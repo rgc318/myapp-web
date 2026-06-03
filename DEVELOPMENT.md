@@ -1,5 +1,10 @@
 # Web Development
 
+Chinese implementation docs:
+
+- `WEB_DEVELOPMENT.zh-CN.md`: JWT-only backend integration and page/API mapping
+- `DEVELOPMENT_PLAN.zh-CN.md`: phased Web implementation plan
+
 ## Role
 
 `myapp-web` is the admin, query, and reporting client.
