@@ -1,6 +1,9 @@
-﻿import type { RequestOptions } from '@@/plugin-request/request';
+import type { RequestOptions } from '@@/plugin-request/request';
 import type { RequestConfig } from '@umijs/max';
+import { getRequestInstance } from '@umijs/max';
 import { message, notification } from 'antd';
+import { refreshMyAppJwt } from '@/services/myapp/auth';
+import { getMyAppAccessToken } from '@/services/myapp/auth-storage';
 
 // 错误处理方案： 错误类型
 enum ErrorShowType {
@@ -17,6 +20,14 @@ interface ResponseStructure {
   errorCode?: number;
   errorMessage?: string;
   showType?: ErrorShowType;
+}
+
+function isMyAppMethodUrl(url: string | undefined) {
+  return Boolean(url?.startsWith('/api/method/myapp.'));
+}
+
+function isMyAppGatewayUrl(url: string | undefined) {
+  return Boolean(url?.startsWith('/api/method/myapp.api.gateway.'));
 }
 
 /**
@@ -85,17 +96,48 @@ export const errorConfig: RequestConfig = {
     },
   },
 
-  // 请求拦截器
   requestInterceptors: [
     (config: RequestOptions) => {
-      // 拦截请求配置，进行个性化处理。
-      const url = config?.url?.concat('?token=123');
-      return { ...config, url };
+      const url = config.url || '';
+      const accessToken = getMyAppAccessToken();
+      if (accessToken && isMyAppMethodUrl(url)) {
+        return {
+          ...config,
+          headers: {
+            ...config.headers,
+            Authorization: `Bearer ${accessToken}`,
+          },
+        };
+      }
+
+      return config;
     },
   ],
 
   // 响应拦截器
   responseInterceptors: [
+    [
+      (response: any) => response,
+      async (error: any) => {
+        const config = error?.config as
+          | (RequestOptions & { _myappRetry?: boolean })
+          | undefined;
+        if (
+          error?.response?.status === 401 &&
+          config &&
+          isMyAppGatewayUrl(config?.url) &&
+          !config._myappRetry
+        ) {
+          const refreshed = await refreshMyAppJwt();
+          if (refreshed) {
+            config._myappRetry = true;
+            return getRequestInstance()(config);
+          }
+        }
+
+        return Promise.reject(error);
+      },
+    ] as any,
     (response) => {
       // 拦截响应数据，进行个性化处理
       const { data } = response as unknown as ResponseStructure;

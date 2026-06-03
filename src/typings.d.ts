@@ -13,3 +13,7 @@ declare module '*.tiff';
 declare module 'omit.js';
 declare module 'numeral';
 declare module 'mockjs';
+
+declare const __MYAPP_WEB_DEV_LOGIN_USERNAME__: string;
+declare const __MYAPP_WEB_DEV_LOGIN_PASSWORD__: string;
+declare const __MYAPP_WEB_PROXY_TARGET__: string;

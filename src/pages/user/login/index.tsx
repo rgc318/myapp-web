@@ -26,7 +26,14 @@ import { flushSync } from 'react-dom';
 import { Footer } from '@/components';
 import { login } from '@/services/ant-design-pro/api';
 import { getFakeCaptcha } from '@/services/ant-design-pro/login';
+import {
+  loginWithMyAppJwt,
+  mapMyAppUserToCurrentUser,
+} from '@/services/myapp/auth';
 import Settings from '../../../../config/defaultSettings';
+
+const devLoginUsername = __MYAPP_WEB_DEV_LOGIN_USERNAME__;
+const devLoginPassword = __MYAPP_WEB_DEV_LOGIN_PASSWORD__;
 
 const useStyles = createStyles(({ token }) => {
   return {
@@ -132,6 +139,29 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (values: API.LoginParams) => {
     try {
+      if (type === 'account') {
+        const currentUser = await loginWithMyAppJwt({
+          username: values.username?.trim() || '',
+          password: values.password || '',
+          rememberMe: Boolean(values.autoLogin),
+        });
+
+        const defaultLoginSuccessMessage = intl.formatMessage({
+          id: 'pages.login.success',
+          defaultMessage: '登录成功！',
+        });
+        message.success(defaultLoginSuccessMessage);
+        flushSync(() => {
+          setInitialState((s) => ({
+            ...s,
+            currentUser: mapMyAppUserToCurrentUser(currentUser, s?.currentUser),
+          }));
+        });
+        const urlParams = new URL(window.location.href).searchParams;
+        window.location.href = urlParams.get('redirect') || '/';
+        return;
+      }
+
       // 登录
       const msg = await login({ ...values, type });
       if (msg.status === 'ok') {
@@ -149,11 +179,23 @@ const Login: React.FC = () => {
       // 如果失败去设置用户错误信息
       setUserLoginState(msg);
     } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : intl.formatMessage({
+              id: 'pages.login.failure',
+              defaultMessage: '登录失败，请重试！',
+            });
       const defaultLoginFailureMessage = intl.formatMessage({
         id: 'pages.login.failure',
         defaultMessage: '登录失败，请重试！',
       });
       console.log(error);
+      setUserLoginState({
+        message: errorMessage,
+        status: 'error',
+        type,
+      });
       message.error(defaultLoginFailureMessage);
     }
   };
@@ -189,6 +231,8 @@ const Login: React.FC = () => {
           })}
           initialValues={{
             autoLogin: true,
+            password: devLoginPassword,
+            username: devLoginUsername,
           }}
           actions={[
             <FormattedMessage
@@ -226,10 +270,13 @@ const Login: React.FC = () => {
 
           {status === 'error' && loginType === 'account' && (
             <LoginMessage
-              content={intl.formatMessage({
-                id: 'pages.login.accountLogin.errorMessage',
-                defaultMessage: '账户或密码错误(admin/ant.design)',
-              })}
+              content={
+                userLoginState.message ||
+                intl.formatMessage({
+                  id: 'pages.login.accountLogin.errorMessage',
+                  defaultMessage: '账户或密码错误(admin/ant.design)',
+                })
+              }
             />
           )}
           {type === 'account' && (

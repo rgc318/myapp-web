@@ -21,9 +21,11 @@ declare namespace API {
     };
     address?: string;
     phone?: string;
+    roles?: string[];
   };
 
   type LoginResult = {
+    message?: string;
     status?: string;
     type?: string;
     currentAuthority?: string;

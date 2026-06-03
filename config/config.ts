@@ -1,5 +1,6 @@
 // https://umijs.org/config/
 
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineConfig } from '@umijs/max';
 import defaultSettings from './defaultSettings';
@@ -8,6 +9,52 @@ import proxy from './proxy';
 import routes from './routes';
 
 const { UMI_ENV = 'dev' } = process.env;
+const isLocalDev = process.env.NODE_ENV !== 'production' && UMI_ENV === 'dev';
+
+function parseEnvFile(envPath: string) {
+  if (!existsSync(envPath)) {
+    return {} as Record<string, string>;
+  }
+
+  return readFileSync(envPath, 'utf8')
+    .split(/\r?\n/)
+    .reduce<Record<string, string>>((acc, line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) {
+        return acc;
+      }
+
+      const index = trimmed.indexOf('=');
+      if (index <= 0) {
+        return acc;
+      }
+
+      const key = trimmed.slice(0, index).trim();
+      const value = trimmed.slice(index + 1).trim();
+      if (key) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+}
+
+const localEnv = isLocalDev
+  ? parseEnvFile(join(__dirname, '../.env.local'))
+  : {};
+const devLoginUsername = isLocalDev
+  ? process.env.MYAPP_WEB_DEV_LOGIN_USERNAME ||
+    localEnv.MYAPP_WEB_DEV_LOGIN_USERNAME ||
+    ''
+  : '';
+const devLoginPassword = isLocalDev
+  ? process.env.MYAPP_WEB_DEV_LOGIN_PASSWORD ||
+    localEnv.MYAPP_WEB_DEV_LOGIN_PASSWORD ||
+    ''
+  : '';
+const proxyTarget =
+  process.env.MYAPP_WEB_PROXY_TARGET ||
+  localEnv.MYAPP_WEB_PROXY_TARGET ||
+  'http://localhost:8080';
 
 /**
  * @name 使用公共路径
@@ -173,5 +220,8 @@ export default defineConfig({
   exportStatic: {},
   define: {
     'process.env.CI': process.env.CI,
+    __MYAPP_WEB_DEV_LOGIN_USERNAME__: devLoginUsername,
+    __MYAPP_WEB_DEV_LOGIN_PASSWORD__: devLoginPassword,
+    __MYAPP_WEB_PROXY_TARGET__: proxyTarget,
   },
 });

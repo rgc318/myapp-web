@@ -11,7 +11,10 @@ import {
   Question,
   SelectLang,
 } from '@/components';
-import { currentUser as queryCurrentUser } from '@/services/ant-design-pro/api';
+import {
+  getMyAppCurrentUser,
+  mapMyAppUserToCurrentUser,
+} from '@/services/myapp/auth';
 import defaultSettings from '../config/defaultSettings';
 import { errorConfig } from './requestErrorConfig';
 
@@ -30,10 +33,10 @@ export async function getInitialState(): Promise<{
 }> {
   const fetchUserInfo = async () => {
     try {
-      const msg = await queryCurrentUser({
-        skipErrorHandler: true,
-      });
-      return msg.data;
+      const myappUser = mapMyAppUserToCurrentUser(await getMyAppCurrentUser());
+      if (myappUser) {
+        return myappUser;
+      }
     } catch (_error) {
       history.push(loginPath);
     }

@@ -11,6 +11,8 @@ _roadhog-api-doc
 
 # misc
 .DS_Store
+.env.local
+.env.*.local
 npm-debug.log*
 yarn-error.log
 
