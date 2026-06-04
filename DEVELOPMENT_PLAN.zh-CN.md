@@ -176,7 +176,12 @@
 
 - 已新增 `src/services/myapp/purchase.ts`。
 - 已覆盖 `search_purchase_orders_v2`、`get_purchase_order_detail_v2`、`get_purchase_receipt_detail_v2` 和 `get_purchase_invoice_detail_v2` 的 Web 查询模型。
-- 下一步可直接实现 `/purchase/orders` 列表和 `/purchase/orders/:name` 详情页。
+- 已新增 `/purchase/orders` 采购订单列表。
+- 已新增 `/purchase/orders/:name` 采购订单详情。
+- 已接入采购菜单，使用现有 `canViewPurchase` 权限点。
+- 采购列表已支持关键词、公司、日期、状态、排序、分页和汇总卡片。
+- 采购详情已支持金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细展示。
+- 已通过 `npm run tsc`、`npm run biome:lint` 和 `npm run build`。
 
 ## 阶段 4：收付款与财务查询
 
@@ -325,7 +330,7 @@
 7. 阶段 6：主数据辅助页
 8. 阶段 7：写操作增强
 
-当前阶段 0、阶段 1 和阶段 2 的基础骨架已经完成到可以继续业务页面开发的状态。后续页面基本是按接口映射推进，不应再因为认证、代理、错误格式和模板服务返工。
+当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。后续页面基本是按接口映射推进，不应再因为认证、代理、错误格式和模板服务返工。
 
 ## 当前骨架完成状态
 
@@ -341,7 +346,7 @@
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
 - 幂等写操作 helper：后续取消、确认、付款等动作统一使用 `Idempotency-Key`。
 - PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。
-- `/dashboard`、`/sales/orders`、`/sales/orders/:name` 已作为第一批真实业务页面接入。
+- `/dashboard`、`/sales/orders`、`/sales/orders/:name`、`/purchase/orders`、`/purchase/orders/:name` 已作为第一批真实业务页面接入。
 - 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
 - 生产部署说明：同域部署、Nginx/Caddy 示例、缓存策略和上线验收。
 
@@ -360,11 +365,12 @@
 - 如果端口被旧进程占用，先清理旧进程；不要同时开多个相同前端服务。
 - 验证 `/umi.js` 的 `content_type` 必须是 `application/javascript`，如果是 `text/html`，浏览器会停在加载占位页。
 
-下一步建议继续从阶段 3 开始：
+下一步建议继续从阶段 4 开始：
 
-- 先做 `/purchase/orders` 列表。
-- 再做 `/purchase/orders/:name` 详情。
-- 筛选、分页、错误态、空态一次性按真实业务接口补齐。
+- 先做报表入口页，复用 `reports.ts` 已有经营概览、销售 / 采购分析、应收应付和资金流水模型。
+- 再做 `/payments` 收付款 / 资金流水查询页。
+- 然后推进 `/finance` 和 `/inventory-ledger` 查询页。
+- 同步补销售 / 采购详情页里的下游单据跳转和动作按钮。
 - UI 风格先沿用 Ant Design Pro，不做大面积重绘。
 
 ## 与云存储的关系

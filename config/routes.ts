@@ -52,6 +52,29 @@ export default [
     ],
   },
   {
+    path: '/purchase',
+    name: 'purchase',
+    icon: 'shopping',
+    access: 'canViewPurchase',
+    routes: [
+      {
+        path: '/purchase',
+        redirect: '/purchase/orders',
+      },
+      {
+        path: '/purchase/orders',
+        name: 'orders',
+        component: './Purchase/Orders',
+      },
+      {
+        path: '/purchase/orders/:name',
+        name: 'order-detail',
+        component: './Purchase/Orders/Detail',
+        hideInMenu: true,
+      },
+    ],
+  },
+  {
     path: '/welcome',
     name: 'welcome',
     icon: 'smile',

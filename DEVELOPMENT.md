@@ -53,9 +53,9 @@ Detailed request/response contracts should be read from the backend API document
 ## First Phase Pages
 
 - Login
-- Dashboard placeholder
-- Sales document list
-- Purchase document list
+- Dashboard
+- Sales order list and detail
+- Purchase order list and detail
 - Payment list
 - Inventory ledger page
 - Finance lookup page
@@ -174,12 +174,14 @@ Detailed request/response contracts should be read from the backend API document
 Recommended web implementation order:
 
 1. login
-2. dashboard placeholder
-3. sales document list
-4. purchase document list
-5. payment list
-6. inventory ledger page
+2. dashboard
+3. sales order list and detail
+4. purchase order list and detail
+5. reporting entry
+6. payment list
 7. finance lookup page
+8. inventory ledger page
+9. master-data lookup pages
 
 ## Data Sources
 
@@ -206,5 +208,6 @@ Priority:
 
 Note:
 
-- `npm run dev` has already been verified in the current environment.
-- The current template is still the default Ant Design Pro starter and has not yet been replaced with business pages.
+- `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
+- The web foundation now has real JWT login, dashboard, sales order query/detail, and purchase order query/detail pages.
+- Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.

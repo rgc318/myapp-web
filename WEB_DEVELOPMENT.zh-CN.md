@@ -404,12 +404,18 @@ Idempotency-Key: <uuid>
 - 交付状态
 - 开票状态
 
+当前页面：
+
+- `/sales/orders` 已接入列表查询、筛选、分页和汇总。
+- `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细。
+
 ### 6.4 采购单据列表
 
 路由：
 
 ```text
 /purchase/orders
+/purchase/orders/:name
 ```
 
 接口：
@@ -419,6 +425,13 @@ Idempotency-Key: <uuid>
 - `myapp.api.gateway.get_purchase_receipt_detail_v2`
 - `myapp.api.gateway.get_purchase_invoice_detail_v2`
 - `myapp.api.gateway.get_purchase_order_status_summary`
+
+当前 Web service：
+
+- `searchPurchaseOrders`
+- `getPurchaseOrderDetail`
+- `getPurchaseReceiptDetail`
+- `getPurchaseInvoiceDetail`
 
 列表字段：
 
@@ -440,6 +453,11 @@ Idempotency-Key: <uuid>
 - 单据状态
 - 收货状态
 - 开票状态
+
+当前页面：
+
+- `/purchase/orders` 已接入采购订单列表、关键词 / 公司 / 日期 / 状态 / 排序筛选、分页和汇总。
+- `/purchase/orders/:name` 已接入采购订单详情、金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细。
 
 ### 6.5 收付款查询
 
@@ -828,6 +846,7 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 新增 `/dashboard`，根路由 `/` 重定向到 `/dashboard`。
 - 首页已接入 `myapp.api.gateway.get_business_report_overview_v1` 的第一版 loading / error / empty / KPI 展示。
 - 新增 `/sales/orders` 和 `/sales/orders/:name`，接入销售订单查询和详情。
+- 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
 - Web API 分层已补齐到查询后台基础面：
   - `reports.ts`：经营概览、销售 / 采购报表、应收应付、资金趋势、资金流水
   - `sales.ts`：销售订单列表 / 详情、发货单详情、销售发票详情
@@ -848,5 +867,6 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 1. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
 2. 登录后确认 `/dashboard` 能显示经营概览或明确错误态。
 3. 登录后确认 `/sales/orders` 能显示列表数据或明确错误态。
-4. 基于已补齐的 `purchase.ts` 继续实现 `/purchase/orders` 和 `/purchase/orders/:name`。
-5. 继续完善销售订单详情的下游发货单、发票、收款跳转。
+4. 登录后确认 `/purchase/orders` 能显示列表数据或明确错误态。
+5. 优先实现报表入口页，然后推进 `/payments`、`/finance`、`/inventory-ledger`。
+6. 继续完善销售 / 采购详情页的下游单据跳转和动作按钮。
