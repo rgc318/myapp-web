@@ -75,6 +75,66 @@ export default [
     ],
   },
   {
+    path: '/reports',
+    name: 'reports',
+    icon: 'barChart',
+    access: 'canViewReports',
+    component: './Reports',
+  },
+  {
+    path: '/payments',
+    name: 'payments',
+    icon: 'transaction',
+    access: 'canViewFinance',
+    component: './Payments',
+  },
+  {
+    path: '/finance',
+    name: 'finance',
+    icon: 'accountBook',
+    access: 'canViewFinance',
+    component: './Finance',
+  },
+  {
+    path: '/inventory-ledger',
+    name: 'inventory-ledger',
+    icon: 'database',
+    access: 'canViewInventory',
+    component: './InventoryLedger',
+  },
+  {
+    path: '/master-data',
+    name: 'master-data',
+    icon: 'appstore',
+    access: 'canViewMasterData',
+    routes: [
+      {
+        path: '/master-data',
+        redirect: '/master-data/products',
+      },
+      {
+        path: '/master-data/products',
+        name: 'products',
+        component: './MasterData/Products',
+      },
+      {
+        path: '/master-data/customers',
+        name: 'customers',
+        component: './MasterData/Customers',
+      },
+      {
+        path: '/master-data/suppliers',
+        name: 'suppliers',
+        component: './MasterData/Suppliers',
+      },
+      {
+        path: '/master-data/uoms',
+        name: 'uoms',
+        component: './MasterData/Uoms',
+      },
+    ],
+  },
+  {
     path: '/welcome',
     name: 'welcome',
     icon: 'smile',

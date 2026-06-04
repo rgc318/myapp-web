@@ -459,7 +459,26 @@ Idempotency-Key: <uuid>
 - `/purchase/orders` 已接入采购订单列表、关键词 / 公司 / 日期 / 状态 / 排序筛选、分页和汇总。
 - `/purchase/orders/:name` 已接入采购订单详情、金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细。
 
-### 6.5 收付款查询
+### 6.5 经营报表
+
+路由：
+
+```text
+/reports
+```
+
+接口：
+
+- `myapp.api.gateway.get_business_report_overview_v1`
+
+当前页面：
+
+- 已接入公司和日期筛选。
+- 已展示销售额、采购额、净现金流、已收 / 应收、已付 / 应付 KPI。
+- 已展示销售客户排行、采购供应商排行、应收 / 应付明细、销售 / 采购商品排行、销售 / 采购 / 资金趋势小表。
+- 当前先做查询入口和表格摘要，不引入复杂图表；后续按使用反馈补图表、钻取和导出。
+
+### 6.6 收付款查询
 
 路由：
 
@@ -473,6 +492,13 @@ Idempotency-Key: <uuid>
 - 可参考 `myapp.api.gateway.get_receivable_payable_report_v1`
 - 可参考 `myapp.api.gateway.list_cashflow_entries_v1`
 
+当前页面：
+
+- `/payments` 已接入 `list_cashflow_entries_v1`。
+- 支持公司、日期和分页查询。
+- 展示收付款单号、收款 / 付款 / 转账方向、往来方类型、往来方、付款方式、金额和参考号。
+- 当前服务层未暴露方向过滤，页面先不在前端做伪筛选；后续等后端接口支持后补方向、付款方式和往来方筛选。
+
 字段：
 
 - 收付款单号
@@ -484,7 +510,7 @@ Idempotency-Key: <uuid>
 - 日期
 - 关联单据
 
-### 6.6 库存流水
+### 6.7 库存流水
 
 路由：
 
@@ -494,8 +520,13 @@ Idempotency-Key: <uuid>
 
 接口：
 
-- 第一期可使用只读查询接口或后续薄聚合接口
-- 如果后端没有满足 Web 查询的接口，应新增薄查询接口，不在前端拼复杂 ERPNext 查询规则
+- `myapp.api.gateway.list_stock_ledger_entries_v1`
+
+当前页面：
+
+- `/inventory-ledger` 已接入 `list_stock_ledger_entries_v1`。
+- 支持公司、商品、仓库、日期、凭证类型、凭证编号筛选和分页。
+- 页面不直接调用 `/api/resource/Stock Ledger Entry`，仍统一通过 myapp JWT gateway。
 
 字段：
 
@@ -508,7 +539,7 @@ Idempotency-Key: <uuid>
 - 库存价值变化
 - 日期
 
-### 6.7 财务查询
+### 6.8 财务查询
 
 路由：
 
@@ -522,6 +553,14 @@ Idempotency-Key: <uuid>
 - `myapp.api.gateway.get_cashflow_report_v1`
 - `myapp.api.gateway.list_cashflow_entries_v1`
 
+当前页面：
+
+- `/finance` 已接入 `get_receivable_payable_report_v1`。
+- 支持公司、日期筛选。
+- 支持客户应收 / 供应商应付切换。
+- 展示总额、未结金额、往来方数量和往来方摘要表。
+- 当前接口返回的是聚合摘要，不是发票级明细；发票级钻取后续需要单据查询接口或报表接口支持。
+
 字段：
 
 - 应收 / 应付方向
@@ -532,7 +571,7 @@ Idempotency-Key: <uuid>
 - 状态
 - 日期
 
-### 6.8 商品与主数据辅助
+### 6.9 商品与主数据辅助
 
 可供筛选、详情和后续管理页使用：
 
@@ -546,6 +585,14 @@ Idempotency-Key: <uuid>
 - `myapp.api.gateway.list_uoms_v2`
 
 第一阶段只作为筛选和详情辅助，不扩展完整主数据后台。
+
+当前页面：
+
+- `/master-data/products` 已接入商品列表，支持关键词、公司、仓库筛选和库存 / 价格摘要展示。
+- `/master-data/customers` 已接入客户列表，支持关键词和分页查询。
+- `/master-data/suppliers` 已接入供应商列表，支持关键词和分页查询。
+- `/master-data/uoms` 已接入计量单位列表，支持关键词和分页查询。
+- 当前页面只做查询辅助，不开放新增、编辑和停用操作。
 
 ## 7. Ant Design Pro 模板清理要求
 
@@ -847,6 +894,11 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 首页已接入 `myapp.api.gateway.get_business_report_overview_v1` 的第一版 loading / error / empty / KPI 展示。
 - 新增 `/sales/orders` 和 `/sales/orders/:name`，接入销售订单查询和详情。
 - 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
+- 新增 `/reports`，接入经营报表入口和多组查询摘要。
+- 新增 `/payments`，接入收付款流水分页查询。
+- 新增 `/finance`，接入应收 / 应付聚合查询。
+- 新增 `/inventory-ledger`，接入真实库存流水查询。
+- 新增 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms`，接入主数据辅助查询。
 - Web API 分层已补齐到查询后台基础面：
   - `reports.ts`：经营概览、销售 / 采购报表、应收应付、资金趋势、资金流水
   - `sales.ts`：销售订单列表 / 详情、发货单详情、销售发票详情
@@ -868,5 +920,9 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 2. 登录后确认 `/dashboard` 能显示经营概览或明确错误态。
 3. 登录后确认 `/sales/orders` 能显示列表数据或明确错误态。
 4. 登录后确认 `/purchase/orders` 能显示列表数据或明确错误态。
-5. 优先实现报表入口页，然后推进 `/payments`、`/finance`、`/inventory-ledger`。
-6. 继续完善销售 / 采购详情页的下游单据跳转和动作按钮。
+5. 登录后确认 `/reports` 能显示经营报表或明确错误态。
+6. 登录后确认 `/payments` 能显示收付款流水或明确错误态。
+7. 登录后确认 `/finance` 能显示应收 / 应付摘要或明确错误态。
+8. 登录后确认 `/inventory-ledger` 能显示库存流水或明确错误态。
+9. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
+10. 继续完善销售 / 采购详情页的下游单据跳转和动作按钮。

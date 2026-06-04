@@ -191,6 +191,7 @@
 
 页面：
 
+- `/reports`
 - `/payments`
 - `/finance`
 
@@ -218,6 +219,13 @@
 
 - 已新增 `src/services/myapp/reports.ts`。
 - 已覆盖经营概览、销售报表、采购报表、应收应付报表、资金趋势和资金流水分页。
+- 已新增 `/reports` 经营报表入口页。
+- `/reports` 已接入 `get_business_report_overview_v1`，支持公司、日期筛选，展示销售 / 采购 / 现金流 / 应收应付 KPI，以及客户、供应商、商品、趋势小表。
+- 已新增 `/payments` 收付款流水查询页。
+- `/payments` 已接入 `list_cashflow_entries_v1`，支持公司、日期和分页查询，展示收款 / 付款 / 转账方向、往来方、付款方式、金额和参考号。
+- 已新增 `/finance` 财务查询页。
+- `/finance` 已接入 `get_receivable_payable_report_v1`，支持公司、日期查询，按客户应收 / 供应商应付切换展示总额、未结金额和往来方摘要。
+- 已通过 `npm run tsc`、`npm run biome:lint` 和 `npm run build`。
 
 ## 阶段 5：库存查询
 
@@ -287,6 +295,14 @@
 
 - 已新增 `src/services/myapp/master-data.ts`。
 - 已覆盖商品、客户、供应商和 UOM 的列表/详情查询模型，可支撑后续商品查询页和筛选选择器。
+- 已新增 `/master-data/products` 商品列表。
+- 已新增 `/master-data/customers` 客户列表。
+- 已新增 `/master-data/suppliers` 供应商列表。
+- 已新增 `/master-data/uoms` 计量单位列表。
+- 当前主数据页面只做查询辅助，不开放新增、编辑和停用操作。
+- 已新增 `/inventory-ledger` 库存流水页。
+- 后端已新增 `myapp.api.gateway.list_stock_ledger_entries_v1`。
+- 当前页面已接入真实 `Stock Ledger Entry` 明细流水，支持公司、商品、仓库、日期、凭证类型和凭证编号筛选。
 
 ## 阶段 7：写操作增强
 
@@ -367,10 +383,10 @@
 
 下一步建议继续从阶段 4 开始：
 
-- 先做报表入口页，复用 `reports.ts` 已有经营概览、销售 / 采购分析、应收应付和资金流水模型。
-- 再做 `/payments` 收付款 / 资金流水查询页。
-- 然后推进 `/finance` 和 `/inventory-ledger` 查询页。
-- 同步补销售 / 采购详情页里的下游单据跳转和动作按钮。
+- 下一步可以补销售 / 采购详情页的下游单据跳转和动作按钮。
+- `/payments` 后续等后端支持后可补方向、付款方式和往来方筛选。
+- `/inventory-ledger` 后续可补凭证跳转、商品选择器和仓库选择器。
+- 报表页后续可按真实使用反馈补图表、钻取和导出。
 - UI 风格先沿用 Ant Design Pro，不做大面积重绘。
 
 ## 与云存储的关系
