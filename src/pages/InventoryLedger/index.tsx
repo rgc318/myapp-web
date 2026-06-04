@@ -1,6 +1,8 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { Link } from '@umijs/max';
 import { Button, Tag } from 'antd';
+import dayjs from 'dayjs';
 import React, { useRef } from 'react';
 import {
   listStockLedgerEntries,
@@ -16,6 +18,30 @@ function formatNumber(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
+function last30DaysRange() {
+  return [
+    dayjs().subtract(29, 'day').format('YYYY-MM-DD'),
+    dayjs().format('YYYY-MM-DD'),
+  ];
+}
+
+function formatDateParam(value: unknown) {
+  if (!value) {
+    return undefined;
+  }
+  if (dayjs.isDayjs(value)) {
+    return value.format('YYYY-MM-DD');
+  }
+  const parsed = dayjs(String(value));
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD') : String(value);
+}
+
+function signedText(value: number) {
+  const color = value > 0 ? '#15803d' : value < 0 ? '#b45309' : undefined;
+  const prefix = value > 0 ? '+' : '';
+  return <span style={{ color }}>{`${prefix}${formatNumber(value)}`}</span>;
+}
+
 function qtyTag(value: number) {
   if (value > 0) {
     return <Tag color="green">入库</Tag>;
@@ -24,6 +50,27 @@ function qtyTag(value: number) {
     return <Tag color="orange">出库</Tag>;
   }
   return <Tag>无变化</Tag>;
+}
+
+function voucherLink(record: StockLedgerEntry) {
+  if (!record.voucherNo) {
+    return '-';
+  }
+
+  const routeMap: Record<string, string> = {
+    'Purchase Order': '/purchase/orders',
+    'Sales Order': '/sales/orders',
+  };
+  const basePath = routeMap[record.voucherType];
+  if (!basePath) {
+    return record.voucherNo;
+  }
+
+  return (
+    <Link to={`${basePath}/${encodeURIComponent(record.voucherNo)}`}>
+      {record.voucherNo}
+    </Link>
+  );
 }
 
 const columns: ProColumns<StockLedgerEntry>[] = [
@@ -56,14 +103,21 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     dataIndex: 'dateRange',
     valueType: 'dateRange',
     hideInTable: true,
+    initialValue: last30DaysRange(),
   },
   {
     title: '凭证类型',
     dataIndex: 'voucherType',
+    valueType: 'select',
     hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: 'Delivery Note / Purchase Receipt',
+    valueEnum: {
+      'Delivery Note': { text: '销售发货单' },
+      'Purchase Receipt': { text: '采购收货单' },
+      'Sales Invoice': { text: '销售发票' },
+      'Purchase Invoice': { text: '采购发票' },
+      'Sales Order': { text: '销售订单' },
+      'Purchase Order': { text: '采购订单' },
+      'Stock Entry': { text: '库存调整' },
     },
   },
   {
@@ -120,7 +174,7 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     align: 'right',
     search: false,
     width: 110,
-    render: (_, record) => formatNumber(record.actualQty),
+    render: (_, record) => signedText(record.actualQty),
   },
   {
     title: '变动后数量',
@@ -144,7 +198,7 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     align: 'right',
     search: false,
     width: 140,
-    render: (_, record) => formatNumber(record.stockValueDifference),
+    render: (_, record) => signedText(record.stockValueDifference),
   },
   {
     title: '凭证类型',
@@ -158,6 +212,7 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     search: false,
     ellipsis: true,
     width: 180,
+    render: (_, record) => voucherLink(record),
   },
 ];
 
@@ -188,8 +243,8 @@ const InventoryLedgerPage: React.FC = () => {
             : [];
           const result = await listStockLedgerEntries({
             company: String(params.company ?? DEFAULT_COMPANY),
-            dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
-            dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
+            dateFrom: formatDateParam(dateRange[0]),
+            dateTo: formatDateParam(dateRange[1]),
             itemCode: String(params.itemCode ?? ''),
             page: current,
             pageSize,

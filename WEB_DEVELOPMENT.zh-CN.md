@@ -526,6 +526,9 @@ Idempotency-Key: <uuid>
 
 - `/inventory-ledger` 已接入 `list_stock_ledger_entries_v1`。
 - 支持公司、商品、仓库、日期、凭证类型、凭证编号筛选和分页。
+- 默认查询最近 30 天。
+- 变动数量和库存价值变动按正负数做颜色区分。
+- 已存在 Web 详情页的凭证类型支持点击跳转；暂未实现详情页的凭证类型保留纯文本。
 - 页面不直接调用 `/api/resource/Stock Ledger Entry`，仍统一通过 myapp JWT gateway。
 
 字段：
