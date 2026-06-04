@@ -366,6 +366,9 @@ Idempotency-Key: <uuid>
 
 ```text
 /sales/orders
+/sales/orders/:name
+/sales/delivery-notes/:name
+/sales/invoices/:name
 ```
 
 接口：
@@ -408,6 +411,8 @@ Idempotency-Key: <uuid>
 
 - `/sales/orders` 已接入列表查询、筛选、分页和汇总。
 - `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细。
+- `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细。
+- `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款信息、关联销售订单 / 发货单和商品明细。
 
 ### 6.4 采购单据列表
 
@@ -416,6 +421,8 @@ Idempotency-Key: <uuid>
 ```text
 /purchase/orders
 /purchase/orders/:name
+/purchase/receipts/:name
+/purchase/invoices/:name
 ```
 
 接口：
@@ -458,6 +465,8 @@ Idempotency-Key: <uuid>
 
 - `/purchase/orders` 已接入采购订单列表、关键词 / 公司 / 日期 / 状态 / 排序筛选、分页和汇总。
 - `/purchase/orders/:name` 已接入采购订单详情、金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细。
+- `/purchase/receipts/:name` 已接入采购收货单详情、金额 / 数量汇总、收货状态、关联采购订单 / 采购发票和商品明细。
+- `/purchase/invoices/:name` 已接入采购发票详情、金额 / 付款汇总、付款信息、关联采购订单 / 收货单和商品明细。
 
 ### 6.5 经营报表
 
@@ -528,7 +537,8 @@ Idempotency-Key: <uuid>
 - 支持公司、商品、仓库、日期、凭证类型、凭证编号筛选和分页。
 - 默认查询最近 30 天。
 - 变动数量和库存价值变动按正负数做颜色区分。
-- 已存在 Web 详情页的凭证类型支持点击跳转；暂未实现详情页的凭证类型保留纯文本。
+- `Sales Order`、`Delivery Note`、`Sales Invoice`、`Purchase Order`、`Purchase Receipt`、`Purchase Invoice` 凭证号支持点击跳转。
+- 暂未实现详情页的凭证类型保留纯文本。
 - 页面不直接调用 `/api/resource/Stock Ledger Entry`，仍统一通过 myapp JWT gateway。
 
 字段：
@@ -897,6 +907,7 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 首页已接入 `myapp.api.gateway.get_business_report_overview_v1` 的第一版 loading / error / empty / KPI 展示。
 - 新增 `/sales/orders` 和 `/sales/orders/:name`，接入销售订单查询和详情。
 - 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
+- 新增 `/sales/delivery-notes/:name`、`/sales/invoices/:name`、`/purchase/receipts/:name`、`/purchase/invoices/:name`，接入下游单据详情和关联跳转。
 - 新增 `/reports`，接入经营报表入口和多组查询摘要。
 - 新增 `/payments`，接入收付款流水分页查询。
 - 新增 `/finance`，接入应收 / 应付聚合查询。
@@ -928,4 +939,4 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 7. 登录后确认 `/finance` 能显示应收 / 应付摘要或明确错误态。
 8. 登录后确认 `/inventory-ledger` 能显示库存流水或明确错误态。
 9. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
-10. 继续完善销售 / 采购详情页的下游单据跳转和动作按钮。
+10. 继续完善销售 / 采购详情页的动作按钮。

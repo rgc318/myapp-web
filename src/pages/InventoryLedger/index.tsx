@@ -58,7 +58,11 @@ function voucherLink(record: StockLedgerEntry) {
   }
 
   const routeMap: Record<string, string> = {
+    'Delivery Note': '/sales/delivery-notes',
+    'Purchase Invoice': '/purchase/invoices',
+    'Purchase Receipt': '/purchase/receipts',
     'Purchase Order': '/purchase/orders',
+    'Sales Invoice': '/sales/invoices',
     'Sales Order': '/sales/orders',
   };
   const basePath = routeMap[record.voucherType];

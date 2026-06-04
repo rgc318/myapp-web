@@ -6,12 +6,12 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Empty, Skeleton, Space, Tag } from 'antd';
 import React from 'react';
 import {
-  getPurchaseOrderDetail,
-  type PurchaseDocumentItem,
-} from '@/services/myapp/purchase';
+  getSalesInvoiceDetail,
+  type SalesOrderDetailItem,
+} from '@/services/myapp/sales';
 
 function formatCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
@@ -53,12 +53,6 @@ const itemColumns = [
     width: 100,
   },
   {
-    title: '已收数量',
-    dataIndex: 'receivedQty',
-    align: 'right' as const,
-    width: 110,
-  },
-  {
     title: '单位',
     dataIndex: 'uom',
     width: 90,
@@ -68,7 +62,7 @@ const itemColumns = [
     dataIndex: 'rate',
     align: 'right' as const,
     width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
+    render: (_: unknown, record: SalesOrderDetailItem) =>
       `¥${formatCurrency(record.rate)}`,
   },
   {
@@ -76,7 +70,7 @@ const itemColumns = [
     dataIndex: 'amount',
     align: 'right' as const,
     width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
+    render: (_: unknown, record: SalesOrderDetailItem) =>
       `¥${formatCurrency(record.amount)}`,
   },
   {
@@ -87,22 +81,22 @@ const itemColumns = [
   },
 ];
 
-const PurchaseOrderDetailPage: React.FC = () => {
+const SalesInvoiceDetailPage: React.FC = () => {
   const params = useParams();
-  const orderName = decodeURIComponent(String(params.name ?? ''));
+  const invoiceName = decodeURIComponent(String(params.name ?? ''));
   const { data, error, loading, refresh } = useRequest(
-    () => getPurchaseOrderDetail(orderName),
+    () => getSalesInvoiceDetail(invoiceName),
     {
-      refreshDeps: [orderName],
+      refreshDeps: [invoiceName],
     },
   );
 
   return (
     <PageContainer
-      title={orderName || '采购订单详情'}
+      title={invoiceName || '销售发票详情'}
       extra={[
         <Button key="back">
-          <Link to="/purchase/orders">返回列表</Link>
+          <Link to="/sales/orders">返回销售订单</Link>
         </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
@@ -120,7 +114,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
             description={
               error instanceof Error ? error.message : '请稍后重试。'
             }
-            message="采购订单详情加载失败"
+            message="销售发票详情加载失败"
             showIcon
             type="error"
           />
@@ -134,7 +128,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
         {!loading && !error && !data ? (
           <ProCard>
-            <Empty description="未找到采购订单" />
+            <Empty description="未找到销售发票" />
           </ProCard>
         ) : null}
 
@@ -143,21 +137,21 @@ const PurchaseOrderDetailPage: React.FC = () => {
             <StatisticCard.Group direction="row">
               <StatisticCard
                 statistic={{
-                  title: '订单金额',
-                  value: formatCurrency(data.amount),
+                  title: '发票金额',
+                  value: formatCurrency(data.grandTotal),
                   prefix: '¥',
                 }}
               />
               <StatisticCard
                 statistic={{
-                  title: '已付金额',
+                  title: '已收金额',
                   value: formatCurrency(data.paidAmount),
                   prefix: '¥',
                 }}
               />
               <StatisticCard
                 statistic={{
-                  title: '未付金额',
+                  title: '未收金额',
                   value: formatCurrency(data.outstandingAmount),
                   prefix: '¥',
                 }}
@@ -167,89 +161,55 @@ const PurchaseOrderDetailPage: React.FC = () => {
             <ProCard split="vertical">
               <ProCard title="基本信息">
                 <ProDescriptions column={2} dataSource={data}>
-                  <ProDescriptions.Item
-                    label="供应商"
-                    dataIndex="supplierName"
-                  />
                   <ProDescriptions.Item label="公司" dataIndex="company" />
                   <ProDescriptions.Item
-                    label="订单日期"
-                    dataIndex="transactionDate"
+                    label="过账日期"
+                    dataIndex="postingDate"
                   />
-                  <ProDescriptions.Item
-                    label="要求到货日期"
-                    dataIndex="scheduleDate"
-                  />
-                  <ProDescriptions.Item
-                    label="供应商单号"
-                    dataIndex="supplierRef"
-                  />
+                  <ProDescriptions.Item label="到期日期" dataIndex="dueDate" />
                   <ProDescriptions.Item label="币种" dataIndex="currency" />
                   <ProDescriptions.Item label="单据状态">
                     {statusTag(data.documentStatus)}
                   </ProDescriptions.Item>
-                  <ProDescriptions.Item label="收货状态">
-                    {statusTag(data.receivingStatus)}
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="付款状态">
+                  <ProDescriptions.Item label="收款状态">
                     {statusTag(data.paymentStatus)}
                   </ProDescriptions.Item>
-                  <ProDescriptions.Item label="完成状态">
-                    {statusTag(data.completionStatus)}
+                  <ProDescriptions.Item label="可取消">
+                    {data.canCancelSalesInvoice ? '是' : '否'}
                   </ProDescriptions.Item>
                 </ProDescriptions>
               </ProCard>
 
-              <ProCard title="采购动作">
-                <Space direction="vertical" size={8}>
-                  <Typography.Text>
-                    可收货：{data.canReceive ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可开票：{data.canCreateInvoice ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可付款：{data.canRecordPayment ? '是' : '否'}
-                  </Typography.Text>
-                </Space>
+              <ProCard title="收款信息">
+                <ProDescriptions column={1} dataSource={data}>
+                  <ProDescriptions.Item
+                    label="应收金额"
+                    dataIndex="receivableAmount"
+                    render={(_, record) =>
+                      `¥${formatCurrency(record.receivableAmount)}`
+                    }
+                  />
+                  <ProDescriptions.Item
+                    label="最近收款"
+                    dataIndex="latestPaymentEntry"
+                  />
+                  <ProDescriptions.Item label="备注" dataIndex="remarks" />
+                </ProDescriptions>
               </ProCard>
-            </ProCard>
-
-            <ProCard title="供应商信息">
-              <ProDescriptions column={2} dataSource={data}>
-                <ProDescriptions.Item
-                  label="联系人"
-                  dataIndex="supplierContactDisplay"
-                />
-                <ProDescriptions.Item
-                  label="联系电话"
-                  dataIndex="supplierContactPhone"
-                />
-                <ProDescriptions.Item
-                  label="供应商地址"
-                  dataIndex="supplierAddressDisplay"
-                  span={2}
-                />
-                <ProDescriptions.Item
-                  label="备注"
-                  dataIndex="remarks"
-                  span={2}
-                />
-              </ProDescriptions>
             </ProCard>
 
             <ProCard title="关联单据">
               <ProDescriptions column={2}>
-                <ProDescriptions.Item label="采购收货单">
-                  {docLinks(data.purchaseReceipts, '/purchase/receipts')}
+                <ProDescriptions.Item label="销售订单">
+                  {docLinks(data.salesOrders, '/sales/orders')}
                 </ProDescriptions.Item>
-                <ProDescriptions.Item label="采购发票">
-                  {docLinks(data.purchaseInvoices, '/purchase/invoices')}
+                <ProDescriptions.Item label="发货单">
+                  {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>
 
-            <ProTable<PurchaseDocumentItem>
+            <ProTable<SalesOrderDetailItem>
               columns={itemColumns}
               dataSource={data.items}
               pagination={false}
@@ -264,4 +224,4 @@ const PurchaseOrderDetailPage: React.FC = () => {
   );
 };
 
-export default PurchaseOrderDetailPage;
+export default SalesInvoiceDetailPage;

@@ -24,6 +24,17 @@ function statusTag(value: string) {
   return value ? <Tag color="blue">{value}</Tag> : <Tag>未知</Tag>;
 }
 
+function docLinks(values: string[], basePath: string) {
+  return values.length
+    ? values.map((name, index) => (
+        <React.Fragment key={name}>
+          {index > 0 ? '、' : null}
+          <Link to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link>
+        </React.Fragment>
+      ))
+    : '无';
+}
+
 const itemColumns = [
   {
     title: '商品编码',
@@ -216,14 +227,10 @@ const SalesOrderDetailPage: React.FC = () => {
             <ProCard title="关联单据">
               <ProDescriptions column={2}>
                 <ProDescriptions.Item label="发货单">
-                  {data.deliveryNotes.length
-                    ? data.deliveryNotes.join('、')
-                    : '无'}
+                  {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
                 </ProDescriptions.Item>
                 <ProDescriptions.Item label="销售发票">
-                  {data.salesInvoices.length
-                    ? data.salesInvoices.join('、')
-                    : '无'}
+                  {docLinks(data.salesInvoices, '/sales/invoices')}
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>

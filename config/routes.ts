@@ -49,6 +49,18 @@ export default [
         component: './Sales/Orders/Detail',
         hideInMenu: true,
       },
+      {
+        path: '/sales/delivery-notes/:name',
+        name: 'delivery-note-detail',
+        component: './Sales/DeliveryNotes/Detail',
+        hideInMenu: true,
+      },
+      {
+        path: '/sales/invoices/:name',
+        name: 'invoice-detail',
+        component: './Sales/Invoices/Detail',
+        hideInMenu: true,
+      },
     ],
   },
   {
@@ -70,6 +82,18 @@ export default [
         path: '/purchase/orders/:name',
         name: 'order-detail',
         component: './Purchase/Orders/Detail',
+        hideInMenu: true,
+      },
+      {
+        path: '/purchase/receipts/:name',
+        name: 'receipt-detail',
+        component: './Purchase/Receipts/Detail',
+        hideInMenu: true,
+      },
+      {
+        path: '/purchase/invoices/:name',
+        name: 'invoice-detail',
+        component: './Purchase/Invoices/Detail',
         hideInMenu: true,
       },
     ],
