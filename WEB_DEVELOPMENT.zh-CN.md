@@ -148,11 +148,28 @@ Web 端应新增自己的 API client，不继续使用模板的 `src/services/an
 
 ```text
 src/services/myapp/api-client.ts
+src/services/myapp/api-base.ts
+src/services/myapp/api-utils.ts
 src/services/myapp/auth-storage.ts
 src/services/myapp/auth.ts
 src/services/myapp/gateway.ts
+src/services/myapp/master-data.ts
 src/services/myapp/media-url.ts
+src/services/myapp/purchase.ts
+src/services/myapp/reports.ts
+src/services/myapp/sales.ts
 ```
+
+分层约定：
+
+- `api-base.ts` 统一生成 API URL，支持生产环境 `MYAPP_WEB_API_BASE_URL`，默认同域。
+- `api-client.ts` 只处理 Frappe 外层 `message`、myapp 网关包络、错误对象和幂等 key。
+- `api-utils.ts` 只放通用字段转换，例如数字、文本、分页和列表包络解析。
+- `gateway.ts` 保留为低层通用网关函数集合，适合临时接入或尚未沉淀 domain service 的接口。
+- `sales.ts`、`purchase.ts`、`reports.ts`、`master-data.ts` 面向 Web 页面返回驼峰字段和页面友好类型。
+- 页面组件不直接读取后端蛇形字段，不直接处理 Frappe 外层响应。
+
+Web service 可以参考 `frontend/myapp-mobile/services/*` 的字段映射，但不要机械照搬移动端交易流程。Web 当前定位是管理、查询和报表客户端，优先沉淀单据列表、详情、状态摘要、下游引用、报表、资金流水和主数据查询。移动端中的开单、草稿、扫码、图片上传、快捷回退等操作，只在 Web 真正有页面需求时再接入。
 
 ### 4.1 Base URL
 
@@ -228,7 +245,27 @@ POST /api/method/myapp.api.gateway.search_sales_orders_v2
 
 不要继续使用 Ant Design Pro 模板的 `{ success, data, errorCode, errorMessage }` 假设。
 
-### 4.4 幂等 key
+当前全局 request 错误处理已做两层兼容：
+
+- 对模板老接口，只在响应明确 `success === false` 时按模板错误处理。
+- 对 `myapp.api.gateway.*`，识别 Frappe `message` 内的 `{ ok: false, code, message }` 包络。
+
+业务服务默认通过 `api-client.ts` 设置 `skipErrorHandler: true`，由 `callGatewayMethod` 抛出 `MyAppApiError`，页面可在 `useRequest` 的 `error` 中展示明确业务错误。没有显式跳过全局错误处理的请求，也不会再被模板的 `success` 逻辑误判。
+
+### 4.4 Token 处理
+
+业务请求不需要页面手动携带 token。
+
+当前统一处理层：
+
+- `auth-storage.ts` 负责保存、读取、清空 token，并导出 `getMyAppAuthHeaders()`。
+- `requestErrorConfig.ts` 的 request interceptor 会对 `/api/method/myapp.*` 自动注入 `Authorization: Bearer <access_token>`。
+- `requestErrorConfig.ts` 的 response interceptor 会对 `myapp.api.gateway.*` 的 `401` 尝试 `refresh_v1`，刷新成功后自动重放原请求一次。
+- `auth.ts` 不依赖 Umi request，认证链路内部使用 `fetch`，但同样复用 `getMyAppAuthHeaders()` 给 `me_v1` 和 `logout_v1` 携带 token。
+
+因此页面和 domain service 不应手动拼 `Authorization`。
+
+### 4.5 幂等 key
 
 交易型接口需要幂等保护。虽然 Web 第一期主要是查询页，但如果实现取消、确认、付款等写操作，应遵守：
 
@@ -240,6 +277,28 @@ POST /api/method/myapp.api.gateway.search_sales_orders_v2
 ```text
 Idempotency-Key: <uuid>
 ```
+
+当前已提供 `services/myapp/mutation.ts`，用于后续写操作统一生成/传入 `Idempotency-Key`，并返回本次使用的 key。页面仍负责二次确认、刷新列表和跳转。
+
+### 4.6 权限和页面状态
+
+当前权限点在 `src/access.ts`：
+
+- `canAdmin`
+- `canViewSales`
+- `canViewPurchase`
+- `canViewFinance`
+- `canViewInventory`
+- `canViewReports`
+- `canViewMasterData`
+
+这些权限暂按 ERPNext 常见角色名宽松匹配，例如 `System Manager`、`Sales Manager`、`Sales User`、`Purchase Manager`、`Accounts User` 等。后续应按真实角色清单调整。
+
+通用页面状态组件：
+
+- `src/components/PageState`
+- 支持 loading、empty、error 和 retry
+- 新页面优先复用它，避免每个页面重复写 `Skeleton / Empty / Alert`
 
 ## 5. 媒体 URL 约定
 
@@ -316,6 +375,13 @@ Idempotency-Key: <uuid>
 - `myapp.api.gateway.get_delivery_note_detail_v2`
 - `myapp.api.gateway.get_sales_invoice_detail_v2`
 - `myapp.api.gateway.get_sales_order_status_summary`
+
+当前 Web service：
+
+- `searchSalesOrders`
+- `getSalesOrderDetail`
+- `getDeliveryNoteDetail`
+- `getSalesInvoiceDetail`
 
 列表字段：
 
@@ -528,6 +594,14 @@ cd frontend/myapp-web
 npm run dev
 ```
 
+如果需要固定本地端口，例如继续使用交接约定的 `8001`：
+
+```bash
+npm run start:dev -- --port 8001
+```
+
+注意：`npm run dev -- --port 8001` 在当前脚本链路下可能不会把端口参数正确传给 `max dev`，Umi 会自动选择其他可用端口，例如 `8003`。排查时以启动日志里的 `App listening at` 为准。
+
 开发前确认：
 
 - Frappe / ERPNext 后端已启动
@@ -545,27 +619,202 @@ npm run dev
 MYAPP_WEB_DEV_LOGIN_USERNAME=
 MYAPP_WEB_DEV_LOGIN_PASSWORD=
 MYAPP_WEB_PROXY_TARGET=http://localhost:8080
+MYAPP_WEB_API_BASE_URL=
 ```
 
 `MYAPP_WEB_DEV_LOGIN_USERNAME` 和 `MYAPP_WEB_DEV_LOGIN_PASSWORD` 只在本地 dev 模式注入登录页初始值，用于联调提效。
+
+`MYAPP_WEB_API_BASE_URL` 用于生产或非同域部署。默认留空，表示前端请求同域 `/api/method/...`。本地开发仍优先使用 Umi dev proxy 的 `MYAPP_WEB_PROXY_TARGET`。
 
 ### 10.2 登录页停在正在加载资源
 
 如果浏览器一直显示 `正在加载资源`：
 
-1. 先检查 `npm run lint` 是否通过。
+1. 先确认浏览器访问的端口就是当前 dev server 监听端口。当前推荐固定使用 `http://localhost:8001`，启动命令为 `npm run start:dev -- --port 8001`。
 2. 确认 `/user/login`、`/umi.js`、`/scripts/loading.js` 和页面引用的 chunk 都返回 `200`。
 3. 检查当前 bundle 中 `auth.ts` 是否仍调用 Umi `request`。认证接口应走 `callAuthMethod` / `fetch`。
-4. 如 bundle 仍是旧代码，停止 dev server，删除生成缓存后重启：
+4. 检查浏览器是否命中旧 PWA / service worker 缓存。当前 Web 管理端默认关闭 PWA，并会在 localhost 下清理旧 service worker 和 Cache Storage。
+5. 如 bundle 仍是旧代码，停止 dev server，删除生成缓存后重启：
 
 ```bash
 rm -rf src/.umi node_modules/.cache
-npm run dev
+npm run start:dev -- --port 8001
 ```
 
-5. 浏览器执行强制刷新，Windows / Linux 通常是 `Ctrl + F5`。
+6. 浏览器执行强制刷新，Windows / Linux 通常是 `Ctrl + F5` 或 `Ctrl + Shift + R`；必要时用无痕窗口验证。
+
+本轮遇到的实际现象：
+
+- 用户按交接访问 `http://localhost:8001/user/login`，页面停留在 `正在加载资源`。
+- 排查发现当前前端实际监听在 `8003`，`8001` 没有服务，另有 `8000` 返回 `500`。
+- 正确启动方式改为 `npm run start:dev -- --port 8001`，并用 curl 验证 `/user/login`、`/sales/orders`、`/umi.js`、`/scripts/loading.js` 均返回 `200`。
+- 同时关闭模板默认 PWA，避免旧 service worker/cache 缓存过期 chunk，导致 React 应用没有接管 loading 占位。
+- 执行 `npm run build` 会清理并重写 `dist`。如果 dev server 仍在跑，可能出现 `/umi.js` 返回 HTML 的状态；此时应重启 dev server，并以启动日志里的 `App listening at` 端口为准。
+
+常用探测命令：
+
+```bash
+ss -ltnp | rg ':800[0-9]'
+
+for route in /user/login /sales/orders /umi.js /scripts/loading.js; do
+  printf '%s ' "$route"
+  /usr/bin/curl -s -o /dev/null -w '%{http_code} %{content_type}\n' \
+    "http://localhost:8001$route" --max-time 10 || true
+done
+```
+
+如果 `8001` 已被旧进程占用，Umi 会自动选择其他端口，例如 `8003`。这种情况下应访问新端口，并确认 `/umi.js` 的 `content_type` 是 `application/javascript`，不是 `text/html`。
 
 本次已验证的修复点：`auth.ts` 不再 import `@umijs/max`，当前 bundle 中登录、当前用户、刷新 token、登出均调用 `callAuthMethod`。
+
+PWA 说明：
+
+- 当前项目定位是桌面端管理 / 查询后台，不依赖离线打开旧页面。
+- 关闭 PWA 不影响登录、JWT、API 请求、销售订单列表和详情等在线功能。
+- 关闭 PWA 会失去 service worker 离线缓存和添加到桌面等能力。
+- 如果未来生产环境确实需要 PWA，应单独设计缓存版本更新策略，避免用户加载旧 chunk。
+
+### 10.3 测试
+
+当前基础层测试不依赖真实后端，主要通过 mock request / gateway 方法验证前端自己的协议解析和字段映射。
+
+新增覆盖：
+
+- `src/services/myapp/__tests__/api-client.test.ts`
+  - Frappe `message` 外层解包
+  - myapp gateway `{ ok, data, meta }` 包络解包
+  - `{ ok: false, code, message }` 业务错误转换为 `MyAppApiError`
+- `src/services/myapp/__tests__/auth-storage.test.ts`
+  - token 保存、读取、清空
+  - `Authorization: Bearer ...` header 生成
+- `src/services/myapp/__tests__/api-utils.test.ts`
+  - 数字、文本、分页、列表包络解析
+- `src/services/myapp/__tests__/domain-services.test.ts`
+  - sales / purchase / reports / master-data 的关键字段映射
+- `src/__tests__/access.test.ts`
+  - 基础角色权限点
+- `src/pages/user/login/login.test.tsx`
+  - 登录页账号密码表单渲染
+  - JWT 登录参数、用户态更新
+  - 后端登录错误提示
+
+运行基础层测试：
+
+```bash
+npm run jest -- src/services/myapp/__tests__ src/__tests__/access.test.ts --runInBand
+npm run jest -- src/pages/user/login/login.test.tsx --runInBand
+```
+
+注意：当前 Jest + Umi 测试配置使用 `@umijs/max/test.js`。如果改回 `@umijs/max/test`，当前依赖组合下会出现配置导入失败。
+
+### 10.4 生产部署
+
+推荐生产形态是前端静态资源和 Frappe API 同域部署：
+
+```text
+https://example.com/            -> myapp-web dist/index.html
+https://example.com/umi.*.js    -> myapp-web dist 静态资源
+https://example.com/api/method/ -> 反向代理到 Frappe
+```
+
+同域部署时 `MYAPP_WEB_API_BASE_URL` 保持空值，前端代码请求相对路径 `/api/method/...`。这能避免 CORS、Cookie 域、跨域重定向和浏览器安全策略带来的额外复杂度。
+
+构建命令：
+
+```bash
+npm ci
+npm run build
+```
+
+生产环境变量：
+
+```text
+MYAPP_WEB_API_BASE_URL=
+```
+
+只有当前端静态站点和 Frappe API 确实分属不同域名时，才设置：
+
+```text
+MYAPP_WEB_API_BASE_URL=https://api.example.com
+```
+
+跨域部署需要后端正确允许 `Authorization`、`Content-Type`、`Idempotency-Key` 请求头，并允许实际 Web 站点域名。第一阶段优先避免跨域部署。
+
+Nginx 示例：
+
+```nginx
+server {
+  listen 80;
+  server_name example.com;
+
+  root /srv/myapp-web/dist;
+  index index.html;
+
+  location = /index.html {
+    add_header Cache-Control "no-store";
+    try_files $uri =404;
+  }
+
+  location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+    try_files $uri =404;
+  }
+
+  location / {
+    add_header Cache-Control "no-store";
+    try_files $uri /index.html;
+  }
+
+  location /api/method/ {
+    proxy_pass http://frappe-backend:8000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+Caddy 示例：
+
+```caddyfile
+example.com {
+  root * /srv/myapp-web/dist
+
+  @api path /api/method/*
+  reverse_proxy @api frappe-backend:8000
+
+  @assets path /assets/*
+  header @assets Cache-Control "public, max-age=31536000, immutable"
+
+  @html path / /index.html
+  header @html Cache-Control "no-store"
+
+  try_files {path} /index.html
+  file_server
+}
+```
+
+缓存策略：
+
+- `index.html` 不长缓存，避免用户拿到旧入口文件。
+- 带 hash 的 JS/CSS/图片资源可以长缓存。
+- 当前 PWA 已关闭，不依赖 service worker 更新机制。
+- 如果部署平台有 CDN，确认 CDN 不会把 `/api/method/` 缓存，也不会把 `index.html` 长缓存。
+
+上线后最小验收：
+
+```bash
+curl -I https://example.com/user/login
+curl -I https://example.com/umi.js
+curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
+```
+
+验收要点：
+
+- `/user/login` 返回 `200` 和 HTML。
+- JS/CSS 静态资源返回 `200`，不是反向代理到后端后的 HTML 错误页。
+- `/api/method/...` 能到达 Frappe，未登录返回明确的 `401` 或业务错误，不应由静态站点返回 `index.html`。
+- 登录后业务请求自动携带 `Authorization: Bearer <token>`，页面代码不应手动拼 token。
 
 ## 11. 当前交接状态
 
@@ -578,10 +827,26 @@ npm run dev
 - 业务网关请求遇到 `401` 时会尝试 `refresh_v1` 并重放一次请求。
 - 新增 `/dashboard`，根路由 `/` 重定向到 `/dashboard`。
 - 首页已接入 `myapp.api.gateway.get_business_report_overview_v1` 的第一版 loading / error / empty / KPI 展示。
+- 新增 `/sales/orders` 和 `/sales/orders/:name`，接入销售订单查询和详情。
+- Web API 分层已补齐到查询后台基础面：
+  - `reports.ts`：经营概览、销售 / 采购报表、应收应付、资金趋势、资金流水
+  - `sales.ts`：销售订单列表 / 详情、发货单详情、销售发票详情
+  - `purchase.ts`：采购订单列表 / 详情、采购收货单详情、采购发票详情
+  - `master-data.ts`：商品、客户、供应商、UOM 查询
+  - `api-utils.ts`：通用字段和分页解析
+- 已补生产 API base 骨架：`MYAPP_WEB_API_BASE_URL` 为空时同域请求，非同域部署时显式指定。
+- 已补统一 token header 层：业务请求由 request interceptor 自动携带 Bearer token。
+- 已补基础权限点和通用页面状态组件。
+- 已补写操作 helper：`services/myapp/mutation.ts` 统一幂等 key 模式。
+- 已补基础层单测：api-client、auth-storage、api-utils、access、domain service 映射。
 - dev proxy 只代理 `/api/method/` 到 `MYAPP_WEB_PROXY_TARGET`，默认 `http://localhost:8080`。
+- 本地开发服务推荐固定用 `npm run start:dev -- --port 8001`。
+- 已关闭模板默认 PWA 缓存，避免开发期加载旧资源后卡在启动占位页。
 
 新对话继续开发时，优先处理：
 
 1. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
 2. 登录后确认 `/dashboard` 能显示经营概览或明确错误态。
-3. 开始阶段 2 销售查询模块，优先做列表和详情，不先大改整体 UI。
+3. 登录后确认 `/sales/orders` 能显示列表数据或明确错误态。
+4. 基于已补齐的 `purchase.ts` 继续实现 `/purchase/orders` 和 `/purchase/orders/:name`。
+5. 继续完善销售订单详情的下游发货单、发票、收款跳转。

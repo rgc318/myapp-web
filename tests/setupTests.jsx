@@ -11,6 +11,11 @@ const localStorageMock = {
 
 global.localStorage = localStorageMock;
 
+global.__MYAPP_WEB_DEV_LOGIN_USERNAME__ = '';
+global.__MYAPP_WEB_DEV_LOGIN_PASSWORD__ = '';
+global.__MYAPP_WEB_PROXY_TARGET__ = 'http://localhost:8080';
+global.__MYAPP_WEB_API_BASE_URL__ = '';
+
 Object.defineProperty(URL, 'createObjectURL', {
   writable: true,
   value: jest.fn(),
@@ -97,9 +102,8 @@ Object.defineProperty(global.window.console, 'error', {
   value: (...rest) => {
     const logStr = rest.join('');
     if (
-      logStr.includes(
-        'Warning: An update to %s inside a test was not wrapped in act(...)',
-      )
+      logStr.includes('inside a test was not wrapped in act(...)') ||
+      logStr.includes('Not implemented: navigation')
     ) {
       return;
     }

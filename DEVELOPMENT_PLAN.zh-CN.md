@@ -40,6 +40,16 @@
 - 已配置 dev proxy 指向本地 Frappe 的 `/api/method/`。
 - 已新增 `.env.example`，本地 `.env.local` 用于开发账号自动填充，不提交。
 - 已修复一次登录页停在 `正在加载资源` 的问题：认证接口不再依赖 Umi request，避免启动期循环依赖；必要时清理 `src/.umi` 和 `node_modules/.cache` 后重启 dev server。
+- 已补充本地端口排障：固定 `8001` 时应使用 `npm run start:dev -- --port 8001`，并以启动日志 `App listening at` 为准。
+- 已关闭模板默认 PWA 缓存；localhost 下会清理旧 service worker/cache，避免旧 chunk 导致页面停在 `正在加载资源`。
+- 已将 request 错误处理从模板 `success` 假设收窄为兼容逻辑，并识别 myapp 网关 `{ ok: false, code, message }` 错误包络。
+- 已新增 `api-utils.ts`，统一数字、文本、分页和列表包络解析。
+- 已新增 `api-base.ts`，生产环境可通过 `MYAPP_WEB_API_BASE_URL` 指定 API base，默认同域 `/api/method/...`。
+- 已统一 token header：业务请求由 request interceptor 自动携带 Bearer token，页面和 domain service 不手动传 token。
+- 已扩展 `src/access.ts` 权限点：销售、采购、财务、库存、报表、主数据。
+- 已新增 `src/components/PageState`，统一 loading、empty、error、retry 状态。
+- 已新增 `src/services/myapp/mutation.ts`，为后续 Web 写操作提供幂等 key 执行模式。
+- 已补基础层 Jest 测试：api-client、auth-storage、api-utils、access、sales/purchase/reports/master-data 字段映射。
 
 仍需收尾：
 
@@ -118,6 +128,14 @@
 - 能按条件查询销售订单
 - 能打开订单详情
 - 能看到履约、开票、收款摘要
+
+当前状态：
+
+- 已新增 `/sales/orders` 销售订单列表。
+- 已新增 `/sales/orders/:name` 销售订单详情。
+- 已新增 `src/services/myapp/sales.ts`，对 `search_sales_orders_v2`、`get_sales_order_detail`、`get_delivery_note_detail_v2` 和 `get_sales_invoice_detail_v2` 做页面侧字段规范化。
+- 已接入菜单文案“销售查询 / 销售订单”。
+- 已通过 `npm run tsc`、`npm run biome:lint` 和 `npm run build`。
 - 不在页面内写死 `/files` 图片路径
 
 ## 阶段 3：采购查询模块
@@ -154,6 +172,12 @@
 - 能打开采购订单详情
 - 能看到收货、开票、付款摘要
 
+当前状态：
+
+- 已新增 `src/services/myapp/purchase.ts`。
+- 已覆盖 `search_purchase_orders_v2`、`get_purchase_order_detail_v2`、`get_purchase_receipt_detail_v2` 和 `get_purchase_invoice_detail_v2` 的 Web 查询模型。
+- 下一步可直接实现 `/purchase/orders` 列表和 `/purchase/orders/:name` 详情页。
+
 ## 阶段 4：收付款与财务查询
 
 目标：
@@ -184,6 +208,11 @@
 - 能区分收款、付款和资金流水
 - 能查看未结金额和结算状态
 - 分页和筛选稳定
+
+当前状态：
+
+- 已新增 `src/services/myapp/reports.ts`。
+- 已覆盖经营概览、销售报表、采购报表、应收应付报表、资金趋势和资金流水分页。
 
 ## 阶段 5：库存查询
 
@@ -249,6 +278,11 @@
 - 查询页筛选所需主数据可复用
 - 详情字段与移动端联调字段保持一致
 
+当前状态：
+
+- 已新增 `src/services/myapp/master-data.ts`。
+- 已覆盖商品、客户、供应商和 UOM 的列表/详情查询模型，可支撑后续商品查询页和筛选选择器。
+
 ## 阶段 7：写操作增强
 
 目标：
@@ -291,12 +325,45 @@
 7. 阶段 6：主数据辅助页
 8. 阶段 7：写操作增强
 
-当前最关键的是阶段 0。只要阶段 0 做稳，后续页面基本是按接口映射推进，不会再因为认证、代理、错误格式和模板服务返工。
+当前阶段 0、阶段 1 和阶段 2 的基础骨架已经完成到可以继续业务页面开发的状态。后续页面基本是按接口映射推进，不应再因为认证、代理、错误格式和模板服务返工。
 
-下一步建议从阶段 2 开始：
+## 当前骨架完成状态
 
-- 先做 `/sales/orders` 列表。
-- 再做 `/sales/orders/:name` 详情。
+已完成：
+
+- Web JWT 登录链路：`login_v1`、`me_v1`、`refresh_v1`、`logout_v1`。
+- 认证接口改为原生 `fetch`，避免 Umi request 运行时循环依赖导致页面卡在 `正在加载资源`。
+- 统一 token 存储和请求注入：业务页面和 domain service 不需要手动拼 `Authorization`。
+- 统一 API base：默认同域 `/api/method/...`，生产或跨域部署可用 `MYAPP_WEB_API_BASE_URL`。
+- Umi dev proxy：`/api/method/` 代理到 `MYAPP_WEB_PROXY_TARGET`，默认 `http://localhost:8080`。
+- Web API 分层：`api-client`、`gateway`、`reports`、`sales`、`purchase`、`master-data`、`mutation`。
+- 通用页面状态组件：loading、empty、error、retry。
+- 基础权限点：销售、采购、财务、库存、报表、主数据。
+- 幂等写操作 helper：后续取消、确认、付款等动作统一使用 `Idempotency-Key`。
+- PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。
+- `/dashboard`、`/sales/orders`、`/sales/orders/:name` 已作为第一批真实业务页面接入。
+- 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
+- 生产部署说明：同域部署、Nginx/Caddy 示例、缓存策略和上线验收。
+
+未完成但不阻塞继续开发：
+
+- Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
+- 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
+- Web 端写操作页面尚未接入，只提供了幂等调用骨架。
+- 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
+- 跨域生产部署未实测，第一阶段推荐同域反向代理。
+
+当前本地服务建议：
+
+- 只保留一个 Web dev server。
+- 首选端口 `8001`，命令：`npm run start:dev -- --port 8001`。
+- 如果端口被旧进程占用，先清理旧进程；不要同时开多个相同前端服务。
+- 验证 `/umi.js` 的 `content_type` 必须是 `application/javascript`，如果是 `text/html`，浏览器会停在加载占位页。
+
+下一步建议继续从阶段 3 开始：
+
+- 先做 `/purchase/orders` 列表。
+- 再做 `/purchase/orders/:name` 详情。
 - 筛选、分页、错误态、空态一次性按真实业务接口补齐。
 - UI 风格先沿用 Ant Design Pro，不做大面积重绘。
 

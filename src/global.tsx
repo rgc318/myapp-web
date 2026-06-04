@@ -4,6 +4,9 @@ import defaultSettings from '../config/defaultSettings';
 
 const { pwa } = defaultSettings;
 const isHttps = document.location.protocol === 'https:';
+const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(
+  document.location.hostname,
+);
 
 const clearCache = () => {
   // remove all caches
@@ -75,7 +78,7 @@ if (pwa) {
       onClose: async () => null,
     });
   });
-} else if ('serviceWorker' in navigator && isHttps) {
+} else if ('serviceWorker' in navigator && (isHttps || isLocalhost)) {
   // unregister service worker
   const { serviceWorker } = navigator;
   if (serviceWorker.getRegistrations) {

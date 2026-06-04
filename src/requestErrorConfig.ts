@@ -1,9 +1,12 @@
 import type { RequestOptions } from '@@/plugin-request/request';
 import type { RequestConfig } from '@umijs/max';
-import { getRequestInstance } from '@umijs/max';
+import { getRequestInstance, history } from '@umijs/max';
 import { message, notification } from 'antd';
 import { refreshMyAppJwt } from '@/services/myapp/auth';
-import { getMyAppAccessToken } from '@/services/myapp/auth-storage';
+import {
+  clearMyAppTokens,
+  getMyAppAuthHeaders,
+} from '@/services/myapp/auth-storage';
 
 // 错误处理方案： 错误类型
 enum ErrorShowType {
@@ -22,12 +25,48 @@ interface ResponseStructure {
   showType?: ErrorShowType;
 }
 
+type MyAppGatewayEnvelope = {
+  code?: string;
+  message?: string;
+  ok?: boolean;
+  status?: string;
+};
+
 function isMyAppMethodUrl(url: string | undefined) {
   return Boolean(url?.startsWith('/api/method/myapp.'));
 }
 
 function isMyAppGatewayUrl(url: string | undefined) {
   return Boolean(url?.startsWith('/api/method/myapp.api.gateway.'));
+}
+
+function getMyAppEnvelope(value: any): MyAppGatewayEnvelope | undefined {
+  const envelope = value?.response?.data?.message ?? value?.data?.message;
+  return envelope && typeof envelope === 'object' ? envelope : undefined;
+}
+
+function getMyAppErrorMessage(error: any) {
+  const envelope = getMyAppEnvelope(error);
+  if (envelope?.ok === false && envelope.message) {
+    return envelope.message;
+  }
+
+  const payload = error?.response?.data;
+  const candidates = [
+    payload?.message?.message,
+    payload?.message,
+    payload?._server_messages,
+    payload?.exception,
+    payload?.exc,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+
+  return undefined;
 }
 
 /**
@@ -42,7 +81,7 @@ export const errorConfig: RequestConfig = {
     errorThrower: (res) => {
       const { success, data, errorCode, errorMessage, showType } =
         res as unknown as ResponseStructure;
-      if (!success) {
+      if (success === false) {
         const error: any = new Error(errorMessage);
         error.name = 'BizError';
         error.info = { errorCode, errorMessage, showType, data };
@@ -80,10 +119,21 @@ export const errorConfig: RequestConfig = {
               message.error(errorMessage);
           }
         }
+      } else if (getMyAppEnvelope(error)?.ok === false) {
+        message.error(getMyAppErrorMessage(error) || '请求失败，请稍后重试。');
       } else if (error.response) {
         // Axios 的错误
         // 请求成功发出且服务器也响应了状态码，但状态代码超出了 2xx 的范围
-        message.error(`Response status:${error.response.status}`);
+        if (error.response.status === 401) {
+          clearMyAppTokens();
+          history.push('/user/login');
+          message.error('登录已过期，请重新登录。');
+          return;
+        }
+        message.error(
+          getMyAppErrorMessage(error) ||
+            `Response status:${error.response.status}`,
+        );
       } else if (error.request) {
         // 请求已经成功发起，但没有收到响应
         // \`error.request\` 在浏览器中是 XMLHttpRequest 的实例，
@@ -99,13 +149,13 @@ export const errorConfig: RequestConfig = {
   requestInterceptors: [
     (config: RequestOptions) => {
       const url = config.url || '';
-      const accessToken = getMyAppAccessToken();
-      if (accessToken && isMyAppMethodUrl(url)) {
+      if (isMyAppMethodUrl(url)) {
+        const authHeaders = getMyAppAuthHeaders();
         return {
           ...config,
           headers: {
             ...config.headers,
-            Authorization: `Bearer ${accessToken}`,
+            ...authHeaders,
           },
         };
       }
@@ -133,6 +183,8 @@ export const errorConfig: RequestConfig = {
             config._myappRetry = true;
             return getRequestInstance()(config);
           }
+          clearMyAppTokens();
+          history.push('/user/login');
         }
 
         return Promise.reject(error);
@@ -142,7 +194,10 @@ export const errorConfig: RequestConfig = {
       // 拦截响应数据，进行个性化处理
       const { data } = response as unknown as ResponseStructure;
 
-      if (data?.success === false) {
+      const envelope = (response as any)?.data?.message;
+      if (envelope?.ok === false) {
+        message.error(envelope.message || '请求失败！');
+      } else if (data?.success === false) {
         message.error('请求失败！');
       }
       return response;

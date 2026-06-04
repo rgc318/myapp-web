@@ -79,3 +79,12 @@ export function clearMyAppTokens() {
 export function getMyAppAccessToken() {
   return getStoredValue(ACCESS_TOKEN_KEY);
 }
+
+export function getMyAppAuthHeaders(): Record<string, string> | undefined {
+  const accessToken = getMyAppAccessToken();
+  return accessToken
+    ? {
+        Authorization: `Bearer ${accessToken}`,
+      }
+    : undefined;
+}

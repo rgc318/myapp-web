@@ -17,3 +17,4 @@ declare module 'mockjs';
 declare const __MYAPP_WEB_DEV_LOGIN_USERNAME__: string;
 declare const __MYAPP_WEB_DEV_LOGIN_PASSWORD__: string;
 declare const __MYAPP_WEB_PROXY_TARGET__: string;
+declare const __MYAPP_WEB_API_BASE_URL__: string;

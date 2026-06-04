@@ -1,8 +1,10 @@
 import {
   clearMyAppTokens,
+  getMyAppAuthHeaders,
   loadMyAppTokens,
   saveMyAppTokens,
 } from './auth-storage';
+import { buildMyAppApiUrl } from './api-base';
 
 type FrappeMethodResponse<T> = {
   message?: T;
@@ -87,15 +89,6 @@ export function mapMyAppUserToCurrentUser(
   } satisfies API.CurrentUser;
 }
 
-function buildAuthHeaders() {
-  const { accessToken } = loadMyAppTokens();
-  return accessToken
-    ? {
-        Authorization: `Bearer ${accessToken}`,
-      }
-    : undefined;
-}
-
 function getFrappeMessage(payload: any, fallback: string) {
   const candidates = [
     payload?.message?.message,
@@ -123,7 +116,7 @@ async function callAuthMethod<T>(
   },
 ) {
   const method = options?.method ?? 'POST';
-  const response = await fetch(`/api/method/${methodPath}`, {
+  const response = await fetch(buildMyAppApiUrl(`/api/method/${methodPath}`), {
     body: method === 'GET' ? undefined : JSON.stringify(options?.data ?? {}),
     credentials: 'same-origin',
     headers: {
@@ -180,7 +173,7 @@ export async function getMyAppCurrentUser() {
     const response = await callAuthMethod<MeMessage>(
       'myapp.auth.token_api.me_v1',
       {
-        headers: buildAuthHeaders(),
+        headers: getMyAppAuthHeaders(),
         method: 'GET',
       },
     );
@@ -204,7 +197,7 @@ export async function getMyAppCurrentUser() {
   const response = await callAuthMethod<MeMessage>(
     'myapp.auth.token_api.me_v1',
     {
-      headers: buildAuthHeaders(),
+      headers: getMyAppAuthHeaders(),
       method: 'GET',
     },
   );
@@ -256,7 +249,7 @@ export async function logoutMyAppJwt() {
   try {
     await callAuthMethod('myapp.auth.token_api.logout_v1', {
       data: refreshToken ? { refresh_token: refreshToken } : undefined,
-      headers: buildAuthHeaders(),
+      headers: getMyAppAuthHeaders(),
     });
   } finally {
     clearMyAppTokens();

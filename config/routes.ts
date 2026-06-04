@@ -29,6 +29,29 @@ export default [
     component: './Dashboard',
   },
   {
+    path: '/sales',
+    name: 'sales',
+    icon: 'shoppingCart',
+    access: 'canViewSales',
+    routes: [
+      {
+        path: '/sales',
+        redirect: '/sales/orders',
+      },
+      {
+        path: '/sales/orders',
+        name: 'orders',
+        component: './Sales/Orders',
+      },
+      {
+        path: '/sales/orders/:name',
+        name: 'order-detail',
+        component: './Sales/Orders/Detail',
+        hideInMenu: true,
+      },
+    ],
+  },
+  {
     path: '/welcome',
     name: 'welcome',
     icon: 'smile',

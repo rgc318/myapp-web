@@ -1,6 +1,7 @@
+import { getMyAppApiBaseUrl } from './api-base';
+
 function getApiBaseUrl() {
-  const target = __MYAPP_WEB_PROXY_TARGET__ || '';
-  return target.replace(/\/+$/, '');
+  return getMyAppApiBaseUrl();
 }
 
 function appendMediaVersion(url: string, version?: string | null) {
@@ -34,3 +35,4 @@ export function resolveMyAppMediaUrl(
   return appendMediaVersion(`${baseUrl}/${trimmed}`, options?.version);
 }
 
+export const resolveMediaUrl = resolveMyAppMediaUrl;

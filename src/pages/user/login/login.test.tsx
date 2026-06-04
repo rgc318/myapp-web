@@ -1,102 +1,130 @@
-﻿// @ts-ignore
-import { startMock } from '@@/requestRecordMock';
-import { TestBrowser } from '@@/testBrowser';
-import { fireEvent, render } from '@testing-library/react';
-import React, { act } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { App } from 'antd';
+import * as React from 'react';
+import {
+  loginWithMyAppJwt,
+  mapMyAppUserToCurrentUser,
+} from '@/services/myapp/auth';
+import Login from './index';
 
-const waitTime = (time: number = 100) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(true);
-    }, time);
-  });
-};
+const mockSetInitialState = jest.fn();
 
-let server: {
-  close: () => void;
-};
+jest.mock('@umijs/max', () => ({
+  FormattedMessage: ({ defaultMessage, id }: any) => defaultMessage || id,
+  Helmet: ({ children }: any) => children,
+  SelectLang: () => null,
+  useIntl: () => ({
+    formatMessage: ({ defaultMessage, id }: any) => defaultMessage || id,
+  }),
+  useModel: () => ({
+    initialState: {
+      currentUser: undefined,
+      fetchUserInfo: jest.fn(),
+    },
+    setInitialState: mockSetInitialState,
+  }),
+}));
+
+jest.mock('@/services/ant-design-pro/api', () => ({
+  login: jest.fn(),
+}));
+
+jest.mock('@/services/ant-design-pro/login', () => ({
+  getFakeCaptcha: jest.fn(),
+}));
+
+jest.mock('@/services/myapp/auth', () => ({
+  loginWithMyAppJwt: jest.fn(),
+  mapMyAppUserToCurrentUser: jest.fn((user) => ({
+    name: user.fullName,
+    roles: user.roles,
+    userid: user.user,
+  })),
+}));
+
+function renderLogin() {
+  return render(React.createElement(App, null, React.createElement(Login)));
+}
 
 describe('Login Page', () => {
-  beforeAll(async () => {
-    server = await startMock({
-      port: 8000,
-      scene: 'login',
-    });
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    window.history.pushState({}, '', '/user/login?redirect=/sales/orders');
   });
 
-  afterAll(() => {
-    server?.close();
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
-  it('should show login form', async () => {
-    const historyRef = React.createRef<any>();
-    const rootContainer = render(
-      <TestBrowser
-        historyRef={historyRef}
-        location={{
-          pathname: '/user/login',
-        }}
-      />,
-    );
+  it('renders account login form', async () => {
+    renderLogin();
 
-    await rootContainer.findAllByText('Ant Design');
-
-    act(() => {
-      historyRef.current?.push('/user/login');
-    });
-
-    expect(
-      rootContainer.baseElement?.querySelector('.ant-pro-form-login-desc')
-        ?.textContent,
-    ).toBe(
-      'Ant Design is the most influential web design specification in Xihu district',
-    );
-
-    expect(rootContainer.asFragment()).toMatchSnapshot();
-
-    rootContainer.unmount();
+    expect(await screen.findByText('账户密码登录')).toBeTruthy();
+    expect(screen.getByPlaceholderText('用户名: admin or user')).toBeTruthy();
+    expect(screen.getByPlaceholderText('密码: ant.design')).toBeTruthy();
   });
 
-  it('should login success', async () => {
-    const historyRef = React.createRef<any>();
-    const rootContainer = render(
-      <TestBrowser
-        historyRef={historyRef}
-        location={{
-          pathname: '/user/login',
-        }}
-      />,
-    );
-
-    await rootContainer.findAllByText('Ant Design');
-
-    const userNameInput = await rootContainer.findByPlaceholderText(
-      'Username: admin or user',
-    );
-
-    act(() => {
-      fireEvent.change(userNameInput, { target: { value: 'admin' } });
+  it('logs in with myapp JWT and updates initial state', async () => {
+    (loginWithMyAppJwt as jest.Mock).mockResolvedValue({
+      email: 'admin@example.com',
+      fullName: 'Admin User',
+      roles: ['System Manager'],
+      user: 'admin@example.com',
     });
 
-    const passwordInput = await rootContainer.findByPlaceholderText(
-      'Password: ant.design',
-    );
+    renderLogin();
 
-    act(() => {
-      fireEvent.change(passwordInput, { target: { value: 'ant.design' } });
+    fireEvent.change(
+      await screen.findByPlaceholderText('用户名: admin or user'),
+      {
+        target: { value: ' admin@example.com ' },
+      },
+    );
+    fireEvent.change(screen.getByPlaceholderText('密码: ant.design'), {
+      target: { value: 'secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /登\s*录|Login/i }));
+
+    await waitFor(() => {
+      expect(loginWithMyAppJwt).toHaveBeenCalledWith({
+        password: 'secret',
+        rememberMe: true,
+        username: 'admin@example.com',
+      });
     });
 
-    await (await rootContainer.findByText('Login')).click();
+    expect(mockSetInitialState).toHaveBeenCalled();
+    mockSetInitialState.mock.calls[0][0]({ currentUser: undefined });
+    expect(mapMyAppUserToCurrentUser).toHaveBeenCalledWith(
+      {
+        email: 'admin@example.com',
+        fullName: 'Admin User',
+        roles: ['System Manager'],
+        user: 'admin@example.com',
+      },
+      undefined,
+    );
+  });
 
-    // 等待接口返回结果
-    await waitTime(5000);
+  it('shows backend error message when JWT login fails', async () => {
+    (loginWithMyAppJwt as jest.Mock).mockRejectedValue(
+      new Error('账号或密码错误'),
+    );
 
-    await rootContainer.findAllByText('Ant Design Pro');
+    renderLogin();
 
-    expect(rootContainer.asFragment()).toMatchSnapshot();
+    fireEvent.change(
+      await screen.findByPlaceholderText('用户名: admin or user'),
+      {
+        target: { value: 'admin@example.com' },
+      },
+    );
+    fireEvent.change(screen.getByPlaceholderText('密码: ant.design'), {
+      target: { value: 'bad-password' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /登\s*录|Login/i }));
 
-    await waitTime(2000);
-
-    rootContainer.unmount();
+    expect(await screen.findByText('账号或密码错误')).toBeTruthy();
   });
 });

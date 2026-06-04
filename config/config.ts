@@ -55,6 +55,8 @@ const proxyTarget =
   process.env.MYAPP_WEB_PROXY_TARGET ||
   localEnv.MYAPP_WEB_PROXY_TARGET ||
   'http://localhost:8080';
+const apiBaseUrl =
+  process.env.MYAPP_WEB_API_BASE_URL || localEnv.MYAPP_WEB_API_BASE_URL || '';
 
 /**
  * @name 使用公共路径
@@ -223,5 +225,6 @@ export default defineConfig({
     __MYAPP_WEB_DEV_LOGIN_USERNAME__: devLoginUsername,
     __MYAPP_WEB_DEV_LOGIN_PASSWORD__: devLoginPassword,
     __MYAPP_WEB_PROXY_TARGET__: proxyTarget,
+    __MYAPP_WEB_API_BASE_URL__: apiBaseUrl,
   },
 });
