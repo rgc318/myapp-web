@@ -17,7 +17,6 @@ import {
   message,
   Skeleton,
   Space,
-  Tag,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
@@ -29,17 +28,12 @@ import {
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
 } from '@/services/myapp/purchase';
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
-}
-
-function statusTag(value: string) {
-  return value ? <Tag color="blue">{value}</Tag> : <Tag>未知</Tag>;
-}
+import {
+  formatCurrencyCode,
+  formatCurrencyValue,
+  formatDisplayUom,
+  StatusTag,
+} from '@/utils/myapp-display';
 
 function docLinks(values: string[], basePath: string) {
   return values.length
@@ -79,6 +73,8 @@ const itemColumns = [
     title: '单位',
     dataIndex: 'uom',
     width: 90,
+    render: (_: unknown, record: PurchaseDocumentItem) =>
+      formatDisplayUom(record.uom),
   },
   {
     title: '单价',
@@ -86,7 +82,7 @@ const itemColumns = [
     align: 'right' as const,
     width: 120,
     render: (_: unknown, record: PurchaseDocumentItem) =>
-      `¥${formatCurrency(record.rate)}`,
+      formatCurrencyValue(record.rate),
   },
   {
     title: '金额',
@@ -94,7 +90,7 @@ const itemColumns = [
     align: 'right' as const,
     width: 120,
     render: (_: unknown, record: PurchaseDocumentItem) =>
-      `¥${formatCurrency(record.amount)}`,
+      formatCurrencyValue(record.amount),
   },
   {
     title: '仓库',
@@ -293,22 +289,22 @@ const PurchaseOrderDetailPage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '订单金额',
-                  value: formatCurrency(data.amount),
-                  prefix: '¥',
+                  value: formatCurrencyValue(data.amount, data.currency),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '已付金额',
-                  value: formatCurrency(data.paidAmount),
-                  prefix: '¥',
+                  value: formatCurrencyValue(data.paidAmount, data.currency),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '未付金额',
-                  value: formatCurrency(data.outstandingAmount),
-                  prefix: '¥',
+                  value: formatCurrencyValue(
+                    data.outstandingAmount,
+                    data.currency,
+                  ),
                 }}
               />
             </StatisticCard.Group>
@@ -333,18 +329,20 @@ const PurchaseOrderDetailPage: React.FC = () => {
                     label="供应商单号"
                     dataIndex="supplierRef"
                   />
-                  <ProDescriptions.Item label="币种" dataIndex="currency" />
+                  <ProDescriptions.Item label="币种">
+                    {formatCurrencyCode(data.currency)}
+                  </ProDescriptions.Item>
                   <ProDescriptions.Item label="单据状态">
-                    {statusTag(data.documentStatus)}
+                    <StatusTag value={data.documentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="收货状态">
-                    {statusTag(data.receivingStatus)}
+                    <StatusTag value={data.receivingStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="付款状态">
-                    {statusTag(data.paymentStatus)}
+                    <StatusTag value={data.paymentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="完成状态">
-                    {statusTag(data.completionStatus)}
+                    <StatusTag value={data.completionStatus} />
                   </ProDescriptions.Item>
                 </ProDescriptions>
               </ProCard>

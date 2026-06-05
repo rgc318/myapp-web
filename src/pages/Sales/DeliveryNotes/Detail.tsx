@@ -6,33 +6,19 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import {
-  Alert,
-  Button,
-  Empty,
-  Modal,
-  message,
-  Skeleton,
-  Space,
-  Tag,
-} from 'antd';
+import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
 import React, { useState } from 'react';
 import {
   cancelDeliveryNote,
   getDeliveryNoteDetail,
   type SalesOrderDetailItem,
 } from '@/services/myapp/sales';
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
-}
-
-function statusTag(value: string) {
-  return value ? <Tag color="blue">{value}</Tag> : <Tag>未知</Tag>;
-}
+import {
+  formatCurrencyCode,
+  formatCurrencyValue,
+  formatDisplayUom,
+  StatusTag,
+} from '@/utils/myapp-display';
 
 function docLinks(values: string[], basePath: string) {
   return values.length
@@ -66,6 +52,8 @@ const itemColumns = [
     title: '单位',
     dataIndex: 'uom',
     width: 90,
+    render: (_: unknown, record: SalesOrderDetailItem) =>
+      formatDisplayUom(record.uom),
   },
   {
     title: '单价',
@@ -73,7 +61,7 @@ const itemColumns = [
     align: 'right' as const,
     width: 120,
     render: (_: unknown, record: SalesOrderDetailItem) =>
-      `¥${formatCurrency(record.rate)}`,
+      formatCurrencyValue(record.rate),
   },
   {
     title: '金额',
@@ -81,7 +69,7 @@ const itemColumns = [
     align: 'right' as const,
     width: 120,
     render: (_: unknown, record: SalesOrderDetailItem) =>
-      `¥${formatCurrency(record.amount)}`,
+      formatCurrencyValue(record.amount),
   },
   {
     title: '仓库',
@@ -179,8 +167,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '发货金额',
-                  value: formatCurrency(data.grandTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(data.grandTotal, data.currency),
                 }}
               />
               <StatisticCard
@@ -203,9 +190,11 @@ const DeliveryNoteDetailPage: React.FC = () => {
                     label="过账时间"
                     dataIndex="postingTime"
                   />
-                  <ProDescriptions.Item label="币种" dataIndex="currency" />
+                  <ProDescriptions.Item label="币种">
+                    {formatCurrencyCode(data.currency)}
+                  </ProDescriptions.Item>
                   <ProDescriptions.Item label="单据状态">
-                    {statusTag(data.documentStatus)}
+                    <StatusTag value={data.documentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="可取消">
                     {data.canCancelDeliveryNote ? '是' : '否'}

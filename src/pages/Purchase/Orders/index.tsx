@@ -1,7 +1,7 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProCard, ProTable } from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
-import { Button, Space, Statistic, Tag } from 'antd';
+import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import {
@@ -9,34 +9,10 @@ import {
   type PurchaseOrderSummary,
   searchPurchaseOrders,
 } from '@/services/myapp/purchase';
+import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
-}
-
-function statusTag(value: string) {
-  if (!value) {
-    return <Tag>未知</Tag>;
-  }
-
-  const colorMap: Record<string, string> = {
-    cancelled: 'red',
-    completed: 'green',
-    paid: 'green',
-    pending: 'gold',
-    received: 'green',
-    submitted: 'blue',
-    unpaid: 'orange',
-  };
-
-  return <Tag color={colorMap[value] ?? 'default'}>{value}</Tag>;
-}
 
 const columns: ProColumns<PurchaseOrderSummary>[] = [
   {
@@ -103,21 +79,21 @@ const columns: ProColumns<PurchaseOrderSummary>[] = [
     dataIndex: 'documentStatus',
     search: false,
     width: 100,
-    render: (_, record) => statusTag(record.documentStatus),
+    render: (_, record) => <StatusTag value={record.documentStatus} />,
   },
   {
     title: '收货',
     dataIndex: 'receivingStatus',
     search: false,
     width: 100,
-    render: (_, record) => statusTag(record.receivingStatus),
+    render: (_, record) => <StatusTag value={record.receivingStatus} />,
   },
   {
     title: '付款',
     dataIndex: 'paymentStatus',
     search: false,
     width: 100,
-    render: (_, record) => statusTag(record.paymentStatus),
+    render: (_, record) => <StatusTag value={record.paymentStatus} />,
   },
   {
     title: '订单金额',
@@ -125,7 +101,7 @@ const columns: ProColumns<PurchaseOrderSummary>[] = [
     align: 'right',
     search: false,
     width: 130,
-    render: (_, record) => `¥${formatCurrency(record.amount)}`,
+    render: (_, record) => formatCurrencyValue(record.amount),
   },
   {
     title: '未付金额',
@@ -133,7 +109,7 @@ const columns: ProColumns<PurchaseOrderSummary>[] = [
     align: 'right',
     search: false,
     width: 130,
-    render: (_, record) => `¥${formatCurrency(record.outstandingAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.outstandingAmount),
   },
   {
     title: '排序',

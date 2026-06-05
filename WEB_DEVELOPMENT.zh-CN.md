@@ -300,6 +300,17 @@ Idempotency-Key: <uuid>
 - 支持 loading、empty、error 和 retry
 - 新页面优先复用它，避免每个页面重复写 `Skeleton / Empty / Alert`
 
+### 4.7 业务展示值
+
+Web 端已新增 `src/utils/myapp-display.tsx`，统一处理常见业务展示值：
+
+- 状态：`StatusTag` / `formatStatusLabel` 将后端状态码展示为中文标签，并按状态类型给出基础颜色。
+- 金额：`formatCurrencyValue(value, currency)` 按移动端约定展示金额单位，`CNY` / `RMB` 显示为 `元`，外币保留币种代码。
+- 币种：`formatCurrencyCode(currency)` 将人民币显示为 `人民币`，外币显示币种代码。
+- 单位：`formatDisplayUom(uom)` 复用移动端单位映射，例如 `NOS` / `PCS` 显示为 `件`，`BOX` 显示为 `箱`，`KG` 显示为 `千克`。
+
+新页面不要再自行硬编码 `¥`、本地 `formatCurrency` 或原始状态标签。销售、采购、发票、发货 / 收货、报表、财务、收付款、商品和库存流水页面已接入该展示层。
+
 ## 5. 媒体 URL 约定
 
 商品图片、文件链接等媒体字段只能当作 opaque URL 使用。
@@ -929,6 +940,7 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 已补生产 API base 骨架：`MYAPP_WEB_API_BASE_URL` 为空时同域请求，非同域部署时显式指定。
 - 已补统一 token header 层：业务请求由 request interceptor 自动携带 Bearer token。
 - 已补基础权限点和通用页面状态组件。
+- 已补业务展示工具：状态中文标签、金额 / 币种单位、计量单位按移动端约定统一展示。
 - 已补写操作 helper：`services/myapp/mutation.ts` 统一幂等 key 模式。
 - 已补基础层单测：api-client、auth-storage、api-utils、access、domain service 映射。
 - dev proxy 只代理 `/api/method/` 到 `MYAPP_WEB_PROXY_TARGET`，默认 `http://localhost:8080`。

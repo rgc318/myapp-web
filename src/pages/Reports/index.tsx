@@ -21,6 +21,7 @@ import {
   type ProductSummaryRow,
   type TrendRow,
 } from '@/services/myapp/reports';
+import { formatCurrencyValue } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const DEFAULT_LIMIT = 8;
@@ -35,13 +36,6 @@ function currentMonthRange() {
     dayjs().startOf('month').format('YYYY-MM-DD'),
     dayjs().format('YYYY-MM-DD'),
   ];
-}
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
 }
 
 function formatNumber(value: number | null | undefined) {
@@ -81,14 +75,14 @@ const partyColumns: ProColumns<PartySummaryRow>[] = [
     align: 'right',
     width: 120,
     render: (_, record) =>
-      `¥${formatCurrency(record.totalAmount ?? record.amount)}`,
+      formatCurrencyValue(record.totalAmount ?? record.amount),
   },
   {
     title: '未结',
     dataIndex: 'outstandingAmount',
     align: 'right',
     width: 120,
-    render: (_, record) => `¥${formatCurrency(record.outstandingAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.outstandingAmount),
   },
 ];
 
@@ -110,7 +104,7 @@ const productColumns: ProColumns<ProductSummaryRow>[] = [
     dataIndex: 'amount',
     align: 'right',
     width: 120,
-    render: (_, record) => `¥${formatCurrency(record.amount)}`,
+    render: (_, record) => formatCurrencyValue(record.amount),
   },
 ];
 
@@ -131,7 +125,7 @@ const trendColumns: ProColumns<TrendRow>[] = [
     dataIndex: 'amount',
     align: 'right',
     width: 140,
-    render: (_, record) => `¥${formatCurrency(record.amount)}`,
+    render: (_, record) => formatCurrencyValue(record.amount),
   },
 ];
 
@@ -146,14 +140,14 @@ const cashflowTrendColumns: ProColumns<CashflowTrendRow>[] = [
     dataIndex: 'inAmount',
     align: 'right',
     width: 120,
-    render: (_, record) => `¥${formatCurrency(record.inAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.inAmount),
   },
   {
     title: '流出',
     dataIndex: 'outAmount',
     align: 'right',
     width: 120,
-    render: (_, record) => `¥${formatCurrency(record.outAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.outAmount),
   },
 ];
 
@@ -265,22 +259,19 @@ const ReportsPage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '销售额',
-                  value: formatCurrency(overview?.salesAmountTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.salesAmountTotal),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '采购额',
-                  value: formatCurrency(overview?.purchaseAmountTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.purchaseAmountTotal),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '净现金流',
-                  value: formatCurrency(overview?.netCashflowTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.netCashflowTotal),
                   valueStyle: {
                     color:
                       (overview?.netCashflowTotal ?? 0) >= 0
@@ -295,29 +286,27 @@ const ReportsPage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '已收金额',
-                  value: formatCurrency(overview?.receivedAmountTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.receivedAmountTotal),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '应收未结',
-                  value: formatCurrency(overview?.receivableOutstandingTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(
+                    overview?.receivableOutstandingTotal,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '已付金额',
-                  value: formatCurrency(overview?.paidAmountTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.paidAmountTotal),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '应付未结',
-                  value: formatCurrency(overview?.payableOutstandingTotal),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.payableOutstandingTotal),
                 }}
               />
             </StatisticCard.Group>

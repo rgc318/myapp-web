@@ -18,6 +18,7 @@ import {
   fetchReceivablePayableReport,
   type PartySummaryRow,
 } from '@/services/myapp/reports';
+import { formatCurrencyValue } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const DEFAULT_LIMIT = 50;
@@ -34,13 +35,6 @@ function currentMonthRange() {
     dayjs().startOf('month').format('YYYY-MM-DD'),
     dayjs().format('YYYY-MM-DD'),
   ];
-}
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
 }
 
 function normalizeFilters(values: FinanceFilters) {
@@ -81,21 +75,21 @@ const columns: ProColumns<PartySummaryRow>[] = [
     align: 'right',
     width: 140,
     render: (_, record) =>
-      `¥${formatCurrency(record.totalAmount ?? record.amount)}`,
+      formatCurrencyValue(record.totalAmount ?? record.amount),
   },
   {
     title: '已结金额',
     dataIndex: 'paidAmount',
     align: 'right',
     width: 140,
-    render: (_, record) => `¥${formatCurrency(record.paidAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.paidAmount),
   },
   {
     title: '未结金额',
     dataIndex: 'outstandingAmount',
     align: 'right',
     width: 140,
-    render: (_, record) => `¥${formatCurrency(record.outstandingAmount)}`,
+    render: (_, record) => formatCurrencyValue(record.outstandingAmount),
   },
 ];
 
@@ -196,15 +190,13 @@ const FinancePage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: mode === 'receivable' ? '应收总额' : '应付总额',
-                  value: formatCurrency(totalAmount),
-                  prefix: '¥',
+                  value: formatCurrencyValue(totalAmount),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: mode === 'receivable' ? '应收未结' : '应付未结',
-                  value: formatCurrency(outstandingAmount),
-                  prefix: '¥',
+                  value: formatCurrencyValue(outstandingAmount),
                 }}
               />
               <StatisticCard

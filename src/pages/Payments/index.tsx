@@ -6,16 +6,10 @@ import {
   type CashflowEntry,
   fetchCashflowEntries,
 } from '@/services/myapp/reports';
+import { formatCurrencyValue } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
-}
 
 function directionTag(value: CashflowEntry['direction']) {
   const map: Record<
@@ -90,7 +84,7 @@ const columns: ProColumns<CashflowEntry>[] = [
     align: 'right',
     search: false,
     width: 130,
-    render: (_, record) => `¥${formatCurrency(record.amount)}`,
+    render: (_, record) => formatCurrencyValue(record.amount),
   },
   {
     title: '参考号',

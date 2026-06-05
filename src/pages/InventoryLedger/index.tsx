@@ -8,6 +8,7 @@ import {
   listStockLedgerEntries,
   type StockLedgerEntry,
 } from '@/services/myapp/inventory';
+import { formatCurrencyValue } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
@@ -40,6 +41,15 @@ function signedText(value: number) {
   const color = value > 0 ? '#15803d' : value < 0 ? '#b45309' : undefined;
   const prefix = value > 0 ? '+' : '';
   return <span style={{ color }}>{`${prefix}${formatNumber(value)}`}</span>;
+}
+
+function signedCurrencyText(value: number | null | undefined) {
+  const amount = value ?? 0;
+  const color = amount > 0 ? '#15803d' : amount < 0 ? '#b45309' : undefined;
+  const prefix = amount > 0 ? '+' : '';
+  return (
+    <span style={{ color }}>{`${prefix}${formatCurrencyValue(amount)}`}</span>
+  );
 }
 
 function qtyTag(value: number) {
@@ -194,7 +204,7 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     align: 'right',
     search: false,
     width: 120,
-    render: (_, record) => formatNumber(record.incomingRate),
+    render: (_, record) => formatCurrencyValue(record.incomingRate),
   },
   {
     title: '库存价值变动',
@@ -202,7 +212,7 @@ const columns: ProColumns<StockLedgerEntry>[] = [
     align: 'right',
     search: false,
     width: 140,
-    render: (_, record) => signedText(record.stockValueDifference),
+    render: (_, record) => signedCurrencyText(record.stockValueDifference),
   },
   {
     title: '凭证类型',

@@ -48,6 +48,7 @@
 - 已统一 token header：业务请求由 request interceptor 自动携带 Bearer token，页面和 domain service 不手动传 token。
 - 已扩展 `src/access.ts` 权限点：销售、采购、财务、库存、报表、主数据。
 - 已新增 `src/components/PageState`，统一 loading、empty、error、retry 状态。
+- 已新增 `src/utils/myapp-display.tsx`，统一状态中文标签、金额 / 币种单位和计量单位展示，规则参考 mobile 端已有处理。
 - 已新增 `src/services/myapp/mutation.ts`，为后续 Web 写操作提供幂等 key 执行模式。
 - 已补基础层 Jest 测试：api-client、auth-storage、api-utils、access、sales/purchase/reports/master-data 字段映射。
 
@@ -385,6 +386,7 @@
 - 页面水印开关：`MYAPP_WEB_ENABLE_WATERMARK`，默认本地 dev 关闭、生产开启。
 - Web API 分层：`api-client`、`gateway`、`reports`、`sales`、`purchase`、`master-data`、`mutation`。
 - 通用页面状态组件：loading、empty、error、retry。
+- 通用业务展示工具：状态中文标签、金额 / 币种单位、计量单位。
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
 - 幂等写操作 helper：取消、确认、付款等动作统一使用 `Idempotency-Key`。
 - PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。

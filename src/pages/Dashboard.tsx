@@ -17,6 +17,7 @@ import {
 import dayjs from 'dayjs';
 import React from 'react';
 import { getBusinessReportOverview } from '@/services/myapp/gateway';
+import { formatCurrencyValue } from '@/utils/myapp-display';
 
 type BusinessOverview = {
   net_cashflow_total?: number | string | null;
@@ -50,13 +51,6 @@ function toNumber(value: number | string | null | undefined) {
   }
 
   return 0;
-}
-
-function formatCurrency(value: number | string | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(toNumber(value));
 }
 
 function formatDateRange(meta: BusinessOverviewData['meta']) {
@@ -140,22 +134,19 @@ const Dashboard: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '销售额',
-                  value: formatCurrency(overview?.sales_amount_total),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.sales_amount_total),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '采购额',
-                  value: formatCurrency(overview?.purchase_amount_total),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.purchase_amount_total),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '净现金流',
-                  value: formatCurrency(overview?.net_cashflow_total),
-                  prefix: '¥',
+                  value: formatCurrencyValue(overview?.net_cashflow_total),
                   valueStyle: {
                     color:
                       toNumber(overview?.net_cashflow_total) >= 0
@@ -172,17 +163,17 @@ const Dashboard: React.FC = () => {
                   <StatisticCard
                     statistic={{
                       title: '已收金额',
-                      value: formatCurrency(overview?.received_amount_total),
-                      prefix: '¥',
+                      value: formatCurrencyValue(
+                        overview?.received_amount_total,
+                      ),
                     }}
                   />
                   <StatisticCard
                     statistic={{
                       title: '应收未结',
-                      value: formatCurrency(
+                      value: formatCurrencyValue(
                         overview?.receivable_outstanding_total,
                       ),
-                      prefix: '¥',
                     }}
                   />
                 </ProCard>
@@ -192,17 +183,15 @@ const Dashboard: React.FC = () => {
                   <StatisticCard
                     statistic={{
                       title: '已付金额',
-                      value: formatCurrency(overview?.paid_amount_total),
-                      prefix: '¥',
+                      value: formatCurrencyValue(overview?.paid_amount_total),
                     }}
                   />
                   <StatisticCard
                     statistic={{
                       title: '应付未结',
-                      value: formatCurrency(
+                      value: formatCurrencyValue(
                         overview?.payable_outstanding_total,
                       ),
-                      prefix: '¥',
                     }}
                   />
                 </ProCard>

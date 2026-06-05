@@ -6,16 +6,10 @@ import {
   listProducts,
   type ProductSummary,
 } from '@/services/myapp/master-data';
+import { formatCurrencyValue, formatDisplayUom } from '@/utils/myapp-display';
 
 const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
-
-function formatCurrency(value: number | null | undefined) {
-  return new Intl.NumberFormat('zh-CN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: 2,
-  }).format(value ?? 0);
-}
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
@@ -93,6 +87,7 @@ const columns: ProColumns<ProductSummary>[] = [
     dataIndex: 'stockUom',
     search: false,
     width: 100,
+    render: (_, record) => formatDisplayUom(record.stockUom),
   },
   {
     title: '价格',
@@ -100,7 +95,7 @@ const columns: ProColumns<ProductSummary>[] = [
     align: 'right',
     search: false,
     width: 120,
-    render: (_, record) => `¥${formatCurrency(record.price)}`,
+    render: (_, record) => formatCurrencyValue(record.price),
   },
   {
     title: '状态',
