@@ -6,9 +6,19 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag } from 'antd';
-import React from 'react';
 import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+  Tag,
+} from 'antd';
+import React, { useState } from 'react';
+import {
+  cancelSalesInvoice,
   getSalesInvoiceDetail,
   type SalesOrderDetailItem,
 } from '@/services/myapp/sales';
@@ -84,12 +94,34 @@ const itemColumns = [
 const SalesInvoiceDetailPage: React.FC = () => {
   const params = useParams();
   const invoiceName = decodeURIComponent(String(params.name ?? ''));
+  const [cancelLoading, setCancelLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getSalesInvoiceDetail(invoiceName),
     {
       refreshDeps: [invoiceName],
     },
   );
+
+  const confirmCancel = () => {
+    Modal.confirm({
+      cancelText: '取消',
+      okText: '确认取消',
+      okType: 'danger',
+      onOk: async () => {
+        setCancelLoading(true);
+        try {
+          await cancelSalesInvoice(invoiceName);
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setCancelLoading(false);
+        }
+      },
+      title: '取消销售发票？',
+    });
+  };
 
   return (
     <PageContainer
@@ -100,6 +132,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
         </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
+        </Button>,
+        <Button
+          danger
+          disabled={!data?.canCancelSalesInvoice}
+          key="cancel"
+          loading={cancelLoading}
+          onClick={confirmCancel}
+        >
+          取消销售发票
         </Button>,
       ]}
     >

@@ -6,9 +6,19 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag } from 'antd';
-import React from 'react';
 import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+  Tag,
+} from 'antd';
+import React, { useState } from 'react';
+import {
+  cancelPurchaseReceipt,
   getPurchaseReceiptDetail,
   type PurchaseDocumentItem,
 } from '@/services/myapp/purchase';
@@ -84,12 +94,34 @@ const itemColumns = [
 const PurchaseReceiptDetailPage: React.FC = () => {
   const params = useParams();
   const receiptName = decodeURIComponent(String(params.name ?? ''));
+  const [cancelLoading, setCancelLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseReceiptDetail(receiptName),
     {
       refreshDeps: [receiptName],
     },
   );
+
+  const confirmCancel = () => {
+    Modal.confirm({
+      cancelText: '取消',
+      okText: '确认取消',
+      okType: 'danger',
+      onOk: async () => {
+        setCancelLoading(true);
+        try {
+          await cancelPurchaseReceipt(receiptName);
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setCancelLoading(false);
+        }
+      },
+      title: '取消采购收货单？',
+    });
+  };
 
   return (
     <PageContainer
@@ -100,6 +132,15 @@ const PurchaseReceiptDetailPage: React.FC = () => {
         </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
+        </Button>,
+        <Button
+          danger
+          disabled={!data?.canCancel}
+          key="cancel"
+          loading={cancelLoading}
+          onClick={confirmCancel}
+        >
+          取消收货单
         </Button>,
       ]}
     >

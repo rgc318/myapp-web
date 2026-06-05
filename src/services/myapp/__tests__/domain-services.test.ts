@@ -1,6 +1,8 @@
 import { callGatewayMethod } from '../api-client';
 import { listProducts } from '../master-data';
 import {
+  cancelPurchaseInvoice,
+  cancelPurchaseReceipt,
   createPurchaseOrderInvoice,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
@@ -8,6 +10,8 @@ import {
 } from '../purchase';
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
 import {
+  cancelDeliveryNote,
+  cancelSalesInvoice,
   createSalesOrderInvoice,
   getSalesOrderDetail,
   recordSalesOrderPayment,
@@ -308,6 +312,46 @@ describe('myapp domain services', () => {
         paid_amount: 88,
         reference_name: 'PO-0001',
       },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs sales downstream cancel mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
+
+    await cancelDeliveryNote('DN-0001');
+    await cancelSalesInvoice('SI-0001');
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'cancel_delivery_note',
+      { delivery_note_name: 'DN-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'cancel_sales_invoice',
+      { sales_invoice_name: 'SI-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs purchase downstream cancel mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
+
+    await cancelPurchaseReceipt('PR-0001');
+    await cancelPurchaseInvoice('PI-0001');
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'cancel_purchase_receipt_v2',
+      { receipt_name: 'PR-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'cancel_purchase_invoice_v2',
+      { invoice_name: 'PI-0001' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

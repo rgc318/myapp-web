@@ -368,3 +368,17 @@ export async function recordPurchaseOrderPayment(
     successMessage: '采购付款已记录',
   });
 }
+
+export async function cancelPurchaseReceipt(receiptName: string) {
+  return runGatewayMutation('cancel_purchase_receipt_v2', {
+    payload: { receipt_name: receiptName },
+    successMessage: '采购收货单已取消',
+  });
+}
+
+export async function cancelPurchaseInvoice(invoiceName: string) {
+  return runGatewayMutation('cancel_purchase_invoice_v2', {
+    payload: { invoice_name: invoiceName },
+    successMessage: '采购发票已取消',
+  });
+}

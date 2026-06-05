@@ -391,3 +391,17 @@ export async function recordSalesOrderPayment(
     successMessage: '销售收款已记录',
   });
 }
+
+export async function cancelDeliveryNote(deliveryNoteName: string) {
+  return runGatewayMutation('cancel_delivery_note', {
+    payload: { delivery_note_name: deliveryNoteName },
+    successMessage: '销售发货单已取消',
+  });
+}
+
+export async function cancelSalesInvoice(salesInvoiceName: string) {
+  return runGatewayMutation('cancel_sales_invoice', {
+    payload: { sales_invoice_name: salesInvoiceName },
+    successMessage: '销售发票已取消',
+  });
+}
