@@ -405,3 +405,10 @@ export async function cancelSalesInvoice(salesInvoiceName: string) {
     successMessage: '销售发票已取消',
   });
 }
+
+export async function cancelSalesPaymentEntry(paymentEntryName: string) {
+  return runGatewayMutation('cancel_payment_entry', {
+    payload: { payment_entry_name: paymentEntryName },
+    successMessage: '销售收款已取消',
+  });
+}

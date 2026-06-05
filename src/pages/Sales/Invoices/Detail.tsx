@@ -19,6 +19,7 @@ import {
 import React, { useState } from 'react';
 import {
   cancelSalesInvoice,
+  cancelSalesPaymentEntry,
   getSalesInvoiceDetail,
   type SalesOrderDetailItem,
 } from '@/services/myapp/sales';
@@ -95,6 +96,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const params = useParams();
   const invoiceName = decodeURIComponent(String(params.name ?? ''));
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getSalesInvoiceDetail(invoiceName),
     {
@@ -123,6 +125,30 @@ const SalesInvoiceDetailPage: React.FC = () => {
     });
   };
 
+  const confirmCancelPayment = () => {
+    if (!data?.latestPaymentEntry) {
+      return;
+    }
+    Modal.confirm({
+      cancelText: '取消',
+      okText: '确认取消',
+      okType: 'danger',
+      onOk: async () => {
+        setPaymentCancelLoading(true);
+        try {
+          await cancelSalesPaymentEntry(data.latestPaymentEntry);
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setPaymentCancelLoading(false);
+        }
+      },
+      title: `取消收款 ${data.latestPaymentEntry}？`,
+    });
+  };
+
   return (
     <PageContainer
       title={invoiceName || '销售发票详情'}
@@ -141,6 +167,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
           onClick={confirmCancel}
         >
           取消销售发票
+        </Button>,
+        <Button
+          danger
+          disabled={!data?.latestPaymentEntry}
+          key="cancel-payment"
+          loading={paymentCancelLoading}
+          onClick={confirmCancelPayment}
+        >
+          取消最近收款
         </Button>,
       ]}
     >

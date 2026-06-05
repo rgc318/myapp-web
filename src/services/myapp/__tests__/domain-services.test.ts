@@ -3,6 +3,7 @@ import { listProducts } from '../master-data';
 import {
   cancelPurchaseInvoice,
   cancelPurchaseReceipt,
+  cancelSupplierPaymentEntry,
   createPurchaseOrderInvoice,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
@@ -11,6 +12,7 @@ import {
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
 import {
   cancelDeliveryNote,
+  cancelSalesPaymentEntry,
   cancelSalesInvoice,
   createSalesOrderInvoice,
   getSalesOrderDetail,
@@ -321,6 +323,7 @@ describe('myapp domain services', () => {
 
     await cancelDeliveryNote('DN-0001');
     await cancelSalesInvoice('SI-0001');
+    await cancelSalesPaymentEntry('PE-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -334,6 +337,12 @@ describe('myapp domain services', () => {
       { sales_invoice_name: 'SI-0001' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'cancel_payment_entry',
+      { payment_entry_name: 'PE-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
   });
 
   it('runs purchase downstream cancel mutations through gateway', async () => {
@@ -341,6 +350,7 @@ describe('myapp domain services', () => {
 
     await cancelPurchaseReceipt('PR-0001');
     await cancelPurchaseInvoice('PI-0001');
+    await cancelSupplierPaymentEntry('PE-0002');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -352,6 +362,12 @@ describe('myapp domain services', () => {
       2,
       'cancel_purchase_invoice_v2',
       { invoice_name: 'PI-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'cancel_supplier_payment',
+      { payment_entry_name: 'PE-0002' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

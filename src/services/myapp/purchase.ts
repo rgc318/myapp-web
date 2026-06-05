@@ -382,3 +382,10 @@ export async function cancelPurchaseInvoice(invoiceName: string) {
     successMessage: '采购发票已取消',
   });
 }
+
+export async function cancelSupplierPaymentEntry(paymentEntryName: string) {
+  return runGatewayMutation('cancel_supplier_payment', {
+    payload: { payment_entry_name: paymentEntryName },
+    successMessage: '采购付款已取消',
+  });
+}
