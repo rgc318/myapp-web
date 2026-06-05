@@ -57,6 +57,12 @@ const proxyTarget =
   'http://localhost:8080';
 const apiBaseUrl =
   process.env.MYAPP_WEB_API_BASE_URL || localEnv.MYAPP_WEB_API_BASE_URL || '';
+const watermarkEnv =
+  process.env.MYAPP_WEB_ENABLE_WATERMARK ?? localEnv.MYAPP_WEB_ENABLE_WATERMARK;
+const enableWatermark =
+  watermarkEnv === undefined
+    ? !isLocalDev
+    : ['1', 'true', 'yes', 'on'].includes(watermarkEnv.toLowerCase());
 
 /**
  * @name 使用公共路径
@@ -226,5 +232,6 @@ export default defineConfig({
     __MYAPP_WEB_DEV_LOGIN_PASSWORD__: devLoginPassword,
     __MYAPP_WEB_PROXY_TARGET__: proxyTarget,
     __MYAPP_WEB_API_BASE_URL__: apiBaseUrl,
+    __MYAPP_WEB_ENABLE_WATERMARK__: enableWatermark,
   },
 });

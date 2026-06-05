@@ -22,6 +22,18 @@ const isDev = process.env.NODE_ENV === 'development';
 const isDevOrTest = isDev || process.env.CI;
 const loginPath = '/user/login';
 
+function getWatermarkContent(currentUser?: API.CurrentUser) {
+  if (!__MYAPP_WEB_ENABLE_WATERMARK__ || !currentUser?.name) {
+    return undefined;
+  }
+
+  return [
+    currentUser.name,
+    new Date().toISOString().slice(0, 10),
+    '内部资料',
+  ].join(' / ');
+}
+
 /**
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
  * */
@@ -79,9 +91,11 @@ export const layout: RunTimeLayoutConfig = ({
         <AvatarDropdown>{avatarChildren}</AvatarDropdown>
       ),
     },
-    waterMarkProps: {
-      content: initialState?.currentUser?.name,
-    },
+    waterMarkProps: __MYAPP_WEB_ENABLE_WATERMARK__
+      ? {
+          content: getWatermarkContent(initialState?.currentUser),
+        }
+      : undefined,
     footerRender: () => <Footer />,
     onPageChange: () => {
       const { location } = history;
