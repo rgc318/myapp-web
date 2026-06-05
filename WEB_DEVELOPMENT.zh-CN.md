@@ -757,6 +757,19 @@ done
 
 如果 `8001` 已被旧进程占用，Umi 会自动选择其他端口，例如 `8003`。这种情况下应访问新端口，并确认 `/umi.js` 的 `content_type` 是 `application/javascript`，不是 `text/html`。
 
+清理旧 dev server：
+
+```bash
+lsof -nP -iTCP:8001 -sTCP:LISTEN
+lsof -nP -iTCP:8003 -sTCP:LISTEN
+lsof -nP -iTCP:8005 -sTCP:LISTEN
+
+lsof -tiTCP:8003 -sTCP:LISTEN | xargs -r kill
+lsof -tiTCP:8005 -sTCP:LISTEN | xargs -r kill
+```
+
+如果 `ss` 能看到端口监听，但 `lsof` / `fuser` 查不到 PID，通常说明旧服务由另一个宿主终端、容器命名空间或更高权限启动。此时不要按端口盲杀后端进程；应回到启动旧前端服务的终端执行 `Ctrl+C`，或在宿主环境用 `lsof` 确认命令行是 `max dev` / `npm run start:dev` 后再关闭。
+
 本次已验证的修复点：`auth.ts` 不再 import `@umijs/max`，当前 bundle 中登录、当前用户、刷新 token、登出均调用 `callAuthMethod`。
 
 PWA 说明：

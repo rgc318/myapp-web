@@ -407,6 +407,7 @@
 - 只保留一个 Web dev server。
 - 首选端口 `8001`，命令：`npm run start:dev -- --port 8001`。
 - 如果端口被旧进程占用，先清理旧进程；不要同时开多个相同前端服务。
+- 清理旧服务前先用 `lsof -nP -iTCP:<port> -sTCP:LISTEN` 确认 PID 和命令行；如果当前工具会话查不到 PID，回到启动旧服务的宿主终端 `Ctrl+C`，不要盲杀不明进程。
 - 验证 `/umi.js` 的 `content_type` 必须是 `application/javascript`，如果是 `text/html`，浏览器会停在加载占位页。
 
 下一步建议：
