@@ -10,6 +10,7 @@ import {
   Alert,
   Button,
   Empty,
+  Input,
   InputNumber,
   Modal,
   message,
@@ -139,22 +140,32 @@ const SalesOrderDetailPage: React.FC = () => {
 
     const outstandingAmount = data.outstandingAmount ?? 0;
     let paymentAmount = outstandingAmount;
+    let modeOfPayment = '';
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <InputNumber
-          autoFocus
-          controls={false}
-          defaultValue={outstandingAmount}
-          max={outstandingAmount}
-          min={0.01}
-          onChange={(value) => {
-            paymentAmount = Number(value ?? 0);
-          }}
-          precision={2}
-          prefix="¥"
-          style={{ width: 240 }}
-        />
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <InputNumber
+            autoFocus
+            controls={false}
+            defaultValue={outstandingAmount}
+            max={outstandingAmount}
+            min={0.01}
+            onChange={(value) => {
+              paymentAmount = Number(value ?? 0);
+            }}
+            precision={2}
+            prefix="¥"
+            style={{ width: '100%' }}
+          />
+          <Input
+            allowClear
+            onChange={(event) => {
+              modeOfPayment = event.target.value;
+            }}
+            placeholder="付款方式，留空使用后端默认"
+          />
+        </Space>
       ),
       okText: '确认收款',
       onOk: async () => {
@@ -165,7 +176,9 @@ const SalesOrderDetailPage: React.FC = () => {
 
         setActionLoading('payment');
         try {
-          await recordSalesOrderPayment(data.name, paymentAmount);
+          await recordSalesOrderPayment(data.name, paymentAmount, {
+            modeOfPayment,
+          });
           refresh();
         } catch (caught) {
           message.error(caught instanceof Error ? caught.message : '操作失败');

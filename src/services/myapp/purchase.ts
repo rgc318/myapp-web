@@ -361,9 +361,13 @@ export async function createPurchaseOrderInvoice(orderName: string) {
 export async function recordPurchaseOrderPayment(
   orderName: string,
   paidAmount: number,
+  options: { modeOfPayment?: string } = {},
 ) {
+  const modeOfPayment = options.modeOfPayment?.trim();
+
   return runGatewayMutation('record_supplier_payment', {
     payload: {
+      ...(modeOfPayment ? { mode_of_payment: modeOfPayment } : {}),
       paid_amount: paidAmount,
       reference_name: orderName,
     },

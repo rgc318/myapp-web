@@ -264,7 +264,7 @@ describe('myapp domain services', () => {
 
     await submitSalesOrderDelivery('SO-0001');
     await createSalesOrderInvoice('SO-0001');
-    await recordSalesOrderPayment('SO-0001', 120);
+    await recordSalesOrderPayment('SO-0001', 120, { modeOfPayment: 'Bank' });
     await cancelSalesOrder('SO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
@@ -283,6 +283,7 @@ describe('myapp domain services', () => {
       3,
       'update_payment_status',
       {
+        mode_of_payment: 'Bank',
         paid_amount: 120,
         reference_doctype: 'Sales Order',
         reference_name: 'SO-0001',
@@ -302,7 +303,9 @@ describe('myapp domain services', () => {
 
     await receivePurchaseOrder('PO-0001');
     await createPurchaseOrderInvoice('PO-0001');
-    await recordPurchaseOrderPayment('PO-0001', 88);
+    await recordPurchaseOrderPayment('PO-0001', 88, {
+      modeOfPayment: 'Cash',
+    });
     await cancelPurchaseOrder('PO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
@@ -321,6 +324,7 @@ describe('myapp domain services', () => {
       3,
       'record_supplier_payment',
       {
+        mode_of_payment: 'Cash',
         paid_amount: 88,
         reference_name: 'PO-0001',
       },
