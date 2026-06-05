@@ -923,6 +923,45 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 
 ## 11. 当前交接状态
 
+### 11.1 本轮任务总结
+
+截至 2026-06-05 当前本地提交，Web 端已完成以下收尾：
+
+- 水印已改为环境变量开关：`MYAPP_WEB_ENABLE_WATERMARK`，本地 dev 默认关闭，生产默认开启。
+- 应用标题、PWA 名称、菜单、登录页标题和页脚已改为中文业务后台文案。
+- 状态、金额、币种和计量单位展示已统一到 `src/utils/myapp-display.tsx`，规则参考 mobile 端已有处理。
+- 销售、采购、发货 / 收货、发票、报表、财务、收付款、商品、库存流水页面已接入统一展示工具。
+- 本地 dev server 排障说明已补充：优先固定 `8001`，旧端口服务需先确认 PID 再关闭，`/umi.js` 必须返回 `application/javascript`。
+
+本轮已验证：
+
+```bash
+npm run jest -- src/utils/__tests__/myapp-display.test.tsx src/pages/user/login/login.test.tsx src/services/myapp/__tests__ src/__tests__/access.test.ts --runInBand
+npm run tsc
+npm run biome:lint
+npm run build
+git diff --check
+```
+
+最近前端本地提交：
+
+```text
+02c9846 docs: document dev server cleanup
+88be384 feat: normalize business display labels
+731c080 docs: document localized app chrome
+c4258c4 feat: localize app chrome
+```
+
+当前前端仓库 `main` 比 `origin/main` ahead 4，尚未推送。后端 `apps/myapp` 当前在 `develop`，工作区干净并已同步远端。
+
+当前本地服务注意事项：
+
+- 本次工具会话无法看到旧 `8001` / `8003` / `8005` 前端进程 PID，但这些端口的 `/umi.js` 已确认返回 `application/javascript`。
+- 新开的 `8007` 已关闭。
+- 下一会话如果需要只保留一个 dev server，应优先回到启动旧服务的宿主终端 `Ctrl+C`，或在宿主环境用 `lsof` 确认是 `max dev` 后再关闭。
+
+### 11.2 基础接入状态
+
 截至当前提交，Web 端基础接入状态：
 
 - 登录页保留 Ant Design Pro 模板视觉，账号密码登录接入 `myapp.auth.token_api.login_v1`。
@@ -960,15 +999,14 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 本地开发服务推荐固定用 `npm run start:dev -- --port 8001`。
 - 已关闭模板默认 PWA 缓存，避免开发期加载旧资源后卡在启动占位页。
 
+### 11.3 新对话继续开发建议
+
 新对话继续开发时，优先处理：
 
-1. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
-2. 登录后确认 `/dashboard` 能显示经营概览或明确错误态。
-3. 登录后确认 `/sales/orders` 能显示列表数据或明确错误态。
-4. 登录后确认 `/purchase/orders` 能显示列表数据或明确错误态。
-5. 登录后确认 `/reports` 能显示经营报表或明确错误态。
-6. 登录后确认 `/payments` 能显示收付款流水或明确错误态。
-7. 登录后确认 `/finance` 能显示应收 / 应付摘要或明确错误态。
-8. 登录后确认 `/inventory-ledger` 能显示库存流水或明确错误态。
-9. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
-10. 继续做真实浏览器联调，验证销售 / 采购创建下游单据、登记收付款、取消订单和取消下游单据后的后端单据状态刷新。
+1. 先处理前端本地 ahead 4：确认是否推送 `main` 到 `origin/main`。
+2. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
+3. 登录后确认 `/dashboard`、`/sales/orders`、`/purchase/orders` 能显示数据或明确错误态。
+4. 登录后确认 `/reports`、`/payments`、`/finance`、`/inventory-ledger` 能显示查询结果或明确错误态。
+5. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
+6. 做真实浏览器联调，验证销售 / 采购创建下游单据、登记收付款、取消订单和取消下游单据后的后端单据状态刷新。
+7. 继续补业务增强：部分数量发货 / 收货 / 开票、付款方式选项接口、主数据轻量编辑、报表图表和钻取。
