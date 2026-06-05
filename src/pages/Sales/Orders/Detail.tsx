@@ -9,6 +9,7 @@ import { Link, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
+  DatePicker,
   Empty,
   Input,
   InputNumber,
@@ -18,6 +19,7 @@ import {
   Space,
   Tag,
 } from 'antd';
+import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
   cancelSalesOrder,
@@ -130,6 +132,53 @@ const SalesOrderDetailPage: React.FC = () => {
         }
       },
       title,
+    });
+  };
+
+  const confirmSubmitDelivery = () => {
+    if (!data) {
+      return;
+    }
+
+    let postingDate = dayjs().format('YYYY-MM-DD');
+    let remarks = '';
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <DatePicker
+            defaultValue={dayjs(postingDate)}
+            onChange={(value) => {
+              postingDate = value?.format('YYYY-MM-DD') ?? '';
+            }}
+            style={{ width: '100%' }}
+          />
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+        </Space>
+      ),
+      okText: '创建发货单',
+      onOk: async () => {
+        setActionLoading('delivery');
+        try {
+          await submitSalesOrderDelivery(data.name, {
+            postingDate,
+            remarks,
+          });
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `创建销售发货单 ${data.name}`,
     });
   };
 
@@ -291,11 +340,7 @@ const SalesOrderDetailPage: React.FC = () => {
                   <Button
                     disabled={!data.canSubmitDelivery}
                     loading={actionLoading === 'delivery'}
-                    onClick={() =>
-                      runOrderAction('delivery', '创建销售发货单？', () =>
-                        submitSalesOrderDelivery(data.name),
-                      )
-                    }
+                    onClick={confirmSubmitDelivery}
                     type="primary"
                   >
                     创建发货单

@@ -366,9 +366,25 @@ export async function getSalesInvoiceDetail(
   };
 }
 
-export async function submitSalesOrderDelivery(orderName: string) {
+export async function submitSalesOrderDelivery(
+  orderName: string,
+  options: { postingDate?: string; remarks?: string } = {},
+) {
+  const postingDate = options.postingDate?.trim();
+  const remarks = options.remarks?.trim();
+
   return runGatewayMutation('submit_delivery', {
-    payload: { order_name: orderName },
+    payload: {
+      ...(postingDate || remarks
+        ? {
+            kwargs: {
+              ...(postingDate ? { posting_date: postingDate } : {}),
+              ...(remarks ? { remarks } : {}),
+            },
+          }
+        : {}),
+      order_name: orderName,
+    },
     successMessage: '销售发货单已创建',
   });
 }

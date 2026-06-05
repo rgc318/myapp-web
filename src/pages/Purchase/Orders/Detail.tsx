@@ -9,6 +9,7 @@ import { Link, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
+  DatePicker,
   Empty,
   Input,
   InputNumber,
@@ -18,6 +19,7 @@ import {
   Space,
   Tag,
 } from 'antd';
+import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
   cancelPurchaseOrder,
@@ -136,6 +138,53 @@ const PurchaseOrderDetailPage: React.FC = () => {
         }
       },
       title,
+    });
+  };
+
+  const confirmReceivePurchaseOrder = () => {
+    if (!data) {
+      return;
+    }
+
+    let postingDate = dayjs().format('YYYY-MM-DD');
+    let remarks = '';
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <DatePicker
+            defaultValue={dayjs(postingDate)}
+            onChange={(value) => {
+              postingDate = value?.format('YYYY-MM-DD') ?? '';
+            }}
+            style={{ width: '100%' }}
+          />
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+        </Space>
+      ),
+      okText: '创建收货单',
+      onOk: async () => {
+        setActionLoading('receipt');
+        try {
+          await receivePurchaseOrder(data.name, {
+            postingDate,
+            remarks,
+          });
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `创建采购收货单 ${data.name}`,
     });
   };
 
@@ -305,11 +354,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
                   <Button
                     disabled={!data.canReceive}
                     loading={actionLoading === 'receipt'}
-                    onClick={() =>
-                      runOrderAction('receipt', '创建采购收货单？', () =>
-                        receivePurchaseOrder(data.name),
-                      )
-                    }
+                    onClick={confirmReceivePurchaseOrder}
                     type="primary"
                   >
                     创建收货单

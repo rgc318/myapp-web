@@ -262,7 +262,10 @@ describe('myapp domain services', () => {
   it('runs sales order mutations through gateway', async () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
 
-    await submitSalesOrderDelivery('SO-0001');
+    await submitSalesOrderDelivery('SO-0001', {
+      postingDate: '2026-06-05',
+      remarks: '发货备注',
+    });
     await createSalesOrderInvoice('SO-0001');
     await recordSalesOrderPayment('SO-0001', 120, { modeOfPayment: 'Bank' });
     await cancelSalesOrder('SO-0001');
@@ -270,7 +273,10 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
       'submit_delivery',
-      { order_name: 'SO-0001' },
+      {
+        kwargs: { posting_date: '2026-06-05', remarks: '发货备注' },
+        order_name: 'SO-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
@@ -301,7 +307,10 @@ describe('myapp domain services', () => {
   it('runs purchase order mutations through gateway', async () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
 
-    await receivePurchaseOrder('PO-0001');
+    await receivePurchaseOrder('PO-0001', {
+      postingDate: '2026-06-05',
+      remarks: '收货备注',
+    });
     await createPurchaseOrderInvoice('PO-0001');
     await recordPurchaseOrderPayment('PO-0001', 88, {
       modeOfPayment: 'Cash',
@@ -311,7 +320,10 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
       'receive_purchase_order',
-      { order_name: 'PO-0001' },
+      {
+        kwargs: { posting_date: '2026-06-05', remarks: '收货备注' },
+        order_name: 'PO-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(

@@ -344,9 +344,25 @@ export async function getPurchaseInvoiceDetail(
   };
 }
 
-export async function receivePurchaseOrder(orderName: string) {
+export async function receivePurchaseOrder(
+  orderName: string,
+  options: { postingDate?: string; remarks?: string } = {},
+) {
+  const postingDate = options.postingDate?.trim();
+  const remarks = options.remarks?.trim();
+
   return runGatewayMutation('receive_purchase_order', {
-    payload: { order_name: orderName },
+    payload: {
+      ...(postingDate || remarks
+        ? {
+            kwargs: {
+              ...(postingDate ? { posting_date: postingDate } : {}),
+              ...(remarks ? { remarks } : {}),
+            },
+          }
+        : {}),
+      order_name: orderName,
+    },
     successMessage: '采购收货单已创建',
   });
 }
