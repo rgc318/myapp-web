@@ -6,11 +6,23 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag, Typography } from 'antd';
-import React from 'react';
 import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+  Tag,
+} from 'antd';
+import React, { useState } from 'react';
+import {
+  createSalesOrderInvoice,
   getSalesOrderDetail,
+  recordSalesOrderPayment,
   type SalesOrderDetailItem,
+  submitSalesOrderDelivery,
 } from '@/services/myapp/sales';
 
 function formatCurrency(value: number | null | undefined) {
@@ -84,12 +96,37 @@ const itemColumns = [
 const SalesOrderDetailPage: React.FC = () => {
   const params = useParams();
   const orderName = decodeURIComponent(String(params.name ?? ''));
+  const [actionLoading, setActionLoading] = useState<string>();
   const { data, error, loading, refresh } = useRequest(
     () => getSalesOrderDetail(orderName),
     {
       refreshDeps: [orderName],
     },
   );
+
+  const runOrderAction = (
+    key: string,
+    title: string,
+    action: () => Promise<unknown>,
+  ) => {
+    Modal.confirm({
+      cancelText: '取消',
+      okText: '确认',
+      onOk: async () => {
+        setActionLoading(key);
+        try {
+          await action();
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title,
+    });
+  };
 
   return (
     <PageContainer
@@ -187,16 +224,50 @@ const SalesOrderDetailPage: React.FC = () => {
               </ProCard>
 
               <ProCard title="履约动作">
-                <Space direction="vertical" size={8}>
-                  <Typography.Text>
-                    可发货：{data.canSubmitDelivery ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可开票：{data.canCreateSalesInvoice ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可收款：{data.canRecordPayment ? '是' : '否'}
-                  </Typography.Text>
+                <Space wrap>
+                  <Button
+                    disabled={!data.canSubmitDelivery}
+                    loading={actionLoading === 'delivery'}
+                    onClick={() =>
+                      runOrderAction('delivery', '创建销售发货单？', () =>
+                        submitSalesOrderDelivery(data.name),
+                      )
+                    }
+                    type="primary"
+                  >
+                    创建发货单
+                  </Button>
+                  <Button
+                    disabled={!data.canCreateSalesInvoice}
+                    loading={actionLoading === 'invoice'}
+                    onClick={() =>
+                      runOrderAction('invoice', '创建销售发票？', () =>
+                        createSalesOrderInvoice(data.name),
+                      )
+                    }
+                  >
+                    创建销售发票
+                  </Button>
+                  <Button
+                    disabled={
+                      !data.canRecordPayment ||
+                      (data.outstandingAmount ?? 0) <= 0
+                    }
+                    loading={actionLoading === 'payment'}
+                    onClick={() =>
+                      runOrderAction(
+                        'payment',
+                        `记录收款 ¥${formatCurrency(data.outstandingAmount)}？`,
+                        () =>
+                          recordSalesOrderPayment(
+                            data.name,
+                            data.outstandingAmount ?? 0,
+                          ),
+                      )
+                    }
+                  >
+                    记录收款
+                  </Button>
                 </Space>
               </ProCard>
             </ProCard>

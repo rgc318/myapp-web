@@ -6,6 +6,7 @@ import {
   toOptionalText,
   toStringList,
 } from './api-utils';
+import { runGatewayMutation } from './mutation';
 
 export type PurchaseOrderStatusFilter =
   | 'all'
@@ -339,4 +340,31 @@ export async function getPurchaseInvoiceDetail(
     supplier: String(supplier.name ?? ''),
     supplierName: String(supplier.display_name ?? supplier.name ?? ''),
   };
+}
+
+export async function receivePurchaseOrder(orderName: string) {
+  return runGatewayMutation('receive_purchase_order', {
+    payload: { order_name: orderName },
+    successMessage: '采购收货单已创建',
+  });
+}
+
+export async function createPurchaseOrderInvoice(orderName: string) {
+  return runGatewayMutation('create_purchase_invoice', {
+    payload: { source_name: orderName },
+    successMessage: '采购发票已创建',
+  });
+}
+
+export async function recordPurchaseOrderPayment(
+  orderName: string,
+  paidAmount: number,
+) {
+  return runGatewayMutation('record_supplier_payment', {
+    payload: {
+      paid_amount: paidAmount,
+      reference_name: orderName,
+    },
+    successMessage: '采购付款已记录',
+  });
 }

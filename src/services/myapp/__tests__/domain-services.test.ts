@@ -1,8 +1,19 @@
 import { callGatewayMethod } from '../api-client';
 import { listProducts } from '../master-data';
-import { searchPurchaseOrders } from '../purchase';
+import {
+  createPurchaseOrderInvoice,
+  receivePurchaseOrder,
+  recordPurchaseOrderPayment,
+  searchPurchaseOrders,
+} from '../purchase';
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
-import { getSalesOrderDetail, searchSalesOrders } from '../sales';
+import {
+  createSalesOrderInvoice,
+  getSalesOrderDetail,
+  recordSalesOrderPayment,
+  searchSalesOrders,
+  submitSalesOrderDelivery,
+} from '../sales';
 
 jest.mock('../api-client', () => ({
   callGatewayMethod: jest.fn(),
@@ -238,5 +249,66 @@ describe('myapp domain services', () => {
     });
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+  });
+
+  it('runs sales order mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
+
+    await submitSalesOrderDelivery('SO-0001');
+    await createSalesOrderInvoice('SO-0001');
+    await recordSalesOrderPayment('SO-0001', 120);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'submit_delivery',
+      { order_name: 'SO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'create_sales_invoice',
+      { source_name: 'SO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'update_payment_status',
+      {
+        paid_amount: 120,
+        reference_doctype: 'Sales Order',
+        reference_name: 'SO-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs purchase order mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
+
+    await receivePurchaseOrder('PO-0001');
+    await createPurchaseOrderInvoice('PO-0001');
+    await recordPurchaseOrderPayment('PO-0001', 88);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'receive_purchase_order',
+      { order_name: 'PO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'create_purchase_invoice',
+      { source_name: 'PO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'record_supplier_payment',
+      {
+        paid_amount: 88,
+        reference_name: 'PO-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
   });
 });

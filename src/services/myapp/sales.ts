@@ -1,5 +1,6 @@
 import { callGatewayMethod } from './api-client';
 import { readObject } from './api-utils';
+import { runGatewayMutation } from './mutation';
 
 export type SalesOrderStatusFilter =
   | 'all'
@@ -361,4 +362,32 @@ export async function getSalesInvoiceDetail(
     remarks: String(meta.remarks ?? ''),
     salesOrders: toStringList(references.sales_orders),
   };
+}
+
+export async function submitSalesOrderDelivery(orderName: string) {
+  return runGatewayMutation('submit_delivery', {
+    payload: { order_name: orderName },
+    successMessage: '销售发货单已创建',
+  });
+}
+
+export async function createSalesOrderInvoice(orderName: string) {
+  return runGatewayMutation('create_sales_invoice', {
+    payload: { source_name: orderName },
+    successMessage: '销售发票已创建',
+  });
+}
+
+export async function recordSalesOrderPayment(
+  orderName: string,
+  paidAmount: number,
+) {
+  return runGatewayMutation('update_payment_status', {
+    payload: {
+      paid_amount: paidAmount,
+      reference_doctype: 'Sales Order',
+      reference_name: orderName,
+    },
+    successMessage: '销售收款已记录',
+  });
 }

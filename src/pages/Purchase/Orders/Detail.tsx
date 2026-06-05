@@ -6,11 +6,23 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag, Typography } from 'antd';
-import React from 'react';
 import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+  Tag,
+} from 'antd';
+import React, { useState } from 'react';
+import {
+  createPurchaseOrderInvoice,
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
+  receivePurchaseOrder,
+  recordPurchaseOrderPayment,
 } from '@/services/myapp/purchase';
 
 function formatCurrency(value: number | null | undefined) {
@@ -90,12 +102,37 @@ const itemColumns = [
 const PurchaseOrderDetailPage: React.FC = () => {
   const params = useParams();
   const orderName = decodeURIComponent(String(params.name ?? ''));
+  const [actionLoading, setActionLoading] = useState<string>();
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseOrderDetail(orderName),
     {
       refreshDeps: [orderName],
     },
   );
+
+  const runOrderAction = (
+    key: string,
+    title: string,
+    action: () => Promise<unknown>,
+  ) => {
+    Modal.confirm({
+      cancelText: '取消',
+      okText: '确认',
+      onOk: async () => {
+        setActionLoading(key);
+        try {
+          await action();
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title,
+    });
+  };
 
   return (
     <PageContainer
@@ -201,16 +238,50 @@ const PurchaseOrderDetailPage: React.FC = () => {
               </ProCard>
 
               <ProCard title="采购动作">
-                <Space direction="vertical" size={8}>
-                  <Typography.Text>
-                    可收货：{data.canReceive ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可开票：{data.canCreateInvoice ? '是' : '否'}
-                  </Typography.Text>
-                  <Typography.Text>
-                    可付款：{data.canRecordPayment ? '是' : '否'}
-                  </Typography.Text>
+                <Space wrap>
+                  <Button
+                    disabled={!data.canReceive}
+                    loading={actionLoading === 'receipt'}
+                    onClick={() =>
+                      runOrderAction('receipt', '创建采购收货单？', () =>
+                        receivePurchaseOrder(data.name),
+                      )
+                    }
+                    type="primary"
+                  >
+                    创建收货单
+                  </Button>
+                  <Button
+                    disabled={!data.canCreateInvoice}
+                    loading={actionLoading === 'invoice'}
+                    onClick={() =>
+                      runOrderAction('invoice', '创建采购发票？', () =>
+                        createPurchaseOrderInvoice(data.name),
+                      )
+                    }
+                  >
+                    创建采购发票
+                  </Button>
+                  <Button
+                    disabled={
+                      !data.canRecordPayment ||
+                      (data.outstandingAmount ?? 0) <= 0
+                    }
+                    loading={actionLoading === 'payment'}
+                    onClick={() =>
+                      runOrderAction(
+                        'payment',
+                        `记录付款 ¥${formatCurrency(data.outstandingAmount)}？`,
+                        () =>
+                          recordPurchaseOrderPayment(
+                            data.name,
+                            data.outstandingAmount ?? 0,
+                          ),
+                      )
+                    }
+                  >
+                    记录付款
+                  </Button>
                 </Space>
               </ProCard>
             </ProCard>
