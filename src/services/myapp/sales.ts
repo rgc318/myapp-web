@@ -55,6 +55,7 @@ export type SearchSalesOrdersParams = {
 };
 
 export type SalesOrderDetail = SalesOrderSummary & {
+  canCancelOrder: boolean;
   currency: string;
   deliveryDate: string;
   remarks: string;
@@ -265,6 +266,7 @@ export async function getSalesOrderDetail(
     addressDisplay: String(shipping.shipping_address_text ?? ''),
     paidAmount: toNumber(amounts.paid_amount),
     receivableAmount: toNumber(amounts.receivable_amount),
+    canCancelOrder: Boolean(actions.can_cancel_sales_order),
     canCreateSalesInvoice: Boolean(actions.can_create_sales_invoice),
     canRecordPayment: Boolean(actions.can_record_payment),
     canSubmitDelivery: Boolean(actions.can_submit_delivery),
@@ -389,6 +391,13 @@ export async function recordSalesOrderPayment(
       reference_name: orderName,
     },
     successMessage: '销售收款已记录',
+  });
+}
+
+export async function cancelSalesOrder(orderName: string) {
+  return runGatewayMutation('cancel_order_v2', {
+    payload: { order_name: orderName },
+    successMessage: '销售订单已取消',
   });
 }
 

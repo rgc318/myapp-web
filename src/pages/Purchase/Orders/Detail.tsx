@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import {
+  cancelPurchaseOrder,
   createPurchaseOrderInvoice,
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
@@ -114,10 +115,12 @@ const PurchaseOrderDetailPage: React.FC = () => {
     key: string,
     title: string,
     action: () => Promise<unknown>,
+    danger = false,
   ) => {
     Modal.confirm({
       cancelText: '取消',
       okText: '确认',
+      okType: danger ? 'danger' : 'primary',
       onOk: async () => {
         setActionLoading(key);
         try {
@@ -281,6 +284,21 @@ const PurchaseOrderDetailPage: React.FC = () => {
                     }
                   >
                     记录付款
+                  </Button>
+                  <Button
+                    danger
+                    disabled={!data.canCancelOrder}
+                    loading={actionLoading === 'cancel'}
+                    onClick={() =>
+                      runOrderAction(
+                        'cancel',
+                        `取消采购订单 ${data.name}？`,
+                        () => cancelPurchaseOrder(data.name),
+                        true,
+                      )
+                    }
+                  >
+                    取消采购订单
                   </Button>
                 </Space>
               </ProCard>

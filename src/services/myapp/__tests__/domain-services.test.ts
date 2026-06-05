@@ -1,6 +1,7 @@
 import { callGatewayMethod } from '../api-client';
 import { listProducts } from '../master-data';
 import {
+  cancelPurchaseOrder,
   cancelPurchaseInvoice,
   cancelPurchaseReceipt,
   cancelSupplierPaymentEntry,
@@ -12,6 +13,7 @@ import {
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
 import {
   cancelDeliveryNote,
+  cancelSalesOrder,
   cancelSalesPaymentEntry,
   cancelSalesInvoice,
   createSalesOrderInvoice,
@@ -263,6 +265,7 @@ describe('myapp domain services', () => {
     await submitSalesOrderDelivery('SO-0001');
     await createSalesOrderInvoice('SO-0001');
     await recordSalesOrderPayment('SO-0001', 120);
+    await cancelSalesOrder('SO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -286,6 +289,12 @@ describe('myapp domain services', () => {
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
+      'cancel_order_v2',
+      { order_name: 'SO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
   });
 
   it('runs purchase order mutations through gateway', async () => {
@@ -294,6 +303,7 @@ describe('myapp domain services', () => {
     await receivePurchaseOrder('PO-0001');
     await createPurchaseOrderInvoice('PO-0001');
     await recordPurchaseOrderPayment('PO-0001', 88);
+    await cancelPurchaseOrder('PO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -314,6 +324,12 @@ describe('myapp domain services', () => {
         paid_amount: 88,
         reference_name: 'PO-0001',
       },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
+      'cancel_purchase_order_v2',
+      { order_name: 'PO-0001' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

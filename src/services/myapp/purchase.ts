@@ -74,6 +74,7 @@ export type PurchaseDocumentItem = {
 
 export type PurchaseOrderDetail = PurchaseOrderSummary & {
   actualPaidAmount: number | null;
+  canCancelOrder: boolean;
   canCreateInvoice: boolean;
   canReceive: boolean;
   canRecordPayment: boolean;
@@ -241,6 +242,7 @@ export async function getPurchaseOrderDetail(
   return {
     ...summary,
     actualPaidAmount: toOptionalNumber(payment.actual_paid_amount),
+    canCancelOrder: Boolean(actions.can_cancel_purchase_order),
     canCreateInvoice: Boolean(actions.can_create_purchase_invoice),
     canReceive: Boolean(actions.can_receive_purchase_order),
     canRecordPayment: Boolean(actions.can_record_supplier_payment),
@@ -366,6 +368,13 @@ export async function recordPurchaseOrderPayment(
       reference_name: orderName,
     },
     successMessage: '采购付款已记录',
+  });
+}
+
+export async function cancelPurchaseOrder(orderName: string) {
+  return runGatewayMutation('cancel_purchase_order_v2', {
+    payload: { order_name: orderName },
+    successMessage: '采购订单已取消',
   });
 }
 

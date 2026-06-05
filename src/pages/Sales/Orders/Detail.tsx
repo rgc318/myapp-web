@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import {
+  cancelSalesOrder,
   createSalesOrderInvoice,
   getSalesOrderDetail,
   recordSalesOrderPayment,
@@ -108,10 +109,12 @@ const SalesOrderDetailPage: React.FC = () => {
     key: string,
     title: string,
     action: () => Promise<unknown>,
+    danger = false,
   ) => {
     Modal.confirm({
       cancelText: '取消',
       okText: '确认',
+      okType: danger ? 'danger' : 'primary',
       onOk: async () => {
         setActionLoading(key);
         try {
@@ -267,6 +270,21 @@ const SalesOrderDetailPage: React.FC = () => {
                     }
                   >
                     记录收款
+                  </Button>
+                  <Button
+                    danger
+                    disabled={!data.canCancelOrder}
+                    loading={actionLoading === 'cancel'}
+                    onClick={() =>
+                      runOrderAction(
+                        'cancel',
+                        `取消销售订单 ${data.name}？`,
+                        () => cancelSalesOrder(data.name),
+                        true,
+                      )
+                    }
+                  >
+                    取消销售订单
                   </Button>
                 </Space>
               </ProCard>
