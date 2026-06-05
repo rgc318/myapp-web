@@ -698,11 +698,14 @@ MYAPP_WEB_DEV_LOGIN_USERNAME=
 MYAPP_WEB_DEV_LOGIN_PASSWORD=
 MYAPP_WEB_PROXY_TARGET=http://localhost:8080
 MYAPP_WEB_API_BASE_URL=
+MYAPP_WEB_ENABLE_WATERMARK=
 ```
 
 `MYAPP_WEB_DEV_LOGIN_USERNAME` 和 `MYAPP_WEB_DEV_LOGIN_PASSWORD` 只在本地 dev 模式注入登录页初始值，用于联调提效。
 
 `MYAPP_WEB_API_BASE_URL` 用于生产或非同域部署。默认留空，表示前端请求同域 `/api/method/...`。本地开发仍优先使用 Umi dev proxy 的 `MYAPP_WEB_PROXY_TARGET`。
+
+`MYAPP_WEB_ENABLE_WATERMARK` 控制页面水印。留空时本地 dev 默认关闭、生产构建默认开启；可显式设置 `true` / `false` 覆盖。水印内容为“用户名 / 日期 / 内部资料”。
 
 ### 10.2 登录页停在正在加载资源
 

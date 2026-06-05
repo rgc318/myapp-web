@@ -380,6 +380,7 @@
 - 统一 token 存储和请求注入：业务页面和 domain service 不需要手动拼 `Authorization`。
 - 统一 API base：默认同域 `/api/method/...`，生产或跨域部署可用 `MYAPP_WEB_API_BASE_URL`。
 - Umi dev proxy：`/api/method/` 代理到 `MYAPP_WEB_PROXY_TARGET`，默认 `http://localhost:8080`。
+- 页面水印开关：`MYAPP_WEB_ENABLE_WATERMARK`，默认本地 dev 关闭、生产开启。
 - Web API 分层：`api-client`、`gateway`、`reports`、`sales`、`purchase`、`master-data`、`mutation`。
 - 通用页面状态组件：loading、empty、error、retry。
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
