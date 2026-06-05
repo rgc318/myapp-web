@@ -410,9 +410,9 @@ Idempotency-Key: <uuid>
 当前页面：
 
 - `/sales/orders` 已接入列表查询、筛选、分页和汇总。
-- `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细。
-- `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细。
-- `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款信息、关联销售订单 / 发货单和商品明细。
+- `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细，并支持创建发货单、创建销售发票和登记收款。
+- `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细，并支持取消发货单。
+- `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款信息、关联销售订单 / 发货单和商品明细，并支持取消销售发票和取消最近收款。
 
 ### 6.4 采购单据列表
 
@@ -464,9 +464,9 @@ Idempotency-Key: <uuid>
 当前页面：
 
 - `/purchase/orders` 已接入采购订单列表、关键词 / 公司 / 日期 / 状态 / 排序筛选、分页和汇总。
-- `/purchase/orders/:name` 已接入采购订单详情、金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细。
-- `/purchase/receipts/:name` 已接入采购收货单详情、金额 / 数量汇总、收货状态、关联采购订单 / 采购发票和商品明细。
-- `/purchase/invoices/:name` 已接入采购发票详情、金额 / 付款汇总、付款信息、关联采购订单 / 收货单和商品明细。
+- `/purchase/orders/:name` 已接入采购订单详情、金额汇总、基本信息、供应商信息、关联收货单 / 发票和商品明细，并支持创建收货单、创建采购发票和登记付款。
+- `/purchase/receipts/:name` 已接入采购收货单详情、金额 / 数量汇总、收货状态、关联采购订单 / 采购发票和商品明细，并支持取消收货单。
+- `/purchase/invoices/:name` 已接入采购发票详情、金额 / 付款汇总、付款信息、关联采购订单 / 收货单和商品明细，并支持取消采购发票和取消最近付款。
 
 ### 6.5 经营报表
 
@@ -908,6 +908,8 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 新增 `/sales/orders` 和 `/sales/orders/:name`，接入销售订单查询和详情。
 - 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
 - 新增 `/sales/delivery-notes/:name`、`/sales/invoices/:name`、`/purchase/receipts/:name`、`/purchase/invoices/:name`，接入下游单据详情和关联跳转。
+- 销售 / 采购订单详情已接入创建下游单据和登记收付款动作。
+- 销售 / 采购下游单据详情已接入取消动作，发票详情额外支持取消最近收款 / 付款。
 - 新增 `/reports`，接入经营报表入口和多组查询摘要。
 - 新增 `/payments`，接入收付款流水分页查询。
 - 新增 `/finance`，接入应收 / 应付聚合查询。
@@ -915,8 +917,8 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 新增 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms`，接入主数据辅助查询。
 - Web API 分层已补齐到查询后台基础面：
   - `reports.ts`：经营概览、销售 / 采购报表、应收应付、资金趋势、资金流水
-  - `sales.ts`：销售订单列表 / 详情、发货单详情、销售发票详情
-  - `purchase.ts`：采购订单列表 / 详情、采购收货单详情、采购发票详情
+  - `sales.ts`：销售订单列表 / 详情、发货单详情、销售发票详情、销售下游单据创建、取消和收款取消
+  - `purchase.ts`：采购订单列表 / 详情、采购收货单详情、采购发票详情、采购下游单据创建、取消和付款取消
   - `master-data.ts`：商品、客户、供应商、UOM 查询
   - `api-utils.ts`：通用字段和分页解析
 - 已补生产 API base 骨架：`MYAPP_WEB_API_BASE_URL` 为空时同域请求，非同域部署时显式指定。
@@ -939,4 +941,4 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 7. 登录后确认 `/finance` 能显示应收 / 应付摘要或明确错误态。
 8. 登录后确认 `/inventory-ledger` 能显示库存流水或明确错误态。
 9. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
-10. 继续完善销售 / 采购详情页的动作按钮。
+10. 继续做真实浏览器联调，验证销售 / 采购创建、取消和收付款取消动作后的后端单据状态刷新。

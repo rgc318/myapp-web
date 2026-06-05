@@ -312,16 +312,33 @@
 
 候选动作：
 
-- 取消销售订单
-- 取消采购订单
+- 创建销售发货单
+- 创建销售发票
+- 登记销售收款
+- 创建采购收货单
+- 创建采购发票
+- 登记采购付款
+- 取消销售发货单
+- 取消销售发票
+- 取消采购收货单
+- 取消采购发票
 - 确认待处理单据
-- 取消付款
+- 取消最近收款
+- 取消最近付款
 - 轻量主数据编辑
 
 接口：
 
-- `myapp.api.gateway.cancel_order_v2`
-- `myapp.api.gateway.cancel_purchase_order_v2`
+- `myapp.api.gateway.create_delivery_note`
+- `myapp.api.gateway.create_sales_invoice`
+- `myapp.api.gateway.record_payment`
+- `myapp.api.gateway.receive_purchase_order`
+- `myapp.api.gateway.create_purchase_invoice`
+- `myapp.api.gateway.record_supplier_payment`
+- `myapp.api.gateway.cancel_delivery_note`
+- `myapp.api.gateway.cancel_sales_invoice`
+- `myapp.api.gateway.cancel_purchase_receipt`
+- `myapp.api.gateway.cancel_purchase_invoice`
 - `myapp.api.gateway.confirm_pending_document`
 - `myapp.api.gateway.cancel_payment_entry`
 - `myapp.api.gateway.cancel_supplier_payment`
@@ -348,6 +365,8 @@
 
 当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。后续页面基本是按接口映射推进，不应再因为认证、代理、错误格式和模板服务返工。
 
+阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可创建下游单据并登记收付款；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款。后续阶段 7 仍可继续补订单取消、待处理确认、表单化参数和主数据轻量编辑。
+
 ## 当前骨架完成状态
 
 已完成：
@@ -360,7 +379,7 @@
 - Web API 分层：`api-client`、`gateway`、`reports`、`sales`、`purchase`、`master-data`、`mutation`。
 - 通用页面状态组件：loading、empty、error、retry。
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
-- 幂等写操作 helper：后续取消、确认、付款等动作统一使用 `Idempotency-Key`。
+- 幂等写操作 helper：取消、确认、付款等动作统一使用 `Idempotency-Key`。
 - PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。
 - `/dashboard`、`/sales/orders`、`/sales/orders/:name`、`/purchase/orders`、`/purchase/orders/:name` 已作为第一批真实业务页面接入。
 - 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
@@ -370,7 +389,7 @@
 
 - Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
 - 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
-- Web 端写操作页面尚未接入，只提供了幂等调用骨架。
+- Web 端第一批写操作已接入；复杂表单参数、订单取消、待处理确认和主数据编辑尚未接入。
 - 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
 - 跨域生产部署未实测，第一阶段推荐同域反向代理。
 
@@ -381,9 +400,10 @@
 - 如果端口被旧进程占用，先清理旧进程；不要同时开多个相同前端服务。
 - 验证 `/umi.js` 的 `content_type` 必须是 `application/javascript`，如果是 `text/html`，浏览器会停在加载占位页。
 
-下一步建议继续从阶段 4 开始：
+下一步建议：
 
-- 下一步可以补销售 / 采购详情页的下游单据跳转和动作按钮。
+- 做真实浏览器联调，验证销售 / 采购创建、取消和收付款取消动作后的后端单据状态刷新。
+- 继续增强销售 / 采购动作表单，支持部分数量、日期、备注和自定义收付款金额。
 - `/payments` 后续等后端支持后可补方向、付款方式和往来方筛选。
 - `/inventory-ledger` 后续可补凭证跳转、商品选择器和仓库选择器。
 - 报表页后续可按真实使用反馈补图表、钻取和导出。
