@@ -10,6 +10,7 @@ import {
   Alert,
   Button,
   Empty,
+  InputNumber,
   Modal,
   message,
   Skeleton,
@@ -128,6 +129,52 @@ const SalesOrderDetailPage: React.FC = () => {
         }
       },
       title,
+    });
+  };
+
+  const confirmRecordPayment = () => {
+    if (!data) {
+      return;
+    }
+
+    const outstandingAmount = data.outstandingAmount ?? 0;
+    let paymentAmount = outstandingAmount;
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <InputNumber
+          autoFocus
+          controls={false}
+          defaultValue={outstandingAmount}
+          max={outstandingAmount}
+          min={0.01}
+          onChange={(value) => {
+            paymentAmount = Number(value ?? 0);
+          }}
+          precision={2}
+          prefix="¥"
+          style={{ width: 240 }}
+        />
+      ),
+      okText: '确认收款',
+      onOk: async () => {
+        if (paymentAmount <= 0 || paymentAmount > outstandingAmount) {
+          message.error('收款金额必须大于 0 且不能超过未收金额');
+          throw new Error('Invalid payment amount');
+        }
+
+        setActionLoading('payment');
+        try {
+          await recordSalesOrderPayment(data.name, paymentAmount);
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `记录收款 ${data.name}`,
     });
   };
 
@@ -257,17 +304,7 @@ const SalesOrderDetailPage: React.FC = () => {
                       (data.outstandingAmount ?? 0) <= 0
                     }
                     loading={actionLoading === 'payment'}
-                    onClick={() =>
-                      runOrderAction(
-                        'payment',
-                        `记录收款 ¥${formatCurrency(data.outstandingAmount)}？`,
-                        () =>
-                          recordSalesOrderPayment(
-                            data.name,
-                            data.outstandingAmount ?? 0,
-                          ),
-                      )
-                    }
+                    onClick={confirmRecordPayment}
                   >
                     记录收款
                   </Button>
