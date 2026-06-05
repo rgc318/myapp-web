@@ -187,7 +187,11 @@ export async function searchPurchaseOrders(
 
   const data = result.data ?? {};
   const rows = Array.isArray(data.items) ? data.items : [];
+  const pagination = readObject(data.pagination);
   const summary = readObject(data.summary);
+  const visibleCount = toOptionalNumber(
+    pagination.total_count ?? summary.visible_count,
+  ) ?? rows.length;
 
   return {
     items: rows.map((row) => mapSummaryRow(row)),
@@ -198,7 +202,7 @@ export async function searchPurchaseOrders(
       receivingCount: Number(summary.receiving_count ?? 0),
       totalCount: Number(summary.total_count ?? 0),
       unfinishedCount: Number(summary.unfinished_count ?? 0),
-      visibleCount: Number(summary.visible_count ?? rows.length),
+      visibleCount,
     } satisfies PurchaseOrderSearchSummary,
   };
 }

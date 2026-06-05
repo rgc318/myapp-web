@@ -37,7 +37,8 @@ describe('myapp domain services', () => {
             transaction_date: '2026-06-04',
           },
         ],
-        summary: { visible_count: 1, unfinished_count: 1 },
+        pagination: { has_more: true, total_count: 30 },
+        summary: { total_count: 31, visible_count: 1, unfinished_count: 1 },
       },
       meta: {},
       raw: {},
@@ -52,7 +53,8 @@ describe('myapp domain services', () => {
       outstandingAmount: 20.5,
       paymentStatus: 'unpaid',
     });
-    expect(result.summary.visibleCount).toBe(1);
+    expect(result.summary.totalCount).toBe(31);
+    expect(result.summary.visibleCount).toBe(30);
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ search_key: 'SO-0001' }),
@@ -132,7 +134,8 @@ describe('myapp domain services', () => {
             transaction_date: '2026-06-04',
           },
         ],
-        summary: { receiving_count: 1, visible_count: 1 },
+        pagination: { has_more: false, total_count: 24 },
+        summary: { receiving_count: 1, total_count: 25, visible_count: 1 },
       },
       meta: {},
       raw: {},
@@ -148,6 +151,8 @@ describe('myapp domain services', () => {
       supplierName: 'Supplier A',
     });
     expect(result.summary.receivingCount).toBe(1);
+    expect(result.summary.totalCount).toBe(25);
+    expect(result.summary.visibleCount).toBe(24);
   });
 
   it('maps report and cashflow envelopes', async () => {
@@ -216,6 +221,7 @@ describe('myapp domain services', () => {
           },
         ],
         meta: { has_more: false, total: 1 },
+        pagination: { has_more: true, total_count: 8 },
       },
       meta: {},
       raw: {},
@@ -230,6 +236,7 @@ describe('myapp domain services', () => {
       price: 19.9,
       totalQty: 5,
     });
-    expect(result.total).toBe(1);
+    expect(result.total).toBe(8);
+    expect(result.hasMore).toBe(true);
   });
 });

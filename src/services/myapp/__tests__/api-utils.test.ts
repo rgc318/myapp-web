@@ -38,5 +38,14 @@ describe('myapp api utils', () => {
         total: 12,
       },
     );
+    expect(
+      readPaginationMeta({
+        meta: { total: 12, total_count: 14, has_more: false },
+        pagination: { total_count: 30, has_more: true },
+      }),
+    ).toEqual({
+      hasMore: true,
+      total: 30,
+    });
   });
 });

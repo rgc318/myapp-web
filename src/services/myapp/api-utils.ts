@@ -80,11 +80,11 @@ export function readPaginationMeta(value: unknown, visibleCount?: number) {
   const pagination = readObject(payload.pagination);
 
   return {
-    hasMore: Boolean(meta.has_more ?? pagination.has_more),
+    hasMore: Boolean(pagination.has_more ?? meta.has_more),
     total:
-      toOptionalNumber(meta.total) ??
-      toOptionalNumber(meta.total_count) ??
       toOptionalNumber(pagination.total_count) ??
+      toOptionalNumber(meta.total_count) ??
+      toOptionalNumber(meta.total) ??
       visibleCount ??
       0,
   };

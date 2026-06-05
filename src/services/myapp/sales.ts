@@ -1,4 +1,5 @@
 import { callGatewayMethod } from './api-client';
+import { readObject } from './api-utils';
 
 export type SalesOrderStatusFilter =
   | 'all'
@@ -204,13 +205,16 @@ export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
 
   const data = result.data ?? {};
   const rows = Array.isArray(data.items) ? data.items : [];
-  const summary = data.summary ?? {};
+  const pagination = readObject(data.pagination);
+  const summary = readObject(data.summary);
+  const visibleCount =
+    toNumber(pagination.total_count ?? summary.visible_count) ?? rows.length;
 
   return {
     items: rows.map((row) => normalizeSummaryRow(row)),
     summary: {
       totalCount: Number(summary.total_count ?? 0),
-      visibleCount: Number(summary.visible_count ?? rows.length),
+      visibleCount,
       unfinishedCount: Number(summary.unfinished_count ?? 0),
       deliveryCount: Number(summary.delivery_count ?? 0),
       paymentCount: Number(summary.payment_count ?? 0),
