@@ -376,6 +376,8 @@
 已完成：
 
 - Web JWT 登录链路：`login_v1`、`me_v1`、`refresh_v1`、`logout_v1`。
+- 应用标题、PWA 名称、菜单、登录页标题和页脚已改为中文业务后台文案。
+- 模板路由 `/welcome`、`/admin`、`/list` 暂时保留但已从菜单隐藏。
 - 认证接口改为原生 `fetch`，避免 Umi request 运行时循环依赖导致页面卡在 `正在加载资源`。
 - 统一 token 存储和请求注入：业务页面和 domain service 不需要手动拼 `Authorization`。
 - 统一 API base：默认同域 `/api/method/...`，生产或跨域部署可用 `MYAPP_WEB_API_BASE_URL`。

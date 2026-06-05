@@ -902,6 +902,8 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 截至当前提交，Web 端基础接入状态：
 
 - 登录页保留 Ant Design Pro 模板视觉，账号密码登录接入 `myapp.auth.token_api.login_v1`。
+- 应用标题、PWA 名称、菜单、登录页标题和页脚已改为中文业务后台文案。
+- `/welcome`、`/admin`、`/list` 模板路由暂时保留但已从菜单隐藏，避免影响业务导航。
 - 登录成功后保存 JWT token，并更新 `@@initialState.currentUser`。
 - `getInitialState` 使用 `me_v1` 恢复当前用户，不再调用模板 `/api/currentUser`。
 - 全局 request 拦截器会给 `/api/method/myapp.*` 请求添加 Bearer Token。
