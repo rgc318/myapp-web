@@ -163,12 +163,14 @@ export default [
     name: 'welcome',
     icon: 'smile',
     component: './Welcome',
+    hideInMenu: true,
   },
   {
     path: '/admin',
     name: 'admin',
     icon: 'crown',
     access: 'canAdmin',
+    hideInMenu: true,
     routes: [
       {
         path: '/admin',
@@ -186,6 +188,7 @@ export default [
     icon: 'table',
     path: '/list',
     component: './table-list',
+    hideInMenu: true,
   },
   {
     path: '/',
