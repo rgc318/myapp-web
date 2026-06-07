@@ -73,14 +73,23 @@ export type SalesOrderDetail = SalesOrderSummary & {
 };
 
 export type SalesOrderDetailItem = {
+  amount: number | null;
+  deliveredQty: number | null;
+  imageUrl?: string;
   itemCode: string;
   itemName: string;
-  imageUrl?: string;
   qty: number | null;
   rate: number | null;
-  amount: number | null;
-  warehouse: string;
+  salesOrderItem: string;
   uom: string;
+  warehouse: string;
+};
+
+export type SalesOrderActionItem = {
+  itemCode?: string;
+  price?: number;
+  qty: number;
+  salesOrderItem?: string;
 };
 
 export type DeliveryNoteDetail = {
@@ -172,15 +181,30 @@ function normalizeItems(value: unknown): SalesOrderDetailItem[] {
   return Array.isArray(value)
     ? value.map((item: Record<string, any>) => ({
         amount: toNumber(item.amount),
+        deliveredQty: toNumber(item.delivered_qty),
         imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
         itemCode: String(item.item_code ?? ''),
         itemName: String(item.item_name ?? item.item_code ?? ''),
         qty: toNumber(item.qty),
         rate: toNumber(item.rate),
+        salesOrderItem: String(item.sales_order_item ?? item.name ?? ''),
         uom: String(item.uom_display ?? item.uom ?? ''),
         warehouse: String(item.warehouse ?? ''),
       }))
     : [];
+}
+
+function normalizeSalesActionItems(items: SalesOrderActionItem[] | undefined) {
+  return items
+    ?.filter((item) => item.qty > 0)
+    .map((item) => ({
+      ...(item.itemCode ? { item_code: item.itemCode } : {}),
+      ...(item.price !== undefined ? { price: item.price } : {}),
+      qty: item.qty,
+      ...(item.salesOrderItem
+        ? { sales_order_item: item.salesOrderItem }
+        : {}),
+    }));
 }
 
 export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
@@ -368,13 +392,19 @@ export async function getSalesInvoiceDetail(
 
 export async function submitSalesOrderDelivery(
   orderName: string,
-  options: { postingDate?: string; remarks?: string } = {},
+  options: {
+    deliveryItems?: SalesOrderActionItem[];
+    postingDate?: string;
+    remarks?: string;
+  } = {},
 ) {
+  const deliveryItems = normalizeSalesActionItems(options.deliveryItems);
   const postingDate = options.postingDate?.trim();
   const remarks = options.remarks?.trim();
 
   return runGatewayMutation('submit_delivery', {
     payload: {
+      ...(deliveryItems?.length ? { delivery_items: deliveryItems } : {}),
       ...(postingDate || remarks
         ? {
             kwargs: {
@@ -389,9 +419,19 @@ export async function submitSalesOrderDelivery(
   });
 }
 
-export async function createSalesOrderInvoice(orderName: string) {
+export async function createSalesOrderInvoice(
+  orderName: string,
+  options: { invoiceItems?: SalesOrderActionItem[]; remarks?: string } = {},
+) {
+  const invoiceItems = normalizeSalesActionItems(options.invoiceItems);
+  const remarks = options.remarks?.trim();
+
   return runGatewayMutation('create_sales_invoice', {
-    payload: { source_name: orderName },
+    payload: {
+      ...(invoiceItems?.length ? { invoice_items: invoiceItems } : {}),
+      ...(remarks ? { kwargs: { remarks } } : {}),
+      source_name: orderName,
+    },
     successMessage: '销售发票已创建',
   });
 }

@@ -65,11 +65,19 @@ export type PurchaseDocumentItem = {
   amount: number | null;
   itemCode: string;
   itemName: string;
+  purchaseOrderItem: string;
   qty: number | null;
   rate: number | null;
   receivedQty?: number | null;
   uom: string;
   warehouse: string;
+};
+
+export type PurchaseOrderActionItem = {
+  itemCode?: string;
+  price?: number;
+  purchaseOrderItem?: string;
+  qty: number;
 };
 
 export type PurchaseOrderDetail = PurchaseOrderSummary & {
@@ -158,6 +166,7 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
         amount: toOptionalNumber(item.amount),
         itemCode: String(item.item_code ?? ''),
         itemName: String(item.item_name ?? item.item_code ?? ''),
+        purchaseOrderItem: String(item.purchase_order_item ?? item.name ?? ''),
         qty: toOptionalNumber(item.qty),
         rate: toOptionalNumber(item.rate),
         receivedQty: toOptionalNumber(item.received_qty),
@@ -165,6 +174,21 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
         warehouse: String(item.warehouse ?? ''),
       }))
     : [];
+}
+
+function normalizePurchaseActionItems(
+  items: PurchaseOrderActionItem[] | undefined,
+) {
+  return items
+    ?.filter((item) => item.qty > 0)
+    .map((item) => ({
+      ...(item.itemCode ? { item_code: item.itemCode } : {}),
+      ...(item.price !== undefined ? { price: item.price } : {}),
+      ...(item.purchaseOrderItem
+        ? { purchase_order_item: item.purchaseOrderItem }
+        : {}),
+      qty: item.qty,
+    }));
 }
 
 export async function searchPurchaseOrders(
@@ -346,13 +370,19 @@ export async function getPurchaseInvoiceDetail(
 
 export async function receivePurchaseOrder(
   orderName: string,
-  options: { postingDate?: string; remarks?: string } = {},
+  options: {
+    postingDate?: string;
+    receiptItems?: PurchaseOrderActionItem[];
+    remarks?: string;
+  } = {},
 ) {
   const postingDate = options.postingDate?.trim();
+  const receiptItems = normalizePurchaseActionItems(options.receiptItems);
   const remarks = options.remarks?.trim();
 
   return runGatewayMutation('receive_purchase_order', {
     payload: {
+      ...(receiptItems?.length ? { receipt_items: receiptItems } : {}),
       ...(postingDate || remarks
         ? {
             kwargs: {
@@ -367,9 +397,19 @@ export async function receivePurchaseOrder(
   });
 }
 
-export async function createPurchaseOrderInvoice(orderName: string) {
+export async function createPurchaseOrderInvoice(
+  orderName: string,
+  options: { invoiceItems?: PurchaseOrderActionItem[]; remarks?: string } = {},
+) {
+  const invoiceItems = normalizePurchaseActionItems(options.invoiceItems);
+  const remarks = options.remarks?.trim();
+
   return runGatewayMutation('create_purchase_invoice', {
-    payload: { source_name: orderName },
+    payload: {
+      ...(invoiceItems?.length ? { invoice_items: invoiceItems } : {}),
+      ...(remarks ? { kwargs: { remarks } } : {}),
+      source_name: orderName,
+    },
     successMessage: '采购发票已创建',
   });
 }

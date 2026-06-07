@@ -95,10 +95,12 @@ describe('myapp domain services', () => {
         items: [
           {
             amount: 100,
+            delivered_qty: 1,
             item_code: 'SKU-1',
             item_name: 'Camera',
             qty: 2,
             rate: 50,
+            sales_order_item: 'SOI-0001',
             uom: 'Nos',
             warehouse: 'Stores - RD',
           },
@@ -131,7 +133,14 @@ describe('myapp domain services', () => {
       canSubmitDelivery: true,
       customer: 'ACME',
       deliveryNotes: ['DN-0001'],
-      items: [{ itemCode: 'SKU-1', itemName: 'Camera' }],
+      items: [
+        {
+          deliveredQty: 1,
+          itemCode: 'SKU-1',
+          itemName: 'Camera',
+          salesOrderItem: 'SOI-0001',
+        },
+      ],
       paidAmount: 70,
       salesInvoices: ['SI-0001'],
     });
@@ -263,10 +272,17 @@ describe('myapp domain services', () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
 
     await submitSalesOrderDelivery('SO-0001', {
+      deliveryItems: [
+        { itemCode: 'SKU-1', qty: 2, salesOrderItem: 'SOI-0001' },
+        { itemCode: 'SKU-2', qty: 0, salesOrderItem: 'SOI-0002' },
+      ],
       postingDate: '2026-06-05',
       remarks: '发货备注',
     });
-    await createSalesOrderInvoice('SO-0001');
+    await createSalesOrderInvoice('SO-0001', {
+      invoiceItems: [{ itemCode: 'SKU-1', qty: 1, salesOrderItem: 'SOI-0001' }],
+      remarks: '开票备注',
+    });
     await recordSalesOrderPayment('SO-0001', 120, { modeOfPayment: 'Bank' });
     await cancelSalesOrder('SO-0001');
 
@@ -274,6 +290,9 @@ describe('myapp domain services', () => {
       1,
       'submit_delivery',
       {
+        delivery_items: [
+          { item_code: 'SKU-1', qty: 2, sales_order_item: 'SOI-0001' },
+        ],
         kwargs: { posting_date: '2026-06-05', remarks: '发货备注' },
         order_name: 'SO-0001',
       },
@@ -282,7 +301,13 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       2,
       'create_sales_invoice',
-      { source_name: 'SO-0001' },
+      {
+        invoice_items: [
+          { item_code: 'SKU-1', qty: 1, sales_order_item: 'SOI-0001' },
+        ],
+        kwargs: { remarks: '开票备注' },
+        source_name: 'SO-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
@@ -309,9 +334,18 @@ describe('myapp domain services', () => {
 
     await receivePurchaseOrder('PO-0001', {
       postingDate: '2026-06-05',
+      receiptItems: [
+        { itemCode: 'SKU-1', purchaseOrderItem: 'POI-0001', qty: 3 },
+        { itemCode: 'SKU-2', purchaseOrderItem: 'POI-0002', qty: 0 },
+      ],
       remarks: '收货备注',
     });
-    await createPurchaseOrderInvoice('PO-0001');
+    await createPurchaseOrderInvoice('PO-0001', {
+      invoiceItems: [
+        { itemCode: 'SKU-1', purchaseOrderItem: 'POI-0001', qty: 2 },
+      ],
+      remarks: '采购开票备注',
+    });
     await recordPurchaseOrderPayment('PO-0001', 88, {
       modeOfPayment: 'Cash',
     });
@@ -323,13 +357,22 @@ describe('myapp domain services', () => {
       {
         kwargs: { posting_date: '2026-06-05', remarks: '收货备注' },
         order_name: 'PO-0001',
+        receipt_items: [
+          { item_code: 'SKU-1', purchase_order_item: 'POI-0001', qty: 3 },
+        ],
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       2,
       'create_purchase_invoice',
-      { source_name: 'PO-0001' },
+      {
+        invoice_items: [
+          { item_code: 'SKU-1', purchase_order_item: 'POI-0001', qty: 2 },
+        ],
+        kwargs: { remarks: '采购开票备注' },
+        source_name: 'PO-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(

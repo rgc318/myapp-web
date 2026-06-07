@@ -21,6 +21,11 @@ import {
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
+  buildLineQtyRow,
+  LineQtyEditor,
+  type LineQtyEditorRow,
+} from '@/components/LineQtyEditor';
+import {
   cancelSalesOrder,
   createSalesOrderInvoice,
   getSalesOrderDetail,
@@ -46,6 +51,39 @@ function docLinks(values: string[], basePath: string) {
     : '无';
 }
 
+function toQty(value: number | null | undefined) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function buildSalesActionRows(
+  items: SalesOrderDetailItem[],
+  getMaxQty: (item: SalesOrderDetailItem) => number,
+) {
+  return items
+    .map((item) =>
+      buildLineQtyRow({
+        completedQty: item.deliveredQty,
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        key: item.salesOrderItem || item.itemCode,
+        maxQty: getMaxQty(item),
+        orderedQty: item.qty,
+        uom: item.uom,
+      }),
+    )
+    .filter((item) => item.maxQty > 0);
+}
+
+function toSalesActionItems(rows: LineQtyEditorRow[]) {
+  return rows
+    .filter((row) => row.actionQty > 0)
+    .map((row) => ({
+      itemCode: row.itemCode,
+      qty: row.actionQty,
+      salesOrderItem: row.key,
+    }));
+}
+
 const itemColumns = [
   {
     title: '商品编码',
@@ -62,6 +100,12 @@ const itemColumns = [
     dataIndex: 'qty',
     align: 'right' as const,
     width: 100,
+  },
+  {
+    title: '已发数量',
+    dataIndex: 'deliveredQty',
+    align: 'right' as const,
+    width: 110,
   },
   {
     title: '单位',
@@ -138,6 +182,15 @@ const SalesOrderDetailPage: React.FC = () => {
 
     let postingDate = dayjs().format('YYYY-MM-DD');
     let remarks = '';
+    let selectedRows = buildSalesActionRows(data.items, (item) =>
+      Math.max(toQty(item.qty) - toQty(item.deliveredQty), 0),
+    );
+
+    if (!selectedRows.length) {
+      message.warning('当前订单没有可发货的商品明细');
+      return;
+    }
+
     Modal.confirm({
       cancelText: '取消',
       content: (
@@ -156,13 +209,28 @@ const SalesOrderDetailPage: React.FC = () => {
             }}
             placeholder="备注"
           />
+          <LineQtyEditor
+            actionTitle="本次发货"
+            completedTitle="已发货"
+            onChange={(rows) => {
+              selectedRows = rows;
+            }}
+            rows={selectedRows}
+          />
         </Space>
       ),
       okText: '创建发货单',
       onOk: async () => {
+        const deliveryItems = toSalesActionItems(selectedRows);
+        if (!deliveryItems.length) {
+          message.error('请至少填写一条本次发货数量');
+          throw new Error('No delivery items selected');
+        }
+
         setActionLoading('delivery');
         try {
           await submitSalesOrderDelivery(data.name, {
+            deliveryItems,
             postingDate,
             remarks,
           });
@@ -175,6 +243,70 @@ const SalesOrderDetailPage: React.FC = () => {
         }
       },
       title: `创建销售发货单 ${data.name}`,
+      width: 900,
+    });
+  };
+
+  const confirmCreateInvoice = () => {
+    if (!data) {
+      return;
+    }
+
+    let remarks = '';
+    let selectedRows = buildSalesActionRows(data.items, (item) =>
+      toQty(item.qty),
+    );
+
+    if (!selectedRows.length) {
+      message.warning('当前订单没有可开票的商品明细');
+      return;
+    }
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+          <LineQtyEditor
+            actionTitle="本次开票"
+            completedTitle="已发货"
+            onChange={(rows) => {
+              selectedRows = rows;
+            }}
+            rows={selectedRows}
+          />
+        </Space>
+      ),
+      okText: '创建销售发票',
+      onOk: async () => {
+        const invoiceItems = toSalesActionItems(selectedRows);
+        if (!invoiceItems.length) {
+          message.error('请至少填写一条本次开票数量');
+          throw new Error('No invoice items selected');
+        }
+
+        setActionLoading('invoice');
+        try {
+          await createSalesOrderInvoice(data.name, {
+            invoiceItems,
+            remarks,
+          });
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `创建销售发票 ${data.name}`,
+      width: 900,
     });
   };
 
@@ -347,11 +479,7 @@ const SalesOrderDetailPage: React.FC = () => {
                   <Button
                     disabled={!data.canCreateSalesInvoice}
                     loading={actionLoading === 'invoice'}
-                    onClick={() =>
-                      runOrderAction('invoice', '创建销售发票？', () =>
-                        createSalesOrderInvoice(data.name),
-                      )
-                    }
+                    onClick={confirmCreateInvoice}
                   >
                     创建销售发票
                   </Button>

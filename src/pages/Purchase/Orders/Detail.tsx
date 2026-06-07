@@ -21,6 +21,11 @@ import {
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
+  buildLineQtyRow,
+  LineQtyEditor,
+  type LineQtyEditorRow,
+} from '@/components/LineQtyEditor';
+import {
   cancelPurchaseOrder,
   createPurchaseOrderInvoice,
   getPurchaseOrderDetail,
@@ -44,6 +49,39 @@ function docLinks(values: string[], basePath: string) {
         </React.Fragment>
       ))
     : '无';
+}
+
+function toQty(value: number | null | undefined) {
+  return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function buildPurchaseActionRows(
+  items: PurchaseDocumentItem[],
+  getMaxQty: (item: PurchaseDocumentItem) => number,
+) {
+  return items
+    .map((item) =>
+      buildLineQtyRow({
+        completedQty: item.receivedQty,
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        key: item.purchaseOrderItem || item.itemCode,
+        maxQty: getMaxQty(item),
+        orderedQty: item.qty,
+        uom: item.uom,
+      }),
+    )
+    .filter((item) => item.maxQty > 0);
+}
+
+function toPurchaseActionItems(rows: LineQtyEditorRow[]) {
+  return rows
+    .filter((row) => row.actionQty > 0)
+    .map((row) => ({
+      itemCode: row.itemCode,
+      purchaseOrderItem: row.key,
+      qty: row.actionQty,
+    }));
 }
 
 const itemColumns = [
@@ -144,6 +182,15 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
     let postingDate = dayjs().format('YYYY-MM-DD');
     let remarks = '';
+    let selectedRows = buildPurchaseActionRows(data.items, (item) =>
+      Math.max(toQty(item.qty) - toQty(item.receivedQty), 0),
+    );
+
+    if (!selectedRows.length) {
+      message.warning('当前订单没有可收货的商品明细');
+      return;
+    }
+
     Modal.confirm({
       cancelText: '取消',
       content: (
@@ -162,14 +209,29 @@ const PurchaseOrderDetailPage: React.FC = () => {
             }}
             placeholder="备注"
           />
+          <LineQtyEditor
+            actionTitle="本次收货"
+            completedTitle="已收货"
+            onChange={(rows) => {
+              selectedRows = rows;
+            }}
+            rows={selectedRows}
+          />
         </Space>
       ),
       okText: '创建收货单',
       onOk: async () => {
+        const receiptItems = toPurchaseActionItems(selectedRows);
+        if (!receiptItems.length) {
+          message.error('请至少填写一条本次收货数量');
+          throw new Error('No receipt items selected');
+        }
+
         setActionLoading('receipt');
         try {
           await receivePurchaseOrder(data.name, {
             postingDate,
+            receiptItems,
             remarks,
           });
           refresh();
@@ -181,6 +243,70 @@ const PurchaseOrderDetailPage: React.FC = () => {
         }
       },
       title: `创建采购收货单 ${data.name}`,
+      width: 900,
+    });
+  };
+
+  const confirmCreateInvoice = () => {
+    if (!data) {
+      return;
+    }
+
+    let remarks = '';
+    let selectedRows = buildPurchaseActionRows(data.items, (item) =>
+      toQty(item.qty),
+    );
+
+    if (!selectedRows.length) {
+      message.warning('当前订单没有可开票的商品明细');
+      return;
+    }
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+          <LineQtyEditor
+            actionTitle="本次开票"
+            completedTitle="已收货"
+            onChange={(rows) => {
+              selectedRows = rows;
+            }}
+            rows={selectedRows}
+          />
+        </Space>
+      ),
+      okText: '创建采购发票',
+      onOk: async () => {
+        const invoiceItems = toPurchaseActionItems(selectedRows);
+        if (!invoiceItems.length) {
+          message.error('请至少填写一条本次开票数量');
+          throw new Error('No invoice items selected');
+        }
+
+        setActionLoading('invoice');
+        try {
+          await createPurchaseOrderInvoice(data.name, {
+            invoiceItems,
+            remarks,
+          });
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `创建采购发票 ${data.name}`,
+      width: 900,
     });
   };
 
@@ -360,11 +486,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
                   <Button
                     disabled={!data.canCreateInvoice}
                     loading={actionLoading === 'invoice'}
-                    onClick={() =>
-                      runOrderAction('invoice', '创建采购发票？', () =>
-                        createPurchaseOrderInvoice(data.name),
-                      )
-                    }
+                    onClick={confirmCreateInvoice}
                   >
                     创建采购发票
                   </Button>
