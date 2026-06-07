@@ -50,6 +50,12 @@ export default [
         hideInMenu: true,
       },
       {
+        path: '/sales/orders/:name/edit',
+        name: 'order-edit',
+        component: './Sales/Orders/Edit',
+        hideInMenu: true,
+      },
+      {
         path: '/sales/orders/:name',
         name: 'order-detail',
         component: './Sales/Orders/Detail',

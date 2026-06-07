@@ -467,6 +467,11 @@ const SalesOrderDetailPage: React.FC = () => {
 
               <ProCard title="履约动作">
                 <Space wrap>
+                  <Link
+                    to={`/sales/orders/${encodeURIComponent(data.name)}/edit`}
+                  >
+                    <Button>编辑订单</Button>
+                  </Link>
                   <Button
                     disabled={!data.canSubmitDelivery}
                     loading={actionLoading === 'delivery'}

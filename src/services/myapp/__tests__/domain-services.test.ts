@@ -24,6 +24,8 @@ import {
   recordSalesOrderPayment,
   searchSalesOrders,
   submitSalesOrderDelivery,
+  updateSalesOrderItemsV2,
+  updateSalesOrderV2,
 } from '../sales';
 
 jest.mock('../api-client', () => ({
@@ -390,6 +392,20 @@ describe('myapp domain services', () => {
       forceDelivery: true,
       items: [{ itemCode: 'SKU-1', qty: 1 }],
     });
+    await updateSalesOrderV2('SO-0001', {
+      customerInfo: { contactDisplayName: 'Alice', contactPhone: '138' },
+      defaultSalesMode: 'retail',
+      deliveryDate: '2026-06-08',
+      remarks: '更新备注',
+      shippingInfo: { shippingAddressText: '上海' },
+      transactionDate: '2026-06-07',
+    });
+    await updateSalesOrderItemsV2('SO-0001', {
+      company: 'rgc (Demo)',
+      defaultWarehouse: 'Stores - RD',
+      deliveryDate: '2026-06-08',
+      items: [{ itemCode: 'SKU-1', price: 22, qty: 3, salesMode: 'retail' }],
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -463,6 +479,42 @@ describe('myapp domain services', () => {
         customer: 'CUST-0001',
         force_delivery: 1,
         items: [{ item_code: 'SKU-1', qty: 1 }],
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      7,
+      'update_order_v2',
+      {
+        customer_info: {
+          contact_display_name: 'Alice',
+          contact_phone: '138',
+        },
+        default_sales_mode: 'retail',
+        delivery_date: '2026-06-08',
+        order_name: 'SO-0001',
+        remarks: '更新备注',
+        shipping_info: { shipping_address_text: '上海' },
+        transaction_date: '2026-06-07',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      8,
+      'update_order_items_v2',
+      {
+        company: 'rgc (Demo)',
+        default_warehouse: 'Stores - RD',
+        delivery_date: '2026-06-08',
+        items: [
+          {
+            item_code: 'SKU-1',
+            price: 22,
+            qty: 3,
+            sales_mode: 'retail',
+          },
+        ],
+        order_name: 'SO-0001',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

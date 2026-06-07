@@ -58,6 +58,7 @@ export type SearchSalesOrdersParams = {
 export type SalesOrderDetail = SalesOrderSummary & {
   canCancelOrder: boolean;
   currency: string;
+  defaultSalesMode: SalesMode;
   deliveryDate: string;
   remarks: string;
   contactDisplay: string;
@@ -82,6 +83,8 @@ export type SalesOrderDetailItem = {
   qty: number | null;
   rate: number | null;
   salesOrderItem: string;
+  salesMode: SalesMode;
+  specification: string;
   uom: string;
   warehouse: string;
 };
@@ -242,6 +245,8 @@ function normalizeItems(value: unknown): SalesOrderDetailItem[] {
         qty: toNumber(item.qty),
         rate: toNumber(item.rate),
         salesOrderItem: String(item.sales_order_item ?? item.name ?? ''),
+        salesMode: item.sales_mode === 'retail' ? 'retail' : 'wholesale',
+        specification: String(item.specification ?? ''),
         uom: String(item.uom_display ?? item.uom ?? ''),
         warehouse: String(item.warehouse ?? ''),
       }))
@@ -436,6 +441,8 @@ export async function getSalesOrderDetail(
   return {
     ...summary,
     currency: String(data.meta?.currency ?? 'CNY'),
+    defaultSalesMode:
+      data.meta?.default_sales_mode === 'retail' ? 'retail' : 'wholesale',
     deliveryDate: String(data.meta?.delivery_date ?? ''),
     remarks: String(data.meta?.remarks ?? ''),
     contactDisplay: String(
@@ -480,6 +487,58 @@ export async function quickCreateSalesOrderV2(payload: CreateSalesOrderPayload) 
     payload: buildCreateSalesOrderPayload(payload),
     successMessage: '销售订单已快捷创建',
   });
+}
+
+export async function updateSalesOrderV2(
+  orderName: string,
+  payload: Omit<CreateSalesOrderPayload, 'company' | 'customer' | 'items'>,
+) {
+  return runGatewayMutation<{ order?: string }>('update_order_v2', {
+    payload: compactPayload({
+      order_name: orderName,
+      customer_info: payload.customerInfo
+        ? compactPayload({
+            contact_display_name: payload.customerInfo.contactDisplayName,
+            contact_email: payload.customerInfo.contactEmail,
+            contact_phone: payload.customerInfo.contactPhone,
+          })
+        : undefined,
+      default_sales_mode: payload.defaultSalesMode,
+      delivery_date: payload.deliveryDate,
+      remarks: payload.remarks,
+      shipping_info: payload.shippingInfo
+        ? compactPayload({
+            receiver_name: payload.shippingInfo.receiverName,
+            receiver_phone: payload.shippingInfo.receiverPhone,
+            shipping_address_name: payload.shippingInfo.shippingAddressName,
+            shipping_address_text: payload.shippingInfo.shippingAddressText,
+          })
+        : undefined,
+      transaction_date: payload.transactionDate,
+    }),
+    successMessage: '销售订单已更新',
+  });
+}
+
+export async function updateSalesOrderItemsV2(
+  orderName: string,
+  payload: Pick<CreateSalesOrderPayload, 'company' | 'deliveryDate' | 'items'> & {
+    defaultWarehouse?: string;
+  },
+) {
+  return runGatewayMutation<{ order?: string; source_order?: string }>(
+    'update_order_items_v2',
+    {
+      payload: compactPayload({
+        company: payload.company,
+        default_warehouse: payload.defaultWarehouse,
+        delivery_date: payload.deliveryDate,
+        items: normalizeSalesOrderItems(payload.items),
+        order_name: orderName,
+      }),
+      successMessage: '销售订单商品明细已更新',
+    },
+  );
 }
 
 export async function getDeliveryNoteDetail(

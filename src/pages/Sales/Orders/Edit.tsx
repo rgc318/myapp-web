@@ -1,6 +1,6 @@
-import { PlusOutlined } from '@ant-design/icons';
+import { SaveOutlined } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
+import { history, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -8,7 +8,9 @@ import {
   Form,
   Input,
   message,
+  Result,
   Select,
+  Skeleton,
   Space,
   Typography,
 } from 'antd';
@@ -19,24 +21,27 @@ import {
   RemoteLinkSelect,
   SalesOrderLinesTable,
 } from '@/components';
-import type { ProductSummary } from '@/services/myapp/master-data';
 import {
-  createSalesOrderV2,
-  getCustomerSalesContext,
-  quickCreateSalesOrderV2,
+  getProductDetail,
+  type ProductSummary,
+} from '@/services/myapp/master-data';
+import {
+  getSalesOrderDetail,
+  type SalesOrderDetail,
+  type SalesOrderDetailItem,
+  updateSalesOrderItemsV2,
+  updateSalesOrderV2,
 } from '@/services/myapp/sales';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 import {
   buildSalesOrderLineFromProduct,
   getOrderLinesTotal,
   getSalesModeLabel,
+  normalizeSalesMode,
   recalculateSalesOrderLine,
   type SalesMode,
   type SalesOrderEditorLine,
 } from '@/utils/sales-order-editor';
-
-const DEFAULT_COMPANY = 'rgc (Demo)';
-const today = dayjs();
 
 type FormValues = {
   company: string;
@@ -51,35 +56,114 @@ type FormValues = {
   warehouse?: string;
 };
 
-const SalesOrderNewPage: React.FC = () => {
+function dateValue(value: string) {
+  return value ? dayjs(value) : dayjs();
+}
+
+function fallbackLineFromItem(
+  item: SalesOrderDetailItem,
+  defaultMode: SalesMode,
+): SalesOrderEditorLine {
+  const uom = item.uom || null;
+  const price = item.rate ?? 0;
+  return recalculateSalesOrderLine({
+    allUomDisplays: {},
+    allUoms: uom ? [uom] : [],
+    amount: item.amount ?? 0,
+    itemCode: item.itemCode,
+    itemName: item.itemName || item.itemCode,
+    key:
+      item.salesOrderItem || `${item.itemCode}:${item.warehouse || 'default'}`,
+    modeDefaults: {
+      retail: { price, uom },
+      wholesale: { price, uom },
+    },
+    price,
+    qty: item.qty ?? 1,
+    salesMode: item.salesMode || defaultMode,
+    specification: item.specification,
+    stockQty: null,
+    stockUom: uom,
+    uom,
+    uomConversions: [],
+    warehouse: item.warehouse,
+  });
+}
+
+async function buildEditableLines(detail: SalesOrderDetail) {
+  const products = await Promise.all(
+    detail.items.map((item) =>
+      getProductDetail(item.itemCode, {
+        company: detail.company,
+        warehouse: item.warehouse,
+      }).catch(() => null),
+    ),
+  );
+
+  return detail.items.map((item, index) => {
+    const mode = normalizeSalesMode(item.salesMode || detail.defaultSalesMode);
+    const product = products[index];
+    if (!product) {
+      return fallbackLineFromItem(item, mode);
+    }
+
+    return recalculateSalesOrderLine({
+      ...buildSalesOrderLineFromProduct({
+        defaultMode: mode,
+        defaultWarehouse: item.warehouse,
+        product,
+      }),
+      amount: item.amount ?? 0,
+      key:
+        item.salesOrderItem ||
+        `${item.itemCode}:${item.warehouse || 'default'}`,
+      price: item.rate,
+      qty: item.qty ?? 1,
+      salesMode: mode,
+      uom: item.uom || product.uom || product.stockUom,
+      warehouse: item.warehouse || product.warehouse,
+    });
+  });
+}
+
+const SalesOrderEditPage: React.FC = () => {
+  const params = useParams();
+  const orderName = decodeURIComponent(String(params.name ?? ''));
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<SalesOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [lastCustomer, setLastCustomer] = useState('');
   const defaultSalesMode =
     Form.useWatch('defaultSalesMode', form) ?? 'wholesale';
-  const customer = Form.useWatch('customer', form);
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getOrderLinesTotal(lines), [lines]);
 
-  React.useEffect(() => {
-    if (!customer || customer === lastCustomer) {
-      return;
-    }
-    setLastCustomer(customer);
-    void getCustomerSalesContext(customer).then((context) => {
+  const { data, error, loading } = useRequest(
+    async () => {
+      const detail = await getSalesOrderDetail(orderName);
+      if (!detail) {
+        return null;
+      }
+      const editableLines = await buildEditableLines(detail);
       form.setFieldsValue({
-        company: context.suggestions.company ?? form.getFieldValue('company'),
-        contactDisplayName: context.defaultContact?.displayName ?? undefined,
-        contactPhone: context.defaultContact?.phone ?? undefined,
-        shippingAddressText:
-          context.defaultAddress?.addressDisplay ?? undefined,
-        warehouse:
-          context.suggestions.warehouse ?? form.getFieldValue('warehouse'),
+        company: detail.company,
+        contactDisplayName: detail.contactDisplay,
+        contactPhone: detail.contactPhone,
+        customer: detail.customer,
+        defaultSalesMode: detail.defaultSalesMode,
+        deliveryDate: dateValue(detail.deliveryDate),
+        remarks: detail.remarks,
+        shippingAddressText: detail.addressDisplay,
+        transactionDate: dateValue(detail.transactionDate),
+        warehouse: editableLines.find((line) => line.warehouse)?.warehouse,
       });
-    });
-  }, [customer, form, lastCustomer]);
+      setLines(editableLines);
+      return detail;
+    },
+    {
+      refreshDeps: [orderName],
+    },
+  );
 
   const addProduct = (product: ProductSummary) => {
     const nextLine = buildSalesOrderLineFromProduct({
@@ -113,7 +197,7 @@ const SalesOrderNewPage: React.FC = () => {
     );
   };
 
-  const submitOrder = async (quick: boolean) => {
+  const submitOrder = async () => {
     const values = await form.validateFields();
     if (!lines.length) {
       message.warning('请先选择商品');
@@ -122,14 +206,24 @@ const SalesOrderNewPage: React.FC = () => {
 
     setSubmitting(true);
     try {
-      const payload = {
-        company: values.company,
-        customer: values.customer,
+      await updateSalesOrderV2(orderName, {
         customerInfo: {
           contactDisplayName: values.contactDisplayName,
           contactPhone: values.contactPhone,
         },
         defaultSalesMode: values.defaultSalesMode,
+        deliveryDate: values.deliveryDate.format('YYYY-MM-DD'),
+        remarks: values.remarks,
+        shippingInfo: {
+          receiverName: values.contactDisplayName,
+          receiverPhone: values.contactPhone,
+          shippingAddressText: values.shippingAddressText,
+        },
+        transactionDate: values.transactionDate.format('YYYY-MM-DD'),
+      });
+      const result = await updateSalesOrderItemsV2(orderName, {
+        company: values.company,
+        defaultWarehouse: values.warehouse,
         deliveryDate: values.deliveryDate.format('YYYY-MM-DD'),
         items: lines.map((line) => ({
           itemCode: line.itemCode,
@@ -139,54 +233,61 @@ const SalesOrderNewPage: React.FC = () => {
           uom: line.uom,
           warehouse: line.warehouse || values.warehouse,
         })),
-        remarks: values.remarks,
-        shippingInfo: {
-          receiverName: values.contactDisplayName,
-          receiverPhone: values.contactPhone,
-          shippingAddressText: values.shippingAddressText,
-        },
-        transactionDate: values.transactionDate.format('YYYY-MM-DD'),
-      };
-      const result = quick
-        ? await quickCreateSalesOrderV2(payload)
-        : await createSalesOrderV2(payload);
-      const orderName = result.data.order;
-      if (orderName) {
-        history.push(`/sales/orders/${encodeURIComponent(orderName)}`);
-      } else {
-        history.push('/sales/orders');
-      }
+      });
+      history.push(
+        `/sales/orders/${encodeURIComponent(result.data.order || orderName)}`,
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
+  if (loading) {
+    return (
+      <PageContainer title={`编辑销售订单 ${orderName}`}>
+        <Skeleton active />
+      </PageContainer>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <PageContainer title={`编辑销售订单 ${orderName}`}>
+        <Result
+          status="warning"
+          title="未能加载销售订单"
+          extra={
+            <Button onClick={() => history.push('/sales/orders')}>
+              返回列表
+            </Button>
+          }
+        />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer
-      title="新建销售订单"
+      title={`编辑销售订单 ${orderName}`}
       extra={[
-        <Button key="back" onClick={() => history.push('/sales/orders')}>
-          返回列表
+        <Button
+          key="detail"
+          onClick={() =>
+            history.push(`/sales/orders/${encodeURIComponent(orderName)}`)
+          }
+        >
+          返回详情
         </Button>,
       ]}
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="当前已接入销售订单 v2 创建接口；快捷下单会同时创建发货单和销售发票。"
+          message="保存会先更新订单日期、交付日期、销售模式和收货信息，再替换商品明细；已发货或已开票订单可能被后端拒绝编辑。"
           showIcon
           type="info"
         />
         <ProCard>
-          <Form<FormValues>
-            form={form}
-            initialValues={{
-              company: DEFAULT_COMPANY,
-              defaultSalesMode: 'wholesale',
-              deliveryDate: today,
-              transactionDate: today,
-            }}
-            layout="vertical"
-          >
+          <Form<FormValues> form={form} layout="vertical">
             <div
               style={{
                 display: 'grid',
@@ -194,19 +295,23 @@ const SalesOrderNewPage: React.FC = () => {
                 gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
               }}
             >
-              <Form.Item
-                label="客户"
-                name="customer"
-                rules={[{ required: true, message: '请选择客户' }]}
-              >
-                <RemoteLinkSelect doctype="Customer" placeholder="搜索客户" />
+              <Form.Item label="客户" name="customer">
+                <RemoteLinkSelect
+                  disabled
+                  doctype="Customer"
+                  placeholder="客户"
+                />
               </Form.Item>
               <Form.Item
                 label="公司"
                 name="company"
                 rules={[{ required: true, message: '请选择公司' }]}
               >
-                <RemoteLinkSelect doctype="Company" placeholder="搜索公司" />
+                <RemoteLinkSelect
+                  disabled
+                  doctype="Company"
+                  placeholder="公司"
+                />
               </Form.Item>
               <Form.Item label="默认仓库" name="warehouse">
                 <RemoteLinkSelect
@@ -241,10 +346,10 @@ const SalesOrderNewPage: React.FC = () => {
                 <DatePicker style={{ width: '100%' }} />
               </Form.Item>
               <Form.Item label="联系人" name="contactDisplayName">
-                <Input placeholder="默认联系人" />
+                <Input placeholder="联系人" />
               </Form.Item>
               <Form.Item label="联系电话" name="contactPhone">
-                <Input placeholder="默认联系电话" />
+                <Input placeholder="联系电话" />
               </Form.Item>
             </div>
             <Form.Item label="收货地址" name="shippingAddressText">
@@ -276,22 +381,14 @@ const SalesOrderNewPage: React.FC = () => {
               共 {lines.length} 个商品，总金额{' '}
               {formatCurrencyValue(totalAmount)}
             </Typography.Text>
-            <Space>
-              <Button
-                icon={<PlusOutlined />}
-                loading={submitting}
-                onClick={() => void submitOrder(false)}
-                type="primary"
-              >
-                保存订单
-              </Button>
-              <Button
-                loading={submitting}
-                onClick={() => void submitOrder(true)}
-              >
-                快捷下单
-              </Button>
-            </Space>
+            <Button
+              icon={<SaveOutlined />}
+              loading={submitting}
+              onClick={() => void submitOrder()}
+              type="primary"
+            >
+              保存修改
+            </Button>
           </Space>
         </ProCard>
       </Space>
@@ -299,4 +396,4 @@ const SalesOrderNewPage: React.FC = () => {
   );
 };
 
-export default SalesOrderNewPage;
+export default SalesOrderEditPage;

@@ -12,12 +12,14 @@ function optionLabel(option: LinkOption) {
 }
 
 export function RemoteLinkSelect({
+  disabled,
   doctype,
   extraFields,
   placeholder,
   value,
   onChange,
 }: {
+  disabled?: boolean;
   doctype: string;
   extraFields?: string[];
   placeholder?: string;
@@ -39,6 +41,7 @@ export function RemoteLinkSelect({
   return (
     <Select
       allowClear
+      disabled={disabled}
       filterOption={false}
       loading={fetching}
       onChange={(nextValue) => onChange?.(nextValue ?? '')}

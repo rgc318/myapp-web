@@ -11,6 +11,7 @@ import { ProductSelect } from './ProductSelect';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
 import { Question, SelectLang } from './RightContent';
 import { AvatarDropdown, AvatarName } from './RightContent/AvatarDropdown';
+import { SalesOrderLinesTable } from './SalesOrderLinesTable';
 
 export {
   AvatarDropdown,
@@ -20,5 +21,6 @@ export {
   ProductSelect,
   Question,
   RemoteLinkSelect,
+  SalesOrderLinesTable,
   SelectLang,
 };

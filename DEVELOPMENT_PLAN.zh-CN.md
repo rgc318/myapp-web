@@ -105,6 +105,7 @@
 
 - `/sales/orders`
 - `/sales/orders/new`
+- `/sales/orders/:name/edit`
 - `/sales/orders/:name`
 - 后续可扩展 `/sales/deliveries/:name`
 - 后续可扩展 `/sales/invoices/:name`
@@ -115,6 +116,8 @@
 - `myapp.api.gateway.get_customer_sales_context`
 - `myapp.api.gateway.create_order_v2`
 - `myapp.api.gateway.quick_create_order_v2`
+- `myapp.api.gateway.update_order_v2`
+- `myapp.api.gateway.update_order_items_v2`
 - `myapp.api.gateway.get_sales_order_detail`
 - `myapp.api.gateway.get_delivery_note_detail_v2`
 - `myapp.api.gateway.get_sales_invoice_detail_v2`
@@ -124,6 +127,7 @@
 
 - 销售订单列表
 - 销售订单新建
+- 销售订单编辑
 - 公司、客户、日期、状态筛选
 - 订单详情
 - 下游发货单、发票、收款引用展示
@@ -143,9 +147,10 @@
 
 - 已新增 `/sales/orders` 销售订单列表。
 - 已新增 `/sales/orders/new` 销售订单新建页，接入客户销售上下文、商品选择、批发 / 零售默认单位和价格、单位换算、金额合计、保存订单和快捷下单。
+- 已新增 `/sales/orders/:name/edit` 销售订单编辑页，复用商品选择、Link 选择和销售订单行编辑组件，接入 `update_order_v2` 和 `update_order_items_v2`。
 - 已新增 `/sales/orders/:name` 销售订单详情。
-- 已新增 `src/services/myapp/sales.ts`，对 `search_sales_orders_v2`、`get_customer_sales_context`、`create_order_v2`、`quick_create_order_v2`、`get_sales_order_detail`、`get_delivery_note_detail_v2` 和 `get_sales_invoice_detail_v2` 做页面侧字段规范化。
-- 已新增 `src/components/RemoteLinkSelect.tsx` 和 `src/components/ProductSelect.tsx`，供销售、采购、退货、编辑等页面复用。
+- 已新增 `src/services/myapp/sales.ts`，对 `search_sales_orders_v2`、`get_customer_sales_context`、`create_order_v2`、`quick_create_order_v2`、`update_order_v2`、`update_order_items_v2`、`get_sales_order_detail`、`get_delivery_note_detail_v2` 和 `get_sales_invoice_detail_v2` 做页面侧字段规范化。
+- 已新增 `src/components/RemoteLinkSelect.tsx`、`src/components/ProductSelect.tsx` 和 `src/components/SalesOrderLinesTable.tsx`，供销售、采购、退货、编辑等页面复用。
 - 已新增 `src/utils/sales-order-editor.ts`，沉淀销售订单行、批发 / 零售单位和价格、单位换算和金额合计逻辑。
 - 已接入菜单文案“销售查询 / 销售订单”。
 - 已通过 `npm run tsc`、`npm run biome:lint` 和 `npm run build`。
@@ -382,14 +387,14 @@
 
 当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。销售模块已经开始从查询详情进入交易主流程开发，当前已完成销售订单新建第一版。后续页面基本是按接口映射和 mobile 业务规则推进，不应再因为认证、代理、错误格式和模板服务返工。
 
-阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`。后续阶段 7 仍可继续补销售订单编辑、退货 / 退款 / 撤销、待处理确认和主数据轻量编辑。
+阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`。后续阶段 7 仍可继续补销售退货 / 退款 / 撤销、待处理确认和主数据轻量编辑。
 
 当前交接摘要：
 
 - 前端 `main` 当前有本地 ahead 提交和未推送的销售新建开发提交，推送前应确认本轮提交已通过测试。
 - 后端 `apps/myapp` 在 `develop`，新增 `search_link_options_v1` 供 Web 通过 JWT 查询付款方式等 Link 选项。
 - 本轮完整验证已通过：Jest 关键测试、`npm run tsc`、`npm run biome:lint`、`npm run build`。
-- 下一会话优先确认是否推送前端 ahead 提交，然后做浏览器联调，继续补销售订单编辑、退货 / 退款 / 撤销流程。
+- 下一会话优先确认是否推送前端 ahead 提交，然后做浏览器联调，继续补销售退货 / 退款 / 撤销流程。
 
 ## 当前骨架完成状态
 
@@ -421,7 +426,7 @@
 - Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
 - 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
 - Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，待处理确认和主数据编辑尚未接入。
-- 销售订单新建已接入；销售订单编辑、撤销 / 退款 / 退货仍待继续按 mobile 流程补齐。
+- 销售订单新建和编辑已接入；撤销 / 退款 / 退货仍待继续按 mobile 流程补齐。
 - 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
 - 跨域生产部署未实测，第一阶段推荐同域反向代理。
 
