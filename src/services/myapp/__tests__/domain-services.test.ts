@@ -16,8 +16,11 @@ import {
   cancelSalesOrder,
   cancelSalesPaymentEntry,
   cancelSalesInvoice,
+  createSalesOrderV2,
   createSalesOrderInvoice,
+  getCustomerSalesContext,
   getSalesOrderDetail,
+  quickCreateSalesOrderV2,
   recordSalesOrderPayment,
   searchSalesOrders,
   submitSalesOrderDelivery,
@@ -243,9 +246,17 @@ describe('myapp domain services', () => {
             image: '/files/item.png',
             item_code: 'SKU-1',
             item_name: 'Camera',
+            all_uoms: [
+              { conversion_factor: 1, uom: 'Nos', uom_display: '个' },
+              { conversion_factor: 12, uom: 'Box', uom_display: '箱' },
+            ],
             price: '19.9',
+            price_summary: { retail_rate: '22', wholesale_rate: '180' },
+            retail_default_uom: 'Nos',
             stock_uom: 'Nos',
             total_qty: '5',
+            warehouse_stock_qty: '3',
+            wholesale_default_uom: 'Box',
           },
         ],
         meta: { has_more: false, total: 1 },
@@ -262,10 +273,54 @@ describe('myapp domain services', () => {
       itemCode: 'SKU-1',
       itemName: 'Camera',
       price: 19.9,
+      retailDefaultUom: 'Nos',
       totalQty: 5,
+      uomConversions: [
+        { conversionFactor: 1, uom: 'Nos' },
+        { conversionFactor: 12, uom: 'Box' },
+      ],
+      warehouseStockQty: 3,
+      wholesaleDefaultUom: 'Box',
     });
+    expect(result.items[0].priceSummary?.wholesaleRate).toBe(180);
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+  });
+
+  it('maps customer sales context', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        customer: { display_name: 'ACME', name: 'CUST-0001' },
+        default_address: {
+          address_display: '上海市长宁区',
+          name: 'ADDR-0001',
+        },
+        default_contact: {
+          display_name: 'Alice',
+          email: 'alice@example.test',
+          name: 'CONT-0001',
+          phone: '13800000000',
+        },
+        suggestions: {
+          company: 'rgc (Demo)',
+          warehouse: 'Stores - RD',
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const context = await getCustomerSalesContext('CUST-0001');
+
+    expect(context).toMatchObject({
+      defaultAddress: { addressDisplay: '上海市长宁区' },
+      defaultContact: { displayName: 'Alice', phone: '13800000000' },
+      suggestions: { company: 'rgc (Demo)', warehouse: 'Stores - RD' },
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_customer_sales_context',
+      { customer: 'CUST-0001' },
+    );
   });
 
   it('maps link options for selectors', async () => {
@@ -312,6 +367,29 @@ describe('myapp domain services', () => {
     });
     await recordSalesOrderPayment('SO-0001', 120, { modeOfPayment: 'Bank' });
     await cancelSalesOrder('SO-0001');
+    await createSalesOrderV2({
+      company: 'rgc (Demo)',
+      customer: 'CUST-0001',
+      defaultSalesMode: 'wholesale',
+      deliveryDate: '2026-06-06',
+      items: [
+        {
+          itemCode: 'SKU-1',
+          price: 100,
+          qty: 2,
+          salesMode: 'wholesale',
+          uom: 'Box',
+          warehouse: 'Stores - RD',
+        },
+      ],
+      transactionDate: '2026-06-05',
+    });
+    await quickCreateSalesOrderV2({
+      company: 'rgc (Demo)',
+      customer: 'CUST-0001',
+      forceDelivery: true,
+      items: [{ itemCode: 'SKU-1', qty: 1 }],
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -352,6 +430,40 @@ describe('myapp domain services', () => {
       4,
       'cancel_order_v2',
       { order_name: 'SO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      5,
+      'create_order_v2',
+      {
+        company: 'rgc (Demo)',
+        customer: 'CUST-0001',
+        default_sales_mode: 'wholesale',
+        delivery_date: '2026-06-06',
+        force_delivery: 0,
+        items: [
+          {
+            item_code: 'SKU-1',
+            price: 100,
+            qty: 2,
+            sales_mode: 'wholesale',
+            uom: 'Box',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        transaction_date: '2026-06-05',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      6,
+      'quick_create_order_v2',
+      {
+        company: 'rgc (Demo)',
+        customer: 'CUST-0001',
+        force_delivery: 1,
+        items: [{ item_code: 'SKU-1', qty: 1 }],
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

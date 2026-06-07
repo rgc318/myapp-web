@@ -7,7 +7,18 @@
  */
 import Footer from './Footer';
 import PageState from './PageState';
+import { ProductSelect } from './ProductSelect';
+import { RemoteLinkSelect } from './RemoteLinkSelect';
 import { Question, SelectLang } from './RightContent';
 import { AvatarDropdown, AvatarName } from './RightContent/AvatarDropdown';
 
-export { AvatarDropdown, AvatarName, Footer, PageState, Question, SelectLang };
+export {
+  AvatarDropdown,
+  AvatarName,
+  Footer,
+  PageState,
+  ProductSelect,
+  Question,
+  RemoteLinkSelect,
+  SelectLang,
+};

@@ -1,6 +1,7 @@
 import { callGatewayMethod } from './api-client';
-import { readObject } from './api-utils';
+import { compactPayload, readObject } from './api-utils';
 import { runGatewayMutation } from './mutation';
+import type { SalesMode } from '@/utils/sales-order-editor';
 
 export type SalesOrderStatusFilter =
   | 'all'
@@ -90,6 +91,59 @@ export type SalesOrderActionItem = {
   price?: number;
   qty: number;
   salesOrderItem?: string;
+};
+
+export type SalesOrderItemInput = {
+  itemCode: string;
+  price?: number | null;
+  qty: number;
+  salesMode?: SalesMode;
+  uom?: string | null;
+  warehouse?: string | null;
+};
+
+export type CreateSalesOrderPayload = {
+  company: string;
+  customer: string;
+  customerInfo?: {
+    contactDisplayName?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+  };
+  defaultSalesMode?: SalesMode;
+  deliveryDate?: string;
+  forceDelivery?: boolean;
+  items: SalesOrderItemInput[];
+  remarks?: string;
+  shippingInfo?: {
+    receiverName?: string;
+    receiverPhone?: string;
+    shippingAddressName?: string;
+    shippingAddressText?: string;
+  };
+  transactionDate?: string;
+};
+
+export type CustomerSalesContext = {
+  customer: {
+    defaultCurrency: string | null;
+    displayName: string;
+    name: string;
+  };
+  defaultAddress: {
+    addressDisplay: string | null;
+    name: string;
+  } | null;
+  defaultContact: {
+    displayName: string;
+    email: string | null;
+    name: string;
+    phone: string | null;
+  } | null;
+  suggestions: {
+    company: string | null;
+    warehouse: string | null;
+  };
 };
 
 export type DeliveryNoteDetail = {
@@ -207,6 +261,107 @@ function normalizeSalesActionItems(items: SalesOrderActionItem[] | undefined) {
     }));
 }
 
+function normalizeSalesOrderItems(items: SalesOrderItemInput[]) {
+  return items
+    .filter((item) => item.itemCode && item.qty > 0)
+    .map((item) =>
+      compactPayload({
+        item_code: item.itemCode,
+        price: item.price ?? undefined,
+        qty: item.qty,
+        sales_mode: item.salesMode,
+        uom: item.uom ?? undefined,
+        warehouse: item.warehouse ?? undefined,
+      }),
+    );
+}
+
+function buildCreateSalesOrderPayload(payload: CreateSalesOrderPayload) {
+  return compactPayload({
+    company: payload.company,
+    customer: payload.customer,
+    customer_info: payload.customerInfo
+      ? compactPayload({
+          contact_display_name: payload.customerInfo.contactDisplayName,
+          contact_email: payload.customerInfo.contactEmail,
+          contact_phone: payload.customerInfo.contactPhone,
+        })
+      : undefined,
+    default_sales_mode: payload.defaultSalesMode,
+    delivery_date: payload.deliveryDate,
+    force_delivery: payload.forceDelivery ? 1 : 0,
+    items: normalizeSalesOrderItems(payload.items),
+    remarks: payload.remarks,
+    shipping_info: payload.shippingInfo
+      ? compactPayload({
+          receiver_name: payload.shippingInfo.receiverName,
+          receiver_phone: payload.shippingInfo.receiverPhone,
+          shipping_address_name: payload.shippingInfo.shippingAddressName,
+          shipping_address_text: payload.shippingInfo.shippingAddressText,
+        })
+      : undefined,
+    transaction_date: payload.transactionDate,
+  });
+}
+
+function normalizeCustomerSalesContext(
+  data: Record<string, any>,
+): CustomerSalesContext {
+  const customer = data.customer ?? {};
+  const defaultContact = data.default_contact;
+  const defaultAddress = data.default_address;
+  const suggestions = data.suggestions ?? {};
+
+  return {
+    customer: {
+      defaultCurrency:
+        typeof customer.default_currency === 'string'
+          ? customer.default_currency
+          : null,
+      displayName: String(customer.display_name ?? customer.name ?? ''),
+      name: String(customer.name ?? ''),
+    },
+    defaultAddress: defaultAddress
+      ? {
+          addressDisplay:
+            typeof defaultAddress.address_display === 'string'
+              ? defaultAddress.address_display
+              : null,
+          name: String(defaultAddress.name ?? ''),
+        }
+      : null,
+    defaultContact: defaultContact
+      ? {
+          displayName: String(
+            defaultContact.display_name ??
+              defaultContact.full_name ??
+              defaultContact.name ??
+              '',
+          ),
+          email:
+            typeof defaultContact.email === 'string'
+              ? defaultContact.email
+              : null,
+          name: String(defaultContact.name ?? ''),
+          phone:
+            typeof defaultContact.phone === 'string'
+              ? defaultContact.phone
+              : typeof defaultContact.mobile_no === 'string'
+                ? defaultContact.mobile_no
+                : null,
+        }
+      : null,
+    suggestions: {
+      company:
+        typeof suggestions.company === 'string' ? suggestions.company : null,
+      warehouse:
+        typeof suggestions.warehouse === 'string'
+          ? suggestions.warehouse
+          : null,
+    },
+  };
+}
+
 export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
   const result = await callGatewayMethod<Record<string, any>>(
     'search_sales_orders_v2',
@@ -298,6 +453,33 @@ export async function getSalesOrderDetail(
     salesInvoices: toStringList(references.sales_invoices),
     items: normalizeItems(data.items),
   };
+}
+
+export async function getCustomerSalesContext(customer: string) {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_customer_sales_context',
+    { customer },
+  );
+  return normalizeCustomerSalesContext(readObject(result.data));
+}
+
+export async function createSalesOrderV2(payload: CreateSalesOrderPayload) {
+  return runGatewayMutation<{ order?: string }>('create_order_v2', {
+    payload: buildCreateSalesOrderPayload(payload),
+    successMessage: '销售订单已创建',
+  });
+}
+
+export async function quickCreateSalesOrderV2(payload: CreateSalesOrderPayload) {
+  return runGatewayMutation<{
+    delivery_note?: string;
+    force_delivery?: boolean;
+    order?: string;
+    sales_invoice?: string;
+  }>('quick_create_order_v2', {
+    payload: buildCreateSalesOrderPayload(payload),
+    successMessage: '销售订单已快捷创建',
+  });
 }
 
 export async function getDeliveryNoteDetail(

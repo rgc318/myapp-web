@@ -44,6 +44,12 @@ export default [
         component: './Sales/Orders',
       },
       {
+        path: '/sales/orders/new',
+        name: 'order-new',
+        component: './Sales/Orders/New',
+        hideInMenu: true,
+      },
+      {
         path: '/sales/orders/:name',
         name: 'order-detail',
         component: './Sales/Orders/Detail',

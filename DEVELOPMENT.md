@@ -7,12 +7,13 @@ Chinese implementation docs:
 
 ## Role
 
-`myapp-web` is the admin, query, and reporting client.
+`myapp-web` is the admin, query, reporting, and operations-support client.
 
 Main scenarios:
 
 - document list and detail pages
 - document status tracking
+- sales order creation and later edit/return workflows
 - finance and inventory lookup
 - dashboard and reporting
 - print preview and later management features
@@ -55,6 +56,7 @@ Detailed request/response contracts should be read from the backend API document
 - Login
 - Dashboard
 - Sales order list and detail
+- Sales order creation
 - Purchase order list and detail
 - Reporting entry
 - Payment list
@@ -88,6 +90,7 @@ Detailed request/response contracts should be read from the backend API document
 
 - Goal:
   - display sales order, delivery, invoice, payment, and return related documents in a query-friendly way
+  - support the first Web sales order creation workflow using the mobile business flow as reference
 - Data source:
   - start with existing ERPNext resource/report data
 - Required fields:
@@ -100,6 +103,17 @@ Detailed request/response contracts should be read from the backend API document
 - Key actions:
   - filter by company, customer, date range, and status
   - open detail page
+  - create a sales order with customer context, product selection, sales mode, UOM conversion, default pricing, and quick create
+
+### Shared Components
+
+Reusable business components should be used before adding page-local selectors or duplicated UOM logic.
+
+- `src/components/RemoteLinkSelect.tsx`: backend-backed Frappe Link selector for Customer, Company, Warehouse, Mode of Payment, and similar fields.
+- `src/components/ProductSelect.tsx`: product search selector returning normalized product data.
+- `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
+- `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
+- `src/utils/sales-order-editor.ts`: sales order line model, wholesale/retail default UOM and price, UOM conversion, line amount, and total calculation.
 
 ### Purchase Document List
 
@@ -200,7 +214,7 @@ Priority:
 ## Frontend Constraints
 
 - Web is not the primary transaction client in phase one
-- Do not duplicate full backend business write flows here unless mobile usage proves it is necessary
+- Mobile is the reference for mature transaction workflows, but Web should implement desktop-friendly table/form interactions instead of copying mobile sheets directly
 - Query pages should be company-aware and default to `rgc (Demo)` in the current test environment
 
 ## Run
@@ -211,5 +225,5 @@ Priority:
 Note:
 
 - `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
-- The web foundation now has real JWT login, dashboard, sales order query/detail, purchase order query/detail, reporting entry, payment list, finance lookup, inventory lookup, and master-data lookup pages.
+- The web foundation now has real JWT login, dashboard, sales order query/detail/create, purchase order query/detail, reporting entry, payment list, finance lookup, inventory lookup, and master-data lookup pages.
 - Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.

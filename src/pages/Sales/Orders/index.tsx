@@ -143,6 +143,9 @@ const SalesOrdersPage: React.FC = () => {
     <PageContainer
       title="销售订单"
       extra={[
+        <Link key="new" to="/sales/orders/new">
+          <Button type="primary">新建订单</Button>
+        </Link>,
         <Button key="refresh" onClick={() => actionRef.current?.reload()}>
           刷新
         </Button>,
