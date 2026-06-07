@@ -56,6 +56,12 @@ export type UomSummary = {
   uomName: string;
 };
 
+export type LinkOption = {
+  description: string | null;
+  label: string;
+  value: string;
+};
+
 function mapProduct(row: Record<string, any>): ProductSummary {
   return {
     barcode: String(row.barcode ?? ''),
@@ -207,4 +213,30 @@ export async function listUoms(options: ListOptions = {}) {
     }),
   );
   return pageResult(result.data, mapUom);
+}
+
+export async function searchLinkOptions(
+  doctype: string,
+  query = '',
+  extraFields: string[] = [],
+) {
+  const result = await callGatewayMethod<unknown>(
+    'search_link_options_v1',
+    compactPayload({
+      doctype,
+      extra_fields: extraFields,
+      limit: 20,
+      query: toOptionalText(query),
+    }),
+  );
+  const rows = Array.isArray(result.data) ? result.data : [];
+
+  return rows
+    .map((row: any) => ({
+      description:
+        typeof row.description === 'string' ? row.description : null,
+      label: String(row.label ?? row.value ?? ''),
+      value: String(row.value ?? row.label ?? ''),
+    }))
+    .filter((option) => option.value) satisfies LinkOption[];
 }

@@ -932,6 +932,7 @@ curl -i https://example.com/api/method/myapp.auth.token_api.me_v1
 - 状态、金额、币种和计量单位展示已统一到 `src/utils/myapp-display.tsx`，规则参考 mobile 端已有处理。
 - 销售、采购、发货 / 收货、发票、报表、财务、收付款、商品、库存流水页面已接入统一展示工具。
 - 本地 dev server 排障说明已补充：优先固定 `8001`，旧端口服务需先确认 PID 再关闭，`/umi.js` 必须返回 `application/javascript`。
+- 付款方式已从手工输入升级为选择器，通过 `myapp.api.gateway.search_link_options_v1` 查询 `Mode of Payment`，不直接调用 `frappe.client.*`。
 
 本轮已验证：
 
@@ -977,6 +978,7 @@ c4258c4 feat: localize app chrome
 - 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
 - 新增 `/sales/delivery-notes/:name`、`/sales/invoices/:name`、`/purchase/receipts/:name`、`/purchase/invoices/:name`，接入下游单据详情和关联跳转。
 - 销售 / 采购订单详情已接入按明细行填写本次数量创建发货 / 收货单、创建发票、按金额和付款方式登记收付款、取消订单动作。
+- 销售 / 采购订单详情登记收付款时已使用付款方式选择器，并优先默认常用支付方式。
 - 销售 / 采购下游单据详情已接入取消动作，发票详情额外支持取消最近收款 / 付款。
 - 新增 `/reports`，接入经营报表入口和多组查询摘要。
 - 新增 `/payments`，接入收付款流水分页查询。
@@ -1003,10 +1005,9 @@ c4258c4 feat: localize app chrome
 
 新对话继续开发时，优先处理：
 
-1. 先处理前端本地 ahead 4：确认是否推送 `main` 到 `origin/main`。
-2. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
-3. 登录后确认 `/dashboard`、`/sales/orders`、`/purchase/orders` 能显示数据或明确错误态。
-4. 登录后确认 `/reports`、`/payments`、`/finance`、`/inventory-ledger` 能显示查询结果或明确错误态。
-5. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
-6. 做真实浏览器联调，验证销售 / 采购创建下游单据、登记收付款、取消订单和取消下游单据后的后端单据状态刷新。
-7. 继续补业务增强：付款方式选项接口、主数据轻量编辑、报表图表和钻取。
+1. 在浏览器确认 `/user/login` 强制刷新后能正常渲染和自动填充。
+2. 登录后确认 `/dashboard`、`/sales/orders`、`/purchase/orders` 能显示数据或明确错误态。
+3. 登录后确认 `/reports`、`/payments`、`/finance`、`/inventory-ledger` 能显示查询结果或明确错误态。
+4. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
+5. 做真实浏览器联调，验证销售 / 采购创建下游单据、登记收付款、取消订单和取消下游单据后的后端单据状态刷新。
+6. 继续补业务增强：主数据轻量编辑、报表图表和钻取。

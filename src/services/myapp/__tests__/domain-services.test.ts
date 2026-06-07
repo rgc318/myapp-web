@@ -1,5 +1,5 @@
 import { callGatewayMethod } from '../api-client';
-import { listProducts } from '../master-data';
+import { listProducts, searchLinkOptions } from '../master-data';
 import {
   cancelPurchaseOrder,
   cancelPurchaseInvoice,
@@ -266,6 +266,33 @@ describe('myapp domain services', () => {
     });
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+  });
+
+  it('maps link options for selectors', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: [
+        { description: null, label: 'Cash', value: 'Cash' },
+        { description: '微信', label: '微信支付', value: '微信支付' },
+      ],
+      meta: {},
+      raw: {},
+    });
+
+    const result = await searchLinkOptions('Mode of Payment', 'Ca');
+
+    expect(result).toEqual([
+      { description: null, label: 'Cash', value: 'Cash' },
+      { description: '微信', label: '微信支付', value: '微信支付' },
+    ]);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_link_options_v1',
+      {
+        doctype: 'Mode of Payment',
+        extra_fields: [],
+        limit: 20,
+        query: 'Ca',
+      },
+    );
   });
 
   it('runs sales order mutations through gateway', async () => {

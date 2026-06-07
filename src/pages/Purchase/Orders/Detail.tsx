@@ -25,6 +25,7 @@ import {
   LineQtyEditor,
   type LineQtyEditorRow,
 } from '@/components/LineQtyEditor';
+import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
   cancelPurchaseOrder,
   createPurchaseOrderInvoice,
@@ -335,12 +336,10 @@ const PurchaseOrderDetailPage: React.FC = () => {
             prefix="¥"
             style={{ width: '100%' }}
           />
-          <Input
-            allowClear
-            onChange={(event) => {
-              modeOfPayment = event.target.value;
+          <PaymentModeSelect
+            onChange={(value) => {
+              modeOfPayment = value;
             }}
-            placeholder="付款方式，留空使用后端默认"
           />
         </Space>
       ),
