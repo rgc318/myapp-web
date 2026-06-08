@@ -183,6 +183,12 @@ export default [
         component: './Inventory/Stock',
       },
       {
+        path: '/inventory/stock/:itemCode',
+        name: 'stock-detail',
+        component: './Inventory/Stock/Detail',
+        hideInMenu: true,
+      },
+      {
         path: '/inventory/ledger',
         name: 'ledger',
         component: './InventoryLedger',

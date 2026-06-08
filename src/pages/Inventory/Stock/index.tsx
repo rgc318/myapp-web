@@ -38,7 +38,23 @@ function ledgerPath(itemCode?: string, warehouse?: string) {
   if (warehouse) {
     params.set('warehouse', warehouse);
   }
-  return `/inventory-ledger?${params.toString()}`;
+  return `/inventory/ledger?${params.toString()}`;
+}
+
+function stockDetailPath(
+  itemCode: string,
+  company?: string,
+  warehouse?: string,
+) {
+  const params = new URLSearchParams();
+  if (company) {
+    params.set('company', company);
+  }
+  if (warehouse) {
+    params.set('warehouse', warehouse);
+  }
+  const query = params.toString();
+  return `/inventory/stock/${encodeURIComponent(itemCode)}${query ? `?${query}` : ''}`;
 }
 
 function warehouseStockTable(
@@ -133,6 +149,13 @@ const columns: ProColumns<ProductSummary>[] = [
     dataIndex: 'itemCode',
     search: false,
     width: 160,
+    render: (_, record) => (
+      <Link
+        to={stockDetailPath(record.itemCode, DEFAULT_COMPANY, record.warehouse)}
+      >
+        {record.itemCode}
+      </Link>
+    ),
   },
   {
     title: '商品名称',
@@ -200,6 +223,12 @@ const columns: ProColumns<ProductSummary>[] = [
     valueType: 'option',
     width: 120,
     render: (_, record) => [
+      <Link
+        key="detail"
+        to={stockDetailPath(record.itemCode, DEFAULT_COMPANY, record.warehouse)}
+      >
+        详情
+      </Link>,
       <Link key="ledger" to={ledgerPath(record.itemCode, record.warehouse)}>
         查看流水
       </Link>,
