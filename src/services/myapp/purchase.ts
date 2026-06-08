@@ -844,6 +844,23 @@ export async function createPurchaseOrderInvoice(
   });
 }
 
+export async function createPurchaseInvoiceFromReceipt(
+  receiptName: string,
+  options: { dueDate?: string; remarks?: string } = {},
+) {
+  return runGatewayMutation<{ purchase_invoice?: string }>(
+    'create_purchase_invoice_from_receipt',
+    {
+      payload: compactPayload({
+        due_date: options.dueDate,
+        receipt_name: receiptName,
+        remarks: options.remarks,
+      }),
+      successMessage: '采购发票已创建',
+    },
+  );
+}
+
 export async function recordPurchaseOrderPayment(
   orderName: string,
   paidAmount: number,

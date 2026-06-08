@@ -5,6 +5,7 @@ import {
   cancelPurchaseInvoice,
   cancelPurchaseReceipt,
   cancelSupplierPaymentEntry,
+  createPurchaseInvoiceFromReceipt,
   createPurchaseOrderV2,
   createPurchaseOrderInvoice,
   getPurchaseCompanyContext,
@@ -760,6 +761,10 @@ describe('myapp domain services', () => {
       ],
       remarks: '采购开票备注',
     });
+    await createPurchaseInvoiceFromReceipt('PR-0001', {
+      dueDate: '2026-06-10',
+      remarks: '收货转发票',
+    });
     await recordPurchaseOrderPayment('PO-0001', 88, {
       modeOfPayment: 'Cash',
     });
@@ -836,6 +841,16 @@ describe('myapp domain services', () => {
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       3,
+      'create_purchase_invoice_from_receipt',
+      {
+        due_date: '2026-06-10',
+        receipt_name: 'PR-0001',
+        remarks: '收货转发票',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
       'record_supplier_payment',
       {
         mode_of_payment: 'Cash',
@@ -845,13 +860,13 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      4,
+      5,
       'cancel_purchase_order_v2',
       { order_name: 'PO-0001' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      5,
+      6,
       'create_purchase_order',
       {
         company: 'rgc (Demo)',
@@ -874,7 +889,7 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      6,
+      7,
       'quick_create_purchase_order_v2',
       {
         company: 'rgc (Demo)',
@@ -887,7 +902,7 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      7,
+      8,
       'update_purchase_order_v2',
       {
         order_name: 'PO-0001',
@@ -899,7 +914,7 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      8,
+      9,
       'update_purchase_order_items_v2',
       {
         company: 'rgc (Demo)',
@@ -911,7 +926,7 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      9,
+      10,
       'quick_cancel_purchase_order_v2',
       {
         order_name: 'PO-0001',
@@ -920,7 +935,7 @@ describe('myapp domain services', () => {
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
-      10,
+      11,
       'process_purchase_return',
       {
         posting_date: '2026-06-09',

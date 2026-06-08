@@ -6,10 +6,22 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { history, Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
+import {
+  Alert,
+  Button,
+  DatePicker,
+  Empty,
+  Input,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+} from 'antd';
+import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import {
   cancelPurchaseReceipt,
+  createPurchaseInvoiceFromReceipt,
   getPurchaseReceiptDetail,
   type PurchaseDocumentItem,
 } from '@/services/myapp/purchase';
@@ -83,6 +95,7 @@ const PurchaseReceiptDetailPage: React.FC = () => {
   const params = useParams();
   const receiptName = decodeURIComponent(String(params.name ?? ''));
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseReceiptDetail(receiptName),
     {
@@ -111,6 +124,56 @@ const PurchaseReceiptDetailPage: React.FC = () => {
     });
   };
 
+  const confirmCreateInvoice = () => {
+    let dueDate = dayjs().format('YYYY-MM-DD');
+    let remarks = '';
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <DatePicker
+            defaultValue={dayjs(dueDate)}
+            onChange={(value) => {
+              dueDate = value?.format('YYYY-MM-DD') ?? '';
+            }}
+            style={{ width: '100%' }}
+          />
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+        </Space>
+      ),
+      okText: '创建采购发票',
+      onOk: async () => {
+        setInvoiceLoading(true);
+        try {
+          const result = await createPurchaseInvoiceFromReceipt(receiptName, {
+            dueDate,
+            remarks,
+          });
+          const invoiceName = result.data.purchase_invoice;
+          if (invoiceName) {
+            history.push(
+              `/purchase/invoices/${encodeURIComponent(invoiceName)}`,
+            );
+          } else {
+            refresh();
+          }
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setInvoiceLoading(false);
+        }
+      },
+      title: `基于收货单 ${receiptName} 创建采购发票`,
+    });
+  };
+
   return (
     <PageContainer
       title={receiptName || '采购收货单详情'}
@@ -120,6 +183,15 @@ const PurchaseReceiptDetailPage: React.FC = () => {
         </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
+        </Button>,
+        <Button
+          disabled={!data?.canCreateInvoice}
+          key="invoice"
+          loading={invoiceLoading}
+          onClick={confirmCreateInvoice}
+          type="primary"
+        >
+          创建采购发票
         </Button>,
         data?.documentStatus !== 'cancelled' ? (
           <Button
