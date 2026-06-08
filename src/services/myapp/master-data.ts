@@ -19,7 +19,14 @@ export type ListOptions = {
 
 export type ProductListOptions = ListOptions & {
   company?: string;
+  inStockOnly?: boolean;
   warehouse?: string;
+};
+
+export type ProductWarehouseStockDetail = {
+  company: string;
+  qty: number | null;
+  warehouse: string;
 };
 
 export type ProductSummary = {
@@ -63,11 +70,13 @@ export type ProductSummary = {
   }[];
   uomDisplay?: string | null;
   warehouse: string;
+  warehouseStockDetails: ProductWarehouseStockDetail[];
   warehouseStockQty: number | null;
   warehouseStockUom?: string | null;
   warehouseStockUomDisplay?: string | null;
   wholesaleDefaultUom?: string | null;
   wholesaleDefaultUomDisplay?: string | null;
+  globalWarehouseStockDetails: ProductWarehouseStockDetail[];
 };
 
 export type PartySummary = {
@@ -135,6 +144,9 @@ function mapProduct(row: Record<string, any>): ProductSummary {
     uomConversions: mapUomConversions(row.all_uoms),
     uomDisplay: typeof row.uom_display === 'string' ? row.uom_display : null,
     warehouse: String(row.warehouse ?? ''),
+    warehouseStockDetails: mapWarehouseStockDetails(
+      row.warehouse_stock_details,
+    ),
     warehouseStockQty: toOptionalNumber(row.warehouse_stock_qty),
     warehouseStockUom:
       typeof row.warehouse_stock_uom === 'string'
@@ -152,7 +164,37 @@ function mapProduct(row: Record<string, any>): ProductSummary {
       typeof row.wholesale_default_uom_display === 'string'
         ? row.wholesale_default_uom_display
         : null,
+    globalWarehouseStockDetails: mapWarehouseStockDetails(
+      row.global_warehouse_stock_details,
+    ),
   };
+}
+
+function mapWarehouseStockDetails(
+  value: unknown,
+): ProductWarehouseStockDetail[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const warehouse =
+        typeof row.warehouse === 'string' ? row.warehouse.trim() : '';
+      if (!warehouse) {
+        return null;
+      }
+      return {
+        company: typeof row.company === 'string' ? row.company : '',
+        qty: toOptionalNumber(row.qty ?? row.total_qty),
+        warehouse,
+      };
+    })
+    .filter((entry): entry is ProductWarehouseStockDetail => Boolean(entry));
 }
 
 function mapUomNames(value: unknown) {
@@ -328,6 +370,7 @@ export async function listProducts(options: ProductListOptions = {}) {
     compactPayload({
       company: toOptionalText(options.company),
       disabled: options.disabled ?? 0,
+      in_stock_only: options.inStockOnly ? 1 : undefined,
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
       start: options.start ?? 0,

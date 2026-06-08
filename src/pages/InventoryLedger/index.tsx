@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link } from '@umijs/max';
+import { Link, useLocation } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef } from 'react';
@@ -232,6 +232,19 @@ const columns: ProColumns<StockLedgerEntry>[] = [
 
 const InventoryLedgerPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const location = useLocation();
+  const query = new URLSearchParams(location.search);
+  const initialItemCode = query.get('itemCode') ?? undefined;
+  const initialWarehouse = query.get('warehouse') ?? undefined;
+  const tableColumns = columns.map((column) => {
+    if (column.dataIndex === 'itemCode') {
+      return { ...column, initialValue: initialItemCode };
+    }
+    if (column.dataIndex === 'warehouse') {
+      return { ...column, initialValue: initialWarehouse };
+    }
+    return column;
+  });
 
   return (
     <PageContainer
@@ -244,7 +257,7 @@ const InventoryLedgerPage: React.FC = () => {
     >
       <ProTable<StockLedgerEntry>
         actionRef={actionRef}
-        columns={columns}
+        columns={tableColumns}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,

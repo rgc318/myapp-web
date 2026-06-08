@@ -43,6 +43,8 @@ const product: ProductSummary = {
   warehouseStockUomDisplay: null,
   wholesaleDefaultUom: 'Box',
   wholesaleDefaultUomDisplay: '箱',
+  globalWarehouseStockDetails: [],
+  warehouseStockDetails: [],
 };
 
 describe('sales order editor utils', () => {

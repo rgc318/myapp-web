@@ -286,13 +286,14 @@
 
 页面：
 
+- `/inventory/stock`
+- `/inventory/ledger`
 - `/inventory-ledger`
-- 后续可扩展 `/products`
 
 接口：
 
-- 优先使用后端薄查询接口
-- 商品辅助可使用 `myapp.api.gateway.list_products_v2`
+- `myapp.api.gateway.list_products_v2`
+- `myapp.api.gateway.list_stock_ledger_entries_v1`
 - 商品详情可使用 `myapp.api.gateway.get_product_detail_v2`
 
 任务：
@@ -301,11 +302,13 @@
 - 商品、仓库、日期筛选
 - 凭证类型和凭证编号跳转
 - 商品库存摘要
+- 仓库库存分布
 
 验收：
 
 - 能按商品和仓库查询库存变化
 - 能从库存流水定位来源单据
+- 能按商品、公司、仓库查询当前库存
 
 ## 阶段 6：主数据辅助页
 
@@ -351,7 +354,9 @@
 - 已新增 `/master-data/suppliers` 供应商列表。
 - 已新增 `/master-data/uoms` 计量单位列表。
 - 当前主数据页面只做查询辅助，不开放新增、编辑和停用操作。
-- 已新增 `/inventory-ledger` 库存流水页。
+- 已新增 `/inventory/stock` 商品库存页，接入 `list_products_v2`，支持关键词、公司、仓库和仅有库存筛选。
+- `/inventory/stock` 已展示当前库存、公司总库存、采购价、零售价和仓库库存明细，并可跳转库存流水。
+- 已新增 `/inventory/ledger` 库存流水页入口，原 `/inventory-ledger` 保留重定向。
 - 后端已新增 `myapp.api.gateway.list_stock_ledger_entries_v1`。
 - 当前页面已接入真实 `Stock Ledger Entry` 明细流水，支持公司、商品、仓库、日期、凭证类型和凭证编号筛选。
 

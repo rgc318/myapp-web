@@ -270,6 +270,9 @@ describe('myapp domain services', () => {
             retail_default_uom: 'Nos',
             stock_uom: 'Nos',
             total_qty: '5',
+            warehouse_stock_details: [
+              { company: 'rgc (Demo)', qty: '3', warehouse: 'Stores - RD' },
+            ],
             warehouse_stock_qty: '3',
             wholesale_default_uom: 'Box',
           },
@@ -293,6 +296,9 @@ describe('myapp domain services', () => {
       uomConversions: [
         { conversionFactor: 1, uom: 'Nos' },
         { conversionFactor: 12, uom: 'Box' },
+      ],
+      warehouseStockDetails: [
+        { company: 'rgc (Demo)', qty: 3, warehouse: 'Stores - RD' },
       ],
       warehouseStockQty: 3,
       wholesaleDefaultUom: 'Box',

@@ -168,11 +168,30 @@ export default [
     component: './Finance',
   },
   {
-    path: '/inventory-ledger',
-    name: 'inventory-ledger',
+    path: '/inventory',
+    name: 'inventory',
     icon: 'database',
     access: 'canViewInventory',
-    component: './InventoryLedger',
+    routes: [
+      {
+        path: '/inventory',
+        redirect: '/inventory/stock',
+      },
+      {
+        path: '/inventory/stock',
+        name: 'stock',
+        component: './Inventory/Stock',
+      },
+      {
+        path: '/inventory/ledger',
+        name: 'ledger',
+        component: './InventoryLedger',
+      },
+    ],
+  },
+  {
+    path: '/inventory-ledger',
+    redirect: '/inventory/ledger',
   },
   {
     path: '/master-data',

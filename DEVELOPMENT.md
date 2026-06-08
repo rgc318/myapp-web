@@ -204,7 +204,7 @@ Recommended web implementation order:
 5. reporting entry
 6. payment list
 7. finance lookup page
-8. inventory ledger page
+8. inventory stock and ledger pages
 9. master-data lookup pages
 
 ## Data Sources
@@ -233,5 +233,5 @@ Priority:
 Note:
 
 - `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
-- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, purchase order query/detail, reporting entry, payment list, finance lookup, inventory lookup, and master-data lookup pages.
+- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, purchase order query/detail, reporting entry, payment list, finance lookup, inventory stock/ledger lookup, and master-data lookup pages.
 - Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.
