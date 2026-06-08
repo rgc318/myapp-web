@@ -134,6 +134,7 @@ Reusable business components should be used before adding page-local selectors o
   - filter by company, supplier, date range, and status
   - open detail page
   - create a purchase order with supplier context, product selection, purchase default price, UOM conversion, and quick purchase
+  - edit a purchase order header and items before downstream receipt or invoice documents lock the item list
 
 ### Payment List
 

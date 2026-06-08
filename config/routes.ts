@@ -109,6 +109,12 @@ export default [
         hideInMenu: true,
       },
       {
+        path: '/purchase/orders/:name/edit',
+        name: 'order-edit',
+        component: './Purchase/Orders/Edit',
+        hideInMenu: true,
+      },
+      {
         path: '/purchase/orders/:name',
         name: 'order-detail',
         component: './Purchase/Orders/Detail',

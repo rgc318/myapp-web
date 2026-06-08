@@ -111,6 +111,20 @@ export type QuickCreatePurchaseOrderPayload = CreatePurchaseOrderPayload & {
   referenceNo?: string;
 };
 
+export type UpdatePurchaseOrderPayload = {
+  remarks?: string;
+  scheduleDate?: string;
+  supplierRef?: string;
+  transactionDate?: string;
+};
+
+export type UpdatePurchaseOrderItemsPayload = {
+  company?: string;
+  defaultWarehouse?: string;
+  items: PurchaseOrderItemInput[];
+  scheduleDate?: string;
+};
+
 export type PurchaseCompanyContext = {
   company: string | null;
   currency: string | null;
@@ -230,7 +244,7 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
         qty: toOptionalNumber(item.qty),
         rate: toOptionalNumber(item.rate),
         receivedQty: toOptionalNumber(item.received_qty),
-        uom: String(item.uom_display ?? item.uom ?? ''),
+        uom: String(item.uom ?? ''),
         warehouse: String(item.warehouse ?? ''),
       }))
     : [];
@@ -609,6 +623,57 @@ export async function quickCreatePurchaseOrderV2(
       reference_no: payload.referenceNo,
     }),
     successMessage: '采购订单已快捷创建',
+  });
+}
+
+export async function updatePurchaseOrderV2(
+  orderName: string,
+  payload: UpdatePurchaseOrderPayload,
+) {
+  return runGatewayMutation<{ purchase_order?: string }>(
+    'update_purchase_order_v2',
+    {
+      payload: compactPayload({
+        order_name: orderName,
+        remarks: payload.remarks,
+        schedule_date: payload.scheduleDate,
+        supplier_ref: payload.supplierRef,
+        transaction_date: payload.transactionDate,
+      }),
+      successMessage: '采购订单已更新',
+    },
+  );
+}
+
+export async function updatePurchaseOrderItemsV2(
+  orderName: string,
+  payload: UpdatePurchaseOrderItemsPayload,
+) {
+  return runGatewayMutation<{
+    items?: PurchaseDocumentItem[];
+    purchase_order?: string;
+    source_purchase_order?: string;
+  }>('update_purchase_order_items_v2', {
+    payload: compactPayload({
+      company: payload.company,
+      default_warehouse: payload.defaultWarehouse,
+      items: normalizePurchaseOrderItems(payload.items),
+      order_name: orderName,
+      schedule_date: payload.scheduleDate,
+    }),
+    successMessage: '采购订单明细已更新',
+    transform: (data) => {
+      const row = readObject(data);
+      return {
+        items: mapItems(row.items),
+        purchase_order:
+          typeof row.purchase_order === 'string' ? row.purchase_order : '',
+        source_purchase_order:
+          typeof row.source_purchase_order === 'string'
+            ? row.source_purchase_order
+            : '',
+      };
+    },
   });
 }
 

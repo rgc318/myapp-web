@@ -5,7 +5,7 @@ import {
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
-import { Link, useParams, useRequest } from '@umijs/max';
+import { history, Link, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -374,6 +374,18 @@ const PurchaseOrderDetailPage: React.FC = () => {
         <Button key="back">
           <Link to="/purchase/orders">返回列表</Link>
         </Button>,
+        data && data.documentStatus !== 'cancelled' ? (
+          <Button
+            key="edit"
+            onClick={() =>
+              history.push(
+                `/purchase/orders/${encodeURIComponent(orderName)}/edit`,
+              )
+            }
+          >
+            编辑订单
+          </Button>
+        ) : null,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,

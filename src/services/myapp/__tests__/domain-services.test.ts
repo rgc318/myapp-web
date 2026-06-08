@@ -13,6 +13,8 @@ import {
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
   searchPurchaseOrders,
+  updatePurchaseOrderItemsV2,
+  updatePurchaseOrderV2,
 } from '../purchase';
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
 import {
@@ -724,6 +726,18 @@ describe('myapp domain services', () => {
       items: [{ itemCode: 'SKU-1', qty: 1 }],
       supplier: 'SUP-0001',
     });
+    await updatePurchaseOrderV2('PO-0001', {
+      remarks: '更新采购备注',
+      scheduleDate: '2026-06-08',
+      supplierRef: 'SUP-REF-2',
+      transactionDate: '2026-06-07',
+    });
+    await updatePurchaseOrderItemsV2('PO-0001', {
+      company: 'rgc (Demo)',
+      defaultWarehouse: 'Stores - RD',
+      items: [{ itemCode: 'SKU-1', price: 13, qty: 4, uom: 'Nos' }],
+      scheduleDate: '2026-06-08',
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -798,6 +812,30 @@ describe('myapp domain services', () => {
         immediate_receive: 1,
         items: [{ item_code: 'SKU-1', qty: 1 }],
         supplier: 'SUP-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      7,
+      'update_purchase_order_v2',
+      {
+        order_name: 'PO-0001',
+        remarks: '更新采购备注',
+        schedule_date: '2026-06-08',
+        supplier_ref: 'SUP-REF-2',
+        transaction_date: '2026-06-07',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      8,
+      'update_purchase_order_items_v2',
+      {
+        company: 'rgc (Demo)',
+        default_warehouse: 'Stores - RD',
+        items: [{ item_code: 'SKU-1', price: 13, qty: 4, uom: 'Nos' }],
+        order_name: 'PO-0001',
+        schedule_date: '2026-06-08',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
