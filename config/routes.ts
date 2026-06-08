@@ -132,6 +132,12 @@ export default [
         component: './Purchase/Invoices/Detail',
         hideInMenu: true,
       },
+      {
+        path: '/purchase/returns/new',
+        name: 'return-new',
+        component: './Purchase/Returns/New',
+        hideInMenu: true,
+      },
     ],
   },
   {

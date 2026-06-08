@@ -119,6 +119,65 @@ export type QuickCancelPurchaseOrderResult = {
   orderName: string;
 };
 
+export type PurchaseReturnSourceDoctype =
+  | 'Purchase Receipt'
+  | 'Purchase Invoice';
+
+export type PurchaseReturnSourceContextItem = {
+  amount: number | null;
+  defaultReturnQty: number | null;
+  detailId: string;
+  detailSubmitKey: string;
+  itemCode: string;
+  itemName: string;
+  maxReturnableQty: number | null;
+  rate: number | null;
+  returnedQty: number | null;
+  sourceQty: number | null;
+  specification: string;
+  uom: string;
+  warehouse: string;
+};
+
+export type PurchaseReturnSourceContext = {
+  canProcessReturn: boolean;
+  company: string;
+  currency: string;
+  documentStatus: string;
+  outstandingAmount: number | null;
+  partyDisplayName: string;
+  partyName: string;
+  postingDate: string;
+  primaryAmount: number | null;
+  sourceDoctype: PurchaseReturnSourceDoctype;
+  sourceLabel: string;
+  sourceName: string;
+  supportsPartialReturn: boolean;
+  items: PurchaseReturnSourceContextItem[];
+};
+
+export type PurchaseReturnSubmissionResult = {
+  businessType: string;
+  documentStatus: string;
+  message: string;
+  nextActions: {
+    canBackToSource: boolean;
+    canViewReturnDocument: boolean;
+    suggestedNextAction: string;
+  };
+  references: Record<string, string[]>;
+  returnDocument: string;
+  returnDoctype: PurchaseReturnSourceDoctype;
+  sourceDoctype: PurchaseReturnSourceDoctype;
+  sourceName: string;
+  summary: {
+    isPartialReturn: boolean;
+    itemCount: number;
+    returnAmountEstimate: number | null;
+    totalQty: number | null;
+  };
+};
+
 export type UpdatePurchaseOrderPayload = {
   remarks?: string;
   scheduleDate?: string;
@@ -271,6 +330,16 @@ function normalizePurchaseActionItems(
         : {}),
       qty: item.qty,
     }));
+}
+
+function normalizeReferences(value: unknown) {
+  return Object.entries(readObject(value)).reduce<Record<string, string[]>>(
+    (acc, [key, rowValue]) => {
+      acc[key] = toStringList(rowValue);
+      return acc;
+    },
+    {},
+  );
 }
 
 function normalizePurchaseOrderItems(items: PurchaseOrderItemInput[]) {
@@ -572,6 +641,79 @@ export async function getPurchaseInvoiceDetail(
   };
 }
 
+export async function getPurchaseReturnSourceContext(
+  sourceDoctype: PurchaseReturnSourceDoctype,
+  sourceName: string,
+): Promise<PurchaseReturnSourceContext | null> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_return_source_context_v2',
+    {
+      source_doctype: sourceDoctype,
+      source_name: sourceName,
+    },
+  );
+  const data = result.data;
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const actions = readObject(data.actions);
+  const amounts = readObject(data.amounts);
+  const meta = readObject(data.meta);
+  const party = readObject(data.party);
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    canProcessReturn: Boolean(actions.can_process_return),
+    company: String(meta.company ?? ''),
+    currency: String(meta.currency ?? 'CNY'),
+    documentStatus: String(data.document_status ?? ''),
+    outstandingAmount: toOptionalNumber(amounts.outstanding_amount),
+    partyDisplayName: String(
+      party.display_name ?? party.party_name ?? data.party_name ?? '',
+    ),
+    partyName: String(party.party_name ?? ''),
+    postingDate: String(meta.posting_date ?? meta.transaction_date ?? ''),
+    primaryAmount: toOptionalNumber(amounts.primary_amount),
+    sourceDoctype: String(
+      data.source_doctype ?? sourceDoctype,
+    ) as PurchaseReturnSourceDoctype,
+    sourceLabel: String(data.source_label ?? sourceDoctype),
+    sourceName: String(data.source_name ?? sourceName),
+    supportsPartialReturn: Boolean(actions.supports_partial_return),
+    items: items
+      .map((item: Record<string, unknown>) => {
+        const detailId = String(item.detail_id ?? '');
+        const detailSubmitKey = String(item.detail_submit_key ?? '');
+        if (!detailId || !detailSubmitKey) {
+          return null;
+        }
+        return {
+          amount: toOptionalNumber(item.amount),
+          defaultReturnQty: toOptionalNumber(item.default_return_qty),
+          detailId,
+          detailSubmitKey,
+          itemCode: String(item.item_code ?? ''),
+          itemName: String(item.item_name ?? item.item_code ?? ''),
+          maxReturnableQty: toOptionalNumber(item.max_returnable_qty),
+          rate: toOptionalNumber(item.rate),
+          returnedQty: toOptionalNumber(item.returned_qty),
+          sourceQty: toOptionalNumber(item.source_qty),
+          specification: String(
+            item.specification ?? item.custom_specification ?? '',
+          ),
+          uom: String(item.uom ?? ''),
+          warehouse: String(item.warehouse ?? ''),
+        } satisfies PurchaseReturnSourceContextItem;
+      })
+      .filter(
+        (
+          item: PurchaseReturnSourceContextItem | null,
+        ): item is PurchaseReturnSourceContextItem => Boolean(item),
+      ),
+  };
+}
+
 export async function receivePurchaseOrder(
   orderName: string,
   options: {
@@ -754,6 +896,66 @@ export async function quickCancelPurchaseOrderV2(
               : '',
           completedSteps: toStringList(row.completed_steps),
           orderName: String(row.purchase_order ?? orderName),
+        };
+      },
+    },
+  );
+}
+
+export async function submitPurchaseReturn(payload: {
+  postingDate?: string;
+  remarks?: string;
+  returnItems: Record<string, unknown>[];
+  sourceDoctype: PurchaseReturnSourceDoctype;
+  sourceName: string;
+}) {
+  return runGatewayMutation<PurchaseReturnSubmissionResult>(
+    'process_purchase_return',
+    {
+      payload: compactPayload({
+        posting_date: payload.postingDate,
+        remarks: payload.remarks,
+        return_items: payload.returnItems.length
+          ? payload.returnItems
+          : undefined,
+        source_doctype: payload.sourceDoctype,
+        source_name: payload.sourceName,
+      }),
+      successMessage: '采购退货单已创建',
+      transform: (data) => {
+        const row = readObject(data);
+        const nextActions = readObject(row.next_actions);
+        const summary = readObject(row.summary);
+        return {
+          businessType: String(row.business_type ?? 'purchase'),
+          documentStatus: String(row.document_status ?? ''),
+          message: String(row.message ?? '采购退货单已创建。'),
+          nextActions: {
+            canBackToSource: Boolean(nextActions.can_back_to_source),
+            canViewReturnDocument: Boolean(
+              nextActions.can_view_return_document,
+            ),
+            suggestedNextAction: String(
+              nextActions.suggested_next_action ?? '',
+            ),
+          },
+          references: normalizeReferences(row.references),
+          returnDocument: String(row.return_document ?? ''),
+          returnDoctype: String(
+            row.return_doctype ?? payload.sourceDoctype,
+          ) as PurchaseReturnSourceDoctype,
+          sourceDoctype: String(
+            row.source_doctype ?? payload.sourceDoctype,
+          ) as PurchaseReturnSourceDoctype,
+          sourceName: String(row.source_name ?? payload.sourceName),
+          summary: {
+            isPartialReturn: Boolean(summary.is_partial_return),
+            itemCount: Number(summary.item_count ?? 0),
+            returnAmountEstimate: toOptionalNumber(
+              summary.return_amount_estimate,
+            ),
+            totalQty: toOptionalNumber(summary.total_qty),
+          },
         };
       },
     },

@@ -5,7 +5,7 @@ import {
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
-import { Link, useParams, useRequest } from '@umijs/max';
+import { history, Link, useParams, useRequest } from '@umijs/max';
 import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
 import React, { useState } from 'react';
 import {
@@ -147,6 +147,20 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        data?.documentStatus !== 'cancelled' ? (
+          <Button
+            key="return"
+            onClick={() => {
+              const params = new URLSearchParams({
+                sourceDoctype: 'Purchase Invoice',
+                sourceName: invoiceName,
+              });
+              history.push(`/purchase/returns/new?${params.toString()}`);
+            }}
+          >
+            采购退货
+          </Button>
+        ) : null,
         <Button
           danger
           disabled={!data?.canCancel}

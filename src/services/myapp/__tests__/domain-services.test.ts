@@ -8,12 +8,14 @@ import {
   createPurchaseOrderV2,
   createPurchaseOrderInvoice,
   getPurchaseCompanyContext,
+  getPurchaseReturnSourceContext,
   getSupplierPurchaseContext,
   quickCancelPurchaseOrderV2,
   quickCreatePurchaseOrderV2,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
   searchPurchaseOrders,
+  submitPurchaseReturn,
   updatePurchaseOrderItemsV2,
   updatePurchaseOrderV2,
 } from '../purchase';
@@ -457,6 +459,66 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('maps purchase return source context', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: { can_process_return: true, supports_partial_return: true },
+        amounts: { outstanding_amount: 0, primary_amount: 88 },
+        document_status: 'submitted',
+        items: [
+          {
+            amount: 88,
+            default_return_qty: 2,
+            detail_id: 'PRI-0001',
+            detail_submit_key: 'purchase_receipt_item',
+            item_code: 'SKU-1',
+            item_name: 'Camera',
+            max_returnable_qty: 2,
+            rate: 44,
+            source_qty: 2,
+            uom: 'Nos',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        meta: { company: 'rgc (Demo)', currency: 'CNY' },
+        party: { display_name: 'Supplier A', party_name: 'SUP-0001' },
+        source_doctype: 'Purchase Receipt',
+        source_label: '采购收货单',
+        source_name: 'PREC-0001',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const context = await getPurchaseReturnSourceContext(
+      'Purchase Receipt',
+      'PREC-0001',
+    );
+
+    expect(context).toMatchObject({
+      canProcessReturn: true,
+      company: 'rgc (Demo)',
+      items: [
+        {
+          detailId: 'PRI-0001',
+          detailSubmitKey: 'purchase_receipt_item',
+          maxReturnableQty: 2,
+        },
+      ],
+      partyDisplayName: 'Supplier A',
+      primaryAmount: 88,
+      sourceDoctype: 'Purchase Receipt',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_return_source_context_v2',
+      {
+        source_doctype: 'Purchase Receipt',
+        source_name: 'PREC-0001',
+      },
+    );
+  });
+
+
   it('maps link options for selectors', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: [
@@ -740,6 +802,13 @@ describe('myapp domain services', () => {
       scheduleDate: '2026-06-08',
     });
     await quickCancelPurchaseOrderV2('PO-0001');
+    await submitPurchaseReturn({
+      postingDate: '2026-06-09',
+      remarks: '采购退货',
+      returnItems: [{ purchase_receipt_item: 'PRI-0001', qty: 1 }],
+      sourceDoctype: 'Purchase Receipt',
+      sourceName: 'PREC-0001',
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -847,6 +916,18 @@ describe('myapp domain services', () => {
       {
         order_name: 'PO-0001',
         rollback_payment: 1,
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      10,
+      'process_purchase_return',
+      {
+        posting_date: '2026-06-09',
+        remarks: '采购退货',
+        return_items: [{ purchase_receipt_item: 'PRI-0001', qty: 1 }],
+        source_doctype: 'Purchase Receipt',
+        source_name: 'PREC-0001',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
