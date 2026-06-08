@@ -30,6 +30,7 @@ import {
   cancelSalesOrder,
   createSalesOrderInvoice,
   getSalesOrderDetail,
+  quickCancelSalesOrderV2,
   recordSalesOrderPayment,
   type SalesOrderDetailItem,
   submitSalesOrderDelivery,
@@ -83,6 +84,19 @@ function toSalesActionItems(rows: LineQtyEditorRow[]) {
       qty: row.actionQty,
       salesOrderItem: row.key,
     }));
+}
+
+function quickCancelStepLabel(step: string) {
+  if (step === 'payment_entry') {
+    return '收款单';
+  }
+  if (step === 'sales_invoice') {
+    return '销售发票';
+  }
+  if (step === 'delivery_note') {
+    return '销售发货单';
+  }
+  return step;
 }
 
 const itemColumns = [
@@ -367,6 +381,62 @@ const SalesOrderDetailPage: React.FC = () => {
     });
   };
 
+  const confirmQuickCancelDownstream = () => {
+    if (!data) {
+      return;
+    }
+
+    Modal.confirm({
+      cancelText: '取消',
+      content:
+        '系统会按顺序回退收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔收款，后端会拒绝快捷回退，请改用分步处理。',
+      okText: '快捷回退',
+      okType: 'danger',
+      onOk: async () => {
+        setActionLoading('quick-cancel');
+        try {
+          const result = await quickCancelSalesOrderV2(data.name, {
+            rollbackPayment: true,
+          });
+          refresh();
+          const completedSteps = result.data.completedSteps
+            .map(quickCancelStepLabel)
+            .join('、');
+          Modal.success({
+            content: (
+              <Space direction="vertical" size={4}>
+                <span>
+                  {completedSteps
+                    ? `已回退：${completedSteps}`
+                    : '当前没有需要回退的下游单据。'}
+                </span>
+                {result.data.cancelledPaymentEntries.length ? (
+                  <span>
+                    收款单：{result.data.cancelledPaymentEntries.join('、')}
+                  </span>
+                ) : null}
+                {result.data.cancelledSalesInvoice ? (
+                  <span>销售发票：{result.data.cancelledSalesInvoice}</span>
+                ) : null}
+                {result.data.cancelledDeliveryNote ? (
+                  <span>销售发货单：{result.data.cancelledDeliveryNote}</span>
+                ) : null}
+              </Space>
+            ),
+            title: '快捷回退完成',
+          });
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `快捷回退销售订单 ${data.name} 的下游单据？`,
+      width: 620,
+    });
+  };
+
   return (
     <PageContainer
       title={orderName || '销售订单详情'}
@@ -496,6 +566,16 @@ const SalesOrderDetailPage: React.FC = () => {
                     onClick={confirmRecordPayment}
                   >
                     记录收款
+                  </Button>
+                  <Button
+                    danger
+                    disabled={
+                      !data.deliveryNotes.length && !data.salesInvoices.length
+                    }
+                    loading={actionLoading === 'quick-cancel'}
+                    onClick={confirmQuickCancelDownstream}
+                  >
+                    快捷回退下游
                   </Button>
                   <Button
                     danger

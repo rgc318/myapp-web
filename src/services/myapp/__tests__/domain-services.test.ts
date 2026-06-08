@@ -20,6 +20,7 @@ import {
   createSalesOrderInvoice,
   getCustomerSalesContext,
   getSalesOrderDetail,
+  quickCancelSalesOrderV2,
   quickCreateSalesOrderV2,
   recordSalesOrderPayment,
   searchSalesOrders,
@@ -406,6 +407,7 @@ describe('myapp domain services', () => {
       deliveryDate: '2026-06-08',
       items: [{ itemCode: 'SKU-1', price: 22, qty: 3, salesMode: 'retail' }],
     });
+    await quickCancelSalesOrderV2('SO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -515,6 +517,15 @@ describe('myapp domain services', () => {
           },
         ],
         order_name: 'SO-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      9,
+      'quick_cancel_order_v2',
+      {
+        order_name: 'SO-0001',
+        rollback_payment: 1,
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

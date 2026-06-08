@@ -96,6 +96,14 @@ export type SalesOrderActionItem = {
   salesOrderItem?: string;
 };
 
+export type QuickCancelSalesOrderResult = {
+  cancelledDeliveryNote: string;
+  cancelledPaymentEntries: string[];
+  cancelledSalesInvoice: string;
+  completedSteps: string[];
+  orderName: string;
+};
+
 export type SalesOrderItemInput = {
   itemCode: string;
   price?: number | null;
@@ -700,6 +708,38 @@ export async function cancelSalesOrder(orderName: string) {
     payload: { order_name: orderName },
     successMessage: '销售订单已取消',
   });
+}
+
+export async function quickCancelSalesOrderV2(
+  orderName: string,
+  options: { rollbackPayment?: boolean } = {},
+) {
+  return runGatewayMutation<QuickCancelSalesOrderResult>(
+    'quick_cancel_order_v2',
+    {
+      payload: {
+        order_name: orderName,
+        rollback_payment: options.rollbackPayment === false ? 0 : 1,
+      },
+      successMessage: '销售订单下游单据已快捷回退',
+      transform: (data) => {
+        const row = readObject(data);
+        return {
+          cancelledDeliveryNote:
+            typeof row.cancelled_delivery_note === 'string'
+              ? row.cancelled_delivery_note
+              : '',
+          cancelledPaymentEntries: toStringList(row.cancelled_payment_entries),
+          cancelledSalesInvoice:
+            typeof row.cancelled_sales_invoice === 'string'
+              ? row.cancelled_sales_invoice
+              : '',
+          completedSteps: toStringList(row.completed_steps),
+          orderName: String(row.order ?? orderName),
+        };
+      },
+    },
+  );
 }
 
 export async function cancelDeliveryNote(deliveryNoteName: string) {
