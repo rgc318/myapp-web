@@ -18,6 +18,7 @@ import {
   cancelSalesInvoice,
   createSalesOrderV2,
   createSalesOrderInvoice,
+  getSalesReturnSourceContext,
   getCustomerSalesContext,
   getSalesOrderDetail,
   quickCancelSalesOrderV2,
@@ -25,6 +26,7 @@ import {
   recordSalesOrderPayment,
   searchSalesOrders,
   submitSalesOrderDelivery,
+  submitSalesReturn,
   updateSalesOrderItemsV2,
   updateSalesOrderV2,
 } from '../sales';
@@ -326,6 +328,59 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('maps sales return source context', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: { can_process_return: true, supports_partial_return: true },
+        amounts: { outstanding_amount: 20, primary_amount: 100 },
+        document_status: 'submitted',
+        items: [
+          {
+            amount: 100,
+            default_return_qty: 2,
+            detail_id: 'SII-0001',
+            detail_submit_key: 'sales_invoice_item',
+            item_code: 'SKU-1',
+            item_name: 'Camera',
+            max_returnable_qty: 2,
+            rate: 50,
+            source_qty: 2,
+            uom: 'Nos',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        meta: { company: 'rgc (Demo)', currency: 'CNY' },
+        party: { display_name: 'ACME', party_name: 'CUST-0001' },
+        source_doctype: 'Sales Invoice',
+        source_label: '销售发票',
+        source_name: 'SINV-0001',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const context = await getSalesReturnSourceContext(
+      'Sales Invoice',
+      'SINV-0001',
+    );
+
+    expect(context).toMatchObject({
+      canProcessReturn: true,
+      company: 'rgc (Demo)',
+      items: [{ detailId: 'SII-0001', detailSubmitKey: 'sales_invoice_item' }],
+      partyDisplayName: 'ACME',
+      primaryAmount: 100,
+      sourceDoctype: 'Sales Invoice',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_return_source_context_v2',
+      {
+        source_doctype: 'Sales Invoice',
+        source_name: 'SINV-0001',
+      },
+    );
+  });
+
   it('maps link options for selectors', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: [
@@ -408,6 +463,13 @@ describe('myapp domain services', () => {
       items: [{ itemCode: 'SKU-1', price: 22, qty: 3, salesMode: 'retail' }],
     });
     await quickCancelSalesOrderV2('SO-0001');
+    await submitSalesReturn({
+      postingDate: '2026-06-09',
+      remarks: '客户退货',
+      returnItems: [{ qty: 1, sales_invoice_item: 'SII-0001' }],
+      sourceDoctype: 'Sales Invoice',
+      sourceName: 'SINV-0001',
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -526,6 +588,18 @@ describe('myapp domain services', () => {
       {
         order_name: 'SO-0001',
         rollback_payment: 1,
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      10,
+      'process_sales_return',
+      {
+        posting_date: '2026-06-09',
+        remarks: '客户退货',
+        return_items: [{ qty: 1, sales_invoice_item: 'SII-0001' }],
+        source_doctype: 'Sales Invoice',
+        source_name: 'SINV-0001',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

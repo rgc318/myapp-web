@@ -73,6 +73,12 @@ export default [
         component: './Sales/Invoices/Detail',
         hideInMenu: true,
       },
+      {
+        path: '/sales/returns/new',
+        name: 'return-new',
+        component: './Sales/Returns/New',
+        hideInMenu: true,
+      },
     ],
   },
   {

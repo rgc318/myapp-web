@@ -121,6 +121,13 @@ const DeliveryNoteDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        <Button key="return">
+          <Link
+            to={`/sales/returns/new?sourceDoctype=${encodeURIComponent('Delivery Note')}&sourceName=${encodeURIComponent(deliveryNoteName)}`}
+          >
+            创建退货
+          </Link>
+        </Button>,
         <Button
           danger
           disabled={!data?.canCancelDeliveryNote}
