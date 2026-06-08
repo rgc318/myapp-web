@@ -169,6 +169,7 @@
 页面：
 
 - `/purchase/orders`
+- `/purchase/orders/new`
 - `/purchase/orders/:name`
 - 后续可扩展 `/purchase/receipts/:name`
 - 后续可扩展 `/purchase/invoices/:name`
@@ -176,6 +177,10 @@
 接口：
 
 - `myapp.api.gateway.search_purchase_orders_v2`
+- `myapp.api.gateway.get_purchase_company_context`
+- `myapp.api.gateway.get_supplier_purchase_context`
+- `myapp.api.gateway.create_purchase_order`
+- `myapp.api.gateway.quick_create_purchase_order_v2`
 - `myapp.api.gateway.get_purchase_order_detail_v2`
 - `myapp.api.gateway.get_purchase_receipt_detail_v2`
 - `myapp.api.gateway.get_purchase_invoice_detail_v2`
@@ -184,6 +189,7 @@
 任务：
 
 - 采购订单列表
+- 采购订单新建
 - 公司、供应商、日期、状态筛选
 - 采购订单详情
 - 下游收货单、发票、付款引用展示
@@ -191,14 +197,16 @@
 验收：
 
 - 能按条件查询采购订单
+- 能选择供应商和商品创建采购订单
 - 能打开采购订单详情
 - 能看到收货、开票、付款摘要
 
 当前状态：
 
 - 已新增 `src/services/myapp/purchase.ts`。
-- 已覆盖 `search_purchase_orders_v2`、`get_purchase_order_detail_v2`、`get_purchase_receipt_detail_v2` 和 `get_purchase_invoice_detail_v2` 的 Web 查询模型。
+- 已覆盖 `search_purchase_orders_v2`、`get_purchase_company_context`、`get_supplier_purchase_context`、`create_purchase_order`、`quick_create_purchase_order_v2`、`get_purchase_order_detail_v2`、`get_purchase_receipt_detail_v2` 和 `get_purchase_invoice_detail_v2` 的 Web 查询 / 创建模型。
 - 已新增 `/purchase/orders` 采购订单列表。
+- 已新增 `/purchase/orders/new` 采购订单新建页，接入供应商采购上下文、商品选择、采购默认价、单位换算、金额合计、保存订单和快捷采购。
 - 已新增 `/purchase/orders/:name` 采购订单详情。
 - 已接入采购菜单，使用现有 `canViewPurchase` 权限点。
 - 采购列表已支持关键词、公司、日期、状态、排序、分页和汇总卡片。
@@ -389,9 +397,9 @@
 7. 阶段 6：主数据辅助页
 8. 阶段 7：写操作增强
 
-当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。销售模块已经开始从查询详情进入交易主流程开发，当前已完成销售订单新建第一版。后续页面基本是按接口映射和 mobile 业务规则推进，不应再因为认证、代理、错误格式和模板服务返工。
+当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。销售模块已经从查询详情进入交易主流程开发；采购模块也已开始补主流程，当前已完成采购订单新建第一版。后续页面基本是按接口映射和 mobile 业务规则推进，不应再因为认证、代理、错误格式和模板服务返工。
 
-阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退。后续阶段 7 仍可继续补待处理确认和主数据轻量编辑。
+阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退。后续阶段 7 仍可继续补待处理确认和主数据轻量编辑。
 
 当前交接摘要：
 
@@ -418,10 +426,12 @@
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
 - 幂等写操作 helper：取消、确认、付款等动作统一使用 `Idempotency-Key`。
 - PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。
-- `/dashboard`、`/sales/orders`、`/sales/orders/:name`、`/purchase/orders`、`/purchase/orders/:name` 已作为第一批真实业务页面接入。
+- `/dashboard`、`/sales/orders`、`/sales/orders/:name`、`/purchase/orders`、`/purchase/orders/new`、`/purchase/orders/:name` 已作为第一批真实业务页面接入。
 - `/sales/orders/new` 已作为销售交易主流程第一步接入，支持客户上下文、商品选择、批发 / 零售单位价格、单位换算、保存订单和快捷下单。
+- `/purchase/orders/new` 已作为采购交易主流程第一步接入，支持供应商上下文、商品选择、采购默认价、单位换算、保存订单和快捷采购。
 - 通用选择组件已抽出：`RemoteLinkSelect`、`ProductSelect`、`PaymentModeSelect`、`LineQtyEditor`。
 - 销售订单行通用工具已抽出：`src/utils/sales-order-editor.ts`。
+- 采购订单行通用工具已抽出：`src/utils/purchase-order-editor.ts`。
 - 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
 - 生产部署说明：同域部署、Nginx/Caddy 示例、缓存策略和上线验收。
 
@@ -429,7 +439,7 @@
 
 - Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
 - 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
-- Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，待处理确认和主数据编辑尚未接入。
+- Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，采购订单新建已接入，待处理确认和主数据编辑尚未接入。
 - 销售订单新建、编辑、快捷回退、退货和退款核对已接入；独立客户退款打款接口后端暂未提供，当前不在 Web 中伪造完成状态。
 - 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
 - 跨域生产部署未实测，第一阶段推荐同域反向代理。

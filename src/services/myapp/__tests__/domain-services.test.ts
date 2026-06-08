@@ -5,7 +5,11 @@ import {
   cancelPurchaseInvoice,
   cancelPurchaseReceipt,
   cancelSupplierPaymentEntry,
+  createPurchaseOrderV2,
   createPurchaseOrderInvoice,
+  getPurchaseCompanyContext,
+  getSupplierPurchaseContext,
+  quickCreatePurchaseOrderV2,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
   searchPurchaseOrders,
@@ -328,6 +332,75 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('maps supplier purchase context', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        default_address: {
+          address_display: '深圳市南山区',
+          name: 'ADDR-0002',
+        },
+        default_contact: {
+          display_name: 'Bob',
+          mobile_no: '13900000000',
+          name: 'CONT-0002',
+        },
+        suggestions: {
+          company: 'rgc (Demo)',
+          currency: 'CNY',
+          warehouse: 'Stores - RD',
+        },
+        supplier: {
+          default_currency: 'CNY',
+          display_name: 'Supplier A',
+          name: 'SUP-0001',
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        company: 'rgc (Demo)',
+        currency: 'CNY',
+        warehouse: 'Stores - RD',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const supplierContext = await getSupplierPurchaseContext(
+      'SUP-0001',
+      'rgc (Demo)',
+    );
+    const companyContext = await getPurchaseCompanyContext('rgc (Demo)');
+
+    expect(supplierContext).toMatchObject({
+      defaultAddress: { addressDisplay: '深圳市南山区' },
+      defaultContact: { displayName: 'Bob', phone: '13900000000' },
+      suggestions: {
+        company: 'rgc (Demo)',
+        currency: 'CNY',
+        warehouse: 'Stores - RD',
+      },
+      supplier: { displayName: 'Supplier A', name: 'SUP-0001' },
+    });
+    expect(companyContext).toEqual({
+      company: 'rgc (Demo)',
+      currency: 'CNY',
+      warehouse: 'Stores - RD',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'get_supplier_purchase_context',
+      { company: 'rgc (Demo)', supplier: 'SUP-0001' },
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'get_purchase_company_context',
+      { company: 'rgc (Demo)' },
+    );
+  });
+
   it('maps sales return source context', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {
@@ -626,6 +699,31 @@ describe('myapp domain services', () => {
       modeOfPayment: 'Cash',
     });
     await cancelPurchaseOrder('PO-0001');
+    await createPurchaseOrderV2({
+      company: 'rgc (Demo)',
+      currency: 'CNY',
+      defaultWarehouse: 'Stores - RD',
+      items: [
+        {
+          itemCode: 'SKU-1',
+          price: 12,
+          qty: 3,
+          uom: 'Nos',
+          warehouse: 'Stores - RD',
+        },
+      ],
+      scheduleDate: '2026-06-06',
+      supplier: 'SUP-0001',
+      supplierRef: 'SUP-REF-1',
+      transactionDate: '2026-06-05',
+    });
+    await quickCreatePurchaseOrderV2({
+      company: 'rgc (Demo)',
+      immediateInvoice: true,
+      immediateReceive: true,
+      items: [{ itemCode: 'SKU-1', qty: 1 }],
+      supplier: 'SUP-0001',
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -665,6 +763,42 @@ describe('myapp domain services', () => {
       4,
       'cancel_purchase_order_v2',
       { order_name: 'PO-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      5,
+      'create_purchase_order',
+      {
+        company: 'rgc (Demo)',
+        currency: 'CNY',
+        default_warehouse: 'Stores - RD',
+        items: [
+          {
+            item_code: 'SKU-1',
+            price: 12,
+            qty: 3,
+            uom: 'Nos',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        schedule_date: '2026-06-06',
+        supplier: 'SUP-0001',
+        supplier_ref: 'SUP-REF-1',
+        transaction_date: '2026-06-05',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      6,
+      'quick_create_purchase_order_v2',
+      {
+        company: 'rgc (Demo)',
+        immediate_invoice: 1,
+        immediate_payment: 0,
+        immediate_receive: 1,
+        items: [{ item_code: 'SKU-1', qty: 1 }],
+        supplier: 'SUP-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

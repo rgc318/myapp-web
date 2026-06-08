@@ -8,6 +8,7 @@
 import Footer from './Footer';
 import PageState from './PageState';
 import { ProductSelect } from './ProductSelect';
+import { PurchaseOrderLinesTable } from './PurchaseOrderLinesTable';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
 import { Question, SelectLang } from './RightContent';
 import { AvatarDropdown, AvatarName } from './RightContent/AvatarDropdown';
@@ -19,6 +20,7 @@ export {
   Footer,
   PageState,
   ProductSelect,
+  PurchaseOrderLinesTable,
   Question,
   RemoteLinkSelect,
   SalesOrderLinesTable,

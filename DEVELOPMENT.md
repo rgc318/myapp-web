@@ -14,6 +14,7 @@ Main scenarios:
 - document list and detail pages
 - document status tracking
 - sales order creation and later edit/return workflows
+- purchase order creation and later edit/return workflows
 - finance and inventory lookup
 - dashboard and reporting
 - print preview and later management features
@@ -57,7 +58,7 @@ Detailed request/response contracts should be read from the backend API document
 - Dashboard
 - Sales order list and detail
 - Sales order creation
-- Purchase order list and detail
+- Purchase order list, detail, and creation
 - Reporting entry
 - Payment list
 - Finance lookup page
@@ -114,6 +115,7 @@ Reusable business components should be used before adding page-local selectors o
 - `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
 - `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
 - `src/utils/sales-order-editor.ts`: sales order line model, wholesale/retail default UOM and price, UOM conversion, line amount, and total calculation.
+- `src/components/PurchaseOrderLinesTable.tsx` and `src/utils/purchase-order-editor.ts`: purchase order line editing, purchase default price, UOM conversion reference, line amount, and total calculation.
 
 ### Purchase Document List
 
@@ -131,6 +133,7 @@ Reusable business components should be used before adding page-local selectors o
 - Key actions:
   - filter by company, supplier, date range, and status
   - open detail page
+  - create a purchase order with supplier context, product selection, purchase default price, UOM conversion, and quick purchase
 
 ### Payment List
 

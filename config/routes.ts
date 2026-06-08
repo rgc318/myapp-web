@@ -103,6 +103,12 @@ export default [
         component: './Purchase/Orders',
       },
       {
+        path: '/purchase/orders/new',
+        name: 'order-new',
+        component: './Purchase/Orders/New',
+        hideInMenu: true,
+      },
+      {
         path: '/purchase/orders/:name',
         name: 'order-detail',
         component: './Purchase/Orders/Detail',

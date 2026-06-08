@@ -80,6 +80,66 @@ export type PurchaseOrderActionItem = {
   qty: number;
 };
 
+export type PurchaseOrderItemInput = {
+  itemCode: string;
+  price?: number | null;
+  qty: number;
+  uom?: string | null;
+  warehouse?: string | null;
+};
+
+export type CreatePurchaseOrderPayload = {
+  buyingPriceList?: string;
+  company: string;
+  currency?: string;
+  defaultWarehouse?: string;
+  items: PurchaseOrderItemInput[];
+  remarks?: string;
+  scheduleDate?: string;
+  supplier: string;
+  supplierRef?: string;
+  transactionDate?: string;
+};
+
+export type QuickCreatePurchaseOrderPayload = CreatePurchaseOrderPayload & {
+  immediateInvoice?: boolean;
+  immediatePayment?: boolean;
+  immediateReceive?: boolean;
+  modeOfPayment?: string;
+  paidAmount?: number;
+  referenceDate?: string;
+  referenceNo?: string;
+};
+
+export type PurchaseCompanyContext = {
+  company: string | null;
+  currency: string | null;
+  warehouse: string | null;
+};
+
+export type SupplierPurchaseContext = {
+  defaultAddress: {
+    addressDisplay: string | null;
+    name: string | null;
+  } | null;
+  defaultContact: {
+    displayName: string | null;
+    email: string | null;
+    name: string | null;
+    phone: string | null;
+  } | null;
+  suggestions: {
+    company: string | null;
+    currency: string | null;
+    warehouse: string | null;
+  };
+  supplier: {
+    defaultCurrency: string | null;
+    displayName: string;
+    name: string;
+  };
+};
+
 export type PurchaseOrderDetail = PurchaseOrderSummary & {
   actualPaidAmount: number | null;
   canCancelOrder: boolean;
@@ -191,6 +251,35 @@ function normalizePurchaseActionItems(
     }));
 }
 
+function normalizePurchaseOrderItems(items: PurchaseOrderItemInput[]) {
+  return items
+    .filter((item) => item.itemCode && item.qty > 0)
+    .map((item) =>
+      compactPayload({
+        item_code: item.itemCode,
+        price: item.price ?? undefined,
+        qty: item.qty,
+        uom: item.uom ?? undefined,
+        warehouse: item.warehouse ?? undefined,
+      }),
+    );
+}
+
+function buildPurchaseOrderPayload(payload: CreatePurchaseOrderPayload) {
+  return compactPayload({
+    buying_price_list: payload.buyingPriceList,
+    company: payload.company,
+    currency: payload.currency,
+    default_warehouse: payload.defaultWarehouse,
+    items: normalizePurchaseOrderItems(payload.items),
+    remarks: payload.remarks,
+    schedule_date: payload.scheduleDate,
+    supplier: payload.supplier,
+    supplier_ref: payload.supplierRef,
+    transaction_date: payload.transactionDate,
+  });
+}
+
 export async function searchPurchaseOrders(
   params: SearchPurchaseOrdersParams = {},
 ) {
@@ -285,6 +374,99 @@ export async function getPurchaseOrderDetail(
     ),
     supplierContactPhone: String(supplier.contact_phone ?? ''),
     supplierRef: String(meta.supplier_ref ?? ''),
+  };
+}
+
+export async function getPurchaseCompanyContext(
+  company?: string,
+): Promise<PurchaseCompanyContext | null> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_purchase_company_context',
+    compactPayload({ company: toOptionalText(company) }),
+  );
+  const data = result.data;
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  return {
+    company: typeof data.company === 'string' ? data.company : null,
+    currency: typeof data.currency === 'string' ? data.currency : null,
+    warehouse: typeof data.warehouse === 'string' ? data.warehouse : null,
+  };
+}
+
+export async function getSupplierPurchaseContext(
+  supplier: string,
+  company?: string,
+): Promise<SupplierPurchaseContext | null> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_supplier_purchase_context',
+    compactPayload({
+      company: toOptionalText(company),
+      supplier,
+    }),
+  );
+  const data = result.data;
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const supplierRow = readObject(data.supplier);
+  const defaultContact = readObject(data.default_contact);
+  const defaultAddress = readObject(data.default_address);
+  const suggestions = readObject(data.suggestions);
+
+  return {
+    defaultAddress: defaultAddress.name
+      ? {
+          addressDisplay:
+            typeof defaultAddress.address_display === 'string'
+              ? defaultAddress.address_display
+              : null,
+          name:
+            typeof defaultAddress.name === 'string' ? defaultAddress.name : null,
+        }
+      : null,
+    defaultContact: defaultContact.name
+      ? {
+          displayName:
+            typeof defaultContact.display_name === 'string'
+              ? defaultContact.display_name
+              : null,
+          email:
+            typeof defaultContact.email === 'string'
+              ? defaultContact.email
+              : null,
+          name:
+            typeof defaultContact.name === 'string' ? defaultContact.name : null,
+          phone:
+            typeof defaultContact.phone === 'string'
+              ? defaultContact.phone
+              : typeof defaultContact.mobile_no === 'string'
+                ? defaultContact.mobile_no
+                : null,
+        }
+      : null,
+    suggestions: {
+      company:
+        typeof suggestions.company === 'string' ? suggestions.company : null,
+      currency:
+        typeof suggestions.currency === 'string' ? suggestions.currency : null,
+      warehouse:
+        typeof suggestions.warehouse === 'string'
+          ? suggestions.warehouse
+          : null,
+    },
+    supplier: {
+      defaultCurrency:
+        typeof supplierRow.default_currency === 'string'
+          ? supplierRow.default_currency
+          : null,
+      displayName: String(
+        supplierRow.display_name ?? supplierRow.name ?? supplier,
+      ),
+      name: String(supplierRow.name ?? supplier),
+    },
   };
 }
 
@@ -394,6 +576,39 @@ export async function receivePurchaseOrder(
       order_name: orderName,
     },
     successMessage: '采购收货单已创建',
+  });
+}
+
+export async function createPurchaseOrderV2(
+  payload: CreatePurchaseOrderPayload,
+) {
+  return runGatewayMutation<{ purchase_order?: string }>('create_purchase_order', {
+    payload: buildPurchaseOrderPayload(payload),
+    successMessage: '采购订单已创建',
+  });
+}
+
+export async function quickCreatePurchaseOrderV2(
+  payload: QuickCreatePurchaseOrderPayload,
+) {
+  return runGatewayMutation<{
+    completed_steps?: string[];
+    payment_entry?: string;
+    purchase_invoice?: string;
+    purchase_order?: string;
+    purchase_receipt?: string;
+  }>('quick_create_purchase_order_v2', {
+    payload: compactPayload({
+      ...buildPurchaseOrderPayload(payload),
+      immediate_invoice: payload.immediateInvoice === false ? 0 : 1,
+      immediate_payment: payload.immediatePayment ? 1 : 0,
+      immediate_receive: payload.immediateReceive === false ? 0 : 1,
+      mode_of_payment: payload.modeOfPayment,
+      paid_amount: payload.paidAmount,
+      reference_date: payload.referenceDate,
+      reference_no: payload.referenceNo,
+    }),
+    successMessage: '采购订单已快捷创建',
   });
 }
 

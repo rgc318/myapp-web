@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProCard, ProTable } from '@ant-design/pro-components';
-import { Link } from '@umijs/max';
+import { history, Link } from '@umijs/max';
 import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
@@ -143,6 +143,13 @@ const PurchaseOrdersPage: React.FC = () => {
     <PageContainer
       title="采购订单"
       extra={[
+        <Button
+          key="new"
+          onClick={() => history.push('/purchase/orders/new')}
+          type="primary"
+        >
+          新建采购订单
+        </Button>,
         <Button key="refresh" onClick={() => actionRef.current?.reload()}>
           刷新
         </Button>,
