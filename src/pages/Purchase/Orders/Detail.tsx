@@ -31,6 +31,7 @@ import {
   createPurchaseOrderInvoice,
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
+  quickCancelPurchaseOrderV2,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
 } from '@/services/myapp/purchase';
@@ -83,6 +84,19 @@ function toPurchaseActionItems(rows: LineQtyEditorRow[]) {
       purchaseOrderItem: row.key,
       qty: row.actionQty,
     }));
+}
+
+function quickCancelStepLabel(step: string) {
+  if (step === 'payment_entry') {
+    return '供应商付款';
+  }
+  if (step === 'purchase_invoice') {
+    return '采购发票';
+  }
+  if (step === 'purchase_receipt') {
+    return '采购收货单';
+  }
+  return step;
 }
 
 const itemColumns = [
@@ -367,6 +381,65 @@ const PurchaseOrderDetailPage: React.FC = () => {
     });
   };
 
+  const confirmQuickCancelDownstream = () => {
+    if (!data) {
+      return;
+    }
+
+    Modal.confirm({
+      cancelText: '取消',
+      content:
+        '系统会按顺序回退供应商付款、采购发票和采购收货单。若当前订单存在多张发票、收货单或多笔付款，后端会拒绝快捷回退，请改用分步处理。',
+      okText: '快捷回退',
+      okType: 'danger',
+      onOk: async () => {
+        setActionLoading('quick-cancel');
+        try {
+          const result = await quickCancelPurchaseOrderV2(data.name, {
+            rollbackPayment: true,
+          });
+          refresh();
+          const completedSteps = result.data.completedSteps
+            .map(quickCancelStepLabel)
+            .join('、');
+          Modal.success({
+            content: (
+              <Space direction="vertical" size={4}>
+                <span>
+                  {completedSteps
+                    ? `已回退：${completedSteps}`
+                    : '当前没有需要回退的下游单据。'}
+                </span>
+                {result.data.cancelledPaymentEntries.length ? (
+                  <span>
+                    供应商付款：
+                    {result.data.cancelledPaymentEntries.join('、')}
+                  </span>
+                ) : null}
+                {result.data.cancelledPurchaseInvoice ? (
+                  <span>采购发票：{result.data.cancelledPurchaseInvoice}</span>
+                ) : null}
+                {result.data.cancelledPurchaseReceipt ? (
+                  <span>
+                    采购收货单：{result.data.cancelledPurchaseReceipt}
+                  </span>
+                ) : null}
+              </Space>
+            ),
+            title: '快捷回退完成',
+          });
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `快捷回退采购订单 ${data.name} 的下游单据？`,
+      width: 620,
+    });
+  };
+
   return (
     <PageContainer
       title={orderName || '采购订单详情'}
@@ -510,6 +583,17 @@ const PurchaseOrderDetailPage: React.FC = () => {
                     onClick={confirmRecordPayment}
                   >
                     记录付款
+                  </Button>
+                  <Button
+                    danger
+                    disabled={
+                      !data.purchaseReceipts.length &&
+                      !data.purchaseInvoices.length
+                    }
+                    loading={actionLoading === 'quick-cancel'}
+                    onClick={confirmQuickCancelDownstream}
+                  >
+                    快捷回退下游
                   </Button>
                   <Button
                     danger

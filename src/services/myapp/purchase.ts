@@ -111,6 +111,14 @@ export type QuickCreatePurchaseOrderPayload = CreatePurchaseOrderPayload & {
   referenceNo?: string;
 };
 
+export type QuickCancelPurchaseOrderResult = {
+  cancelledPaymentEntries: string[];
+  cancelledPurchaseInvoice: string;
+  cancelledPurchaseReceipt: string;
+  completedSteps: string[];
+  orderName: string;
+};
+
 export type UpdatePurchaseOrderPayload = {
   remarks?: string;
   scheduleDate?: string;
@@ -716,6 +724,40 @@ export async function cancelPurchaseOrder(orderName: string) {
     payload: { order_name: orderName },
     successMessage: '采购订单已取消',
   });
+}
+
+export async function quickCancelPurchaseOrderV2(
+  orderName: string,
+  options: { rollbackPayment?: boolean } = {},
+) {
+  return runGatewayMutation<QuickCancelPurchaseOrderResult>(
+    'quick_cancel_purchase_order_v2',
+    {
+      payload: {
+        order_name: orderName,
+        rollback_payment: options.rollbackPayment === false ? 0 : 1,
+      },
+      successMessage: '采购订单下游单据已快捷回退',
+      transform: (data) => {
+        const row = readObject(data);
+        return {
+          cancelledPaymentEntries: toStringList(
+            row.cancelled_payment_entries,
+          ),
+          cancelledPurchaseInvoice:
+            typeof row.cancelled_purchase_invoice === 'string'
+              ? row.cancelled_purchase_invoice
+              : '',
+          cancelledPurchaseReceipt:
+            typeof row.cancelled_purchase_receipt === 'string'
+              ? row.cancelled_purchase_receipt
+              : '',
+          completedSteps: toStringList(row.completed_steps),
+          orderName: String(row.purchase_order ?? orderName),
+        };
+      },
+    },
+  );
 }
 
 export async function cancelPurchaseReceipt(receiptName: string) {

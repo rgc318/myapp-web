@@ -9,6 +9,7 @@ import {
   createPurchaseOrderInvoice,
   getPurchaseCompanyContext,
   getSupplierPurchaseContext,
+  quickCancelPurchaseOrderV2,
   quickCreatePurchaseOrderV2,
   receivePurchaseOrder,
   recordPurchaseOrderPayment,
@@ -738,6 +739,7 @@ describe('myapp domain services', () => {
       items: [{ itemCode: 'SKU-1', price: 13, qty: 4, uom: 'Nos' }],
       scheduleDate: '2026-06-08',
     });
+    await quickCancelPurchaseOrderV2('PO-0001');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -836,6 +838,15 @@ describe('myapp domain services', () => {
         items: [{ item_code: 'SKU-1', price: 13, qty: 4, uom: 'Nos' }],
         order_name: 'PO-0001',
         schedule_date: '2026-06-08',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      9,
+      'quick_cancel_purchase_order_v2',
+      {
+        order_name: 'PO-0001',
+        rollback_payment: 1,
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
