@@ -138,6 +138,12 @@ export default [
         component: './Purchase/Returns/New',
         hideInMenu: true,
       },
+      {
+        path: '/purchase/refunds/review',
+        name: 'refund-review',
+        component: './Purchase/Refunds/Review',
+        hideInMenu: true,
+      },
     ],
   },
   {

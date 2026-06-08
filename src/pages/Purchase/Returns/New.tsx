@@ -61,6 +61,14 @@ function getSuggestedActionHint(result: PurchaseReturnSubmissionResult) {
   return '可以查看退货单，或返回来源单据继续处理后续业务。';
 }
 
+function getRefundReviewPath(result: PurchaseReturnSubmissionResult) {
+  const params = new URLSearchParams({
+    returnInvoice: result.returnDocument,
+    sourceInvoice: result.sourceName,
+  });
+  return `/purchase/refunds/review?${params.toString()}`;
+}
+
 function estimateLineAmount(line: ReturnLine) {
   const maxQty = line.maxReturnableQty ?? line.sourceQty ?? 0;
   if (!maxQty || !line.amount) {
@@ -432,6 +440,16 @@ const PurchaseReturnNewPage: React.FC = () => {
         {result ? (
           <Result
             extra={[
+              result.nextActions.suggestedNextAction ===
+              'review_supplier_refund' ? (
+                <Button
+                  key="refund"
+                  onClick={() => history.push(getRefundReviewPath(result))}
+                  type="primary"
+                >
+                  核对退款
+                </Button>
+              ) : null,
               <Button
                 key="return"
                 onClick={() =>
@@ -442,7 +460,12 @@ const PurchaseReturnNewPage: React.FC = () => {
                     ),
                   )
                 }
-                type="primary"
+                type={
+                  result.nextActions.suggestedNextAction ===
+                  'review_supplier_refund'
+                    ? 'default'
+                    : 'primary'
+                }
               >
                 查看退货单
               </Button>,

@@ -138,6 +138,7 @@ Reusable business components should be used before adding page-local selectors o
   - create a purchase invoice from a purchase receipt
   - record supplier payments from purchase invoices
   - submit purchase returns from purchase receipts or purchase invoices
+  - review supplier refunds after purchase invoice returns
 
 ### Payment List
 

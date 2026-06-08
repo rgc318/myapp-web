@@ -173,6 +173,7 @@
 - `/purchase/orders/:name/edit`
 - `/purchase/orders/:name`
 - `/purchase/returns/new`
+- `/purchase/refunds/review`
 - `/purchase/receipts/:name`
 - `/purchase/invoices/:name`
 
@@ -212,6 +213,7 @@
 - 能选择供应商和商品创建采购订单
 - 能编辑采购订单日期、交货日期、供应商单号、备注和商品明细
 - 能基于采购收货单或采购发票提交采购退货
+- 能在采购退货后核对来源采购发票付款状态
 - 能从采购收货单详情创建采购发票
 - 能从采购发票详情登记供应商付款
 - 能打开采购订单详情
@@ -225,6 +227,7 @@
 - 已新增 `/purchase/orders/new` 采购订单新建页，接入供应商采购上下文、商品选择、采购默认价、单位换算、金额合计、保存订单和快捷采购。
 - 已新增 `/purchase/orders/:name/edit` 采购订单编辑页，复用商品选择、Link 选择和采购订单行编辑组件，接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`。
 - 已新增 `/purchase/returns/new` 采购退货页，支持基于采购收货单或采购发票读取可退明细并提交独立退货单。
+- 已新增 `/purchase/refunds/review` 采购退款核对页，支持来源采购发票付款状态核对和最近付款回退。
 - 已新增 `/purchase/orders/:name` 采购订单详情。
 - 已接入采购菜单，使用现有 `canViewPurchase` 权限点。
 - 采购列表已支持关键词、公司、日期、状态、排序、分页和汇总卡片。
@@ -417,7 +420,7 @@
 
 当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。销售模块已经从查询详情进入交易主流程开发；采购模块也已开始补主流程，当前已完成采购订单新建、编辑和退货第一版。后续页面基本是按接口映射和 mobile 业务规则推进，不应再因为认证、代理、错误格式和模板服务返工。
 
-阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；采购订单详情在单张关联采购发票场景可登记供应商付款；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；采购发票详情可按未付金额登记供应商付款；采购收货单详情可基于收货单创建采购发票；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；采购订单编辑页已接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；采购订单详情已接入 `quick_cancel_purchase_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；采购退货页已接入 `get_return_source_context_v2` 和 `process_purchase_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退。后续阶段 7 仍可继续补待处理确认和主数据轻量编辑。
+阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；采购订单详情在单张关联采购发票场景可登记供应商付款；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；采购发票详情可按未付金额登记供应商付款；采购收货单详情可基于收货单创建采购发票；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；采购订单编辑页已接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；采购订单详情已接入 `quick_cancel_purchase_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；采购退货页已接入 `get_return_source_context_v2` 和 `process_purchase_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退；采购退款核对页已接入来源采购发票付款状态核对和最近付款回退。后续阶段 7 仍可继续补待处理确认和主数据轻量编辑。
 
 当前交接摘要：
 
