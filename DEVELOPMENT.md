@@ -225,5 +225,5 @@ Priority:
 Note:
 
 - `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
-- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return, purchase order query/detail, reporting entry, payment list, finance lookup, inventory lookup, and master-data lookup pages.
+- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, purchase order query/detail, reporting entry, payment list, finance lookup, inventory lookup, and master-data lookup pages.
 - Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.

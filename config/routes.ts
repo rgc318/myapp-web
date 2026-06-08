@@ -79,6 +79,12 @@ export default [
         component: './Sales/Returns/New',
         hideInMenu: true,
       },
+      {
+        path: '/sales/refunds/review',
+        name: 'refund-review',
+        component: './Sales/Refunds/Review',
+        hideInMenu: true,
+      },
     ],
   },
   {
