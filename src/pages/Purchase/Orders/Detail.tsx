@@ -33,7 +33,7 @@ import {
   type PurchaseDocumentItem,
   quickCancelPurchaseOrderV2,
   receivePurchaseOrder,
-  recordPurchaseOrderPayment,
+  recordSupplierPayment,
 } from '@/services/myapp/purchase';
 import {
   formatCurrencyCode,
@@ -330,6 +330,19 @@ const PurchaseOrderDetailPage: React.FC = () => {
       return;
     }
 
+    const invoiceNames = data.purchaseInvoices ?? [];
+    if (!invoiceNames.length) {
+      message.warning('请先创建采购发票后再登记付款');
+      return;
+    }
+    if (invoiceNames.length > 1) {
+      message.warning(
+        '当前订单关联多张采购发票，请进入具体采购发票详情登记付款',
+      );
+      return;
+    }
+
+    const paymentReferenceName = invoiceNames[0];
     const outstandingAmount = data.outstandingAmount ?? 0;
     let paymentAmount = outstandingAmount;
     let modeOfPayment = '';
@@ -366,7 +379,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
         setActionLoading('payment');
         try {
-          await recordPurchaseOrderPayment(data.name, paymentAmount, {
+          await recordSupplierPayment(paymentReferenceName, paymentAmount, {
             modeOfPayment,
           });
           refresh();
@@ -377,7 +390,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `记录付款 ${data.name}`,
+      title: `记录付款 ${paymentReferenceName}`,
     });
   };
 

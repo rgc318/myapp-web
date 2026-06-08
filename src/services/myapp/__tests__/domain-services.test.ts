@@ -14,7 +14,7 @@ import {
   quickCancelPurchaseOrderV2,
   quickCreatePurchaseOrderV2,
   receivePurchaseOrder,
-  recordPurchaseOrderPayment,
+  recordSupplierPayment,
   searchPurchaseOrders,
   submitPurchaseReturn,
   updatePurchaseOrderItemsV2,
@@ -765,8 +765,8 @@ describe('myapp domain services', () => {
       dueDate: '2026-06-10',
       remarks: '收货转发票',
     });
-    await recordPurchaseOrderPayment('PO-0001', 88, {
-      modeOfPayment: 'Cash',
+    await recordSupplierPayment('PI-0001', 66, {
+      modeOfPayment: 'Bank',
     });
     await cancelPurchaseOrder('PO-0001');
     await createPurchaseOrderV2({
@@ -853,9 +853,9 @@ describe('myapp domain services', () => {
       4,
       'record_supplier_payment',
       {
-        mode_of_payment: 'Cash',
-        paid_amount: 88,
-        reference_name: 'PO-0001',
+        mode_of_payment: 'Bank',
+        paid_amount: 66,
+        reference_name: 'PI-0001',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

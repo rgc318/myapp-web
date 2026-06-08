@@ -6,13 +6,24 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { history, Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
+import {
+  Alert,
+  Button,
+  Empty,
+  InputNumber,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+} from 'antd';
 import React, { useState } from 'react';
+import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
   cancelPurchaseInvoice,
   cancelSupplierPaymentEntry,
   getPurchaseInvoiceDetail,
   type PurchaseDocumentItem,
+  recordSupplierPayment,
 } from '@/services/myapp/purchase';
 import {
   formatCurrencyCode,
@@ -84,6 +95,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
   const params = useParams();
   const invoiceName = decodeURIComponent(String(params.name ?? ''));
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseInvoiceDetail(invoiceName),
@@ -137,6 +149,62 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
     });
   };
 
+  const confirmRecordPayment = () => {
+    if (!data) {
+      return;
+    }
+
+    const outstandingAmount = data.outstandingAmount ?? 0;
+    let paymentAmount = outstandingAmount;
+    let modeOfPayment = '';
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <InputNumber
+            autoFocus
+            controls={false}
+            defaultValue={outstandingAmount}
+            max={outstandingAmount}
+            min={0.01}
+            onChange={(value) => {
+              paymentAmount = Number(value ?? 0);
+            }}
+            precision={2}
+            prefix="¥"
+            style={{ width: '100%' }}
+          />
+          <PaymentModeSelect
+            onChange={(value) => {
+              modeOfPayment = value;
+            }}
+          />
+        </Space>
+      ),
+      okText: '确认付款',
+      onOk: async () => {
+        if (paymentAmount <= 0 || paymentAmount > outstandingAmount) {
+          message.error('付款金额必须大于 0 且不能超过未付金额');
+          throw new Error('Invalid payment amount');
+        }
+
+        setPaymentLoading(true);
+        try {
+          await recordSupplierPayment(invoiceName, paymentAmount, {
+            modeOfPayment,
+          });
+          refresh();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setPaymentLoading(false);
+        }
+      },
+      title: `记录付款 ${invoiceName}`,
+    });
+  };
+
   return (
     <PageContainer
       title={invoiceName || '采购发票详情'}
@@ -161,6 +229,18 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
             采购退货
           </Button>
         ) : null,
+        <Button
+          disabled={
+            data?.documentStatus === 'cancelled' ||
+            (data?.outstandingAmount ?? 0) <= 0
+          }
+          key="payment"
+          loading={paymentLoading}
+          onClick={confirmRecordPayment}
+          type="primary"
+        >
+          记录付款
+        </Button>,
         <Button
           danger
           disabled={!data?.canCancel}

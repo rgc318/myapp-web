@@ -136,6 +136,7 @@ Reusable business components should be used before adding page-local selectors o
   - create a purchase order with supplier context, product selection, purchase default price, UOM conversion, and quick purchase
   - edit a purchase order header and items before downstream receipt or invoice documents lock the item list
   - create a purchase invoice from a purchase receipt
+  - record supplier payments from purchase invoices
   - submit purchase returns from purchase receipts or purchase invoices
 
 ### Payment List
