@@ -35,6 +35,52 @@ export type StockLedgerEntryParams = {
   warehouse?: string;
 };
 
+export type InventoryStockStatus =
+  | 'all'
+  | 'in_stock'
+  | 'low_stock'
+  | 'out_of_stock'
+  | 'negative';
+
+export type InventoryStockSummaryRow = {
+  actualQty: number;
+  company: string;
+  disabled: boolean;
+  indentedQty: number;
+  itemCode: string;
+  itemName: string;
+  orderedQty: number;
+  projectedQty: number;
+  reservedQty: number;
+  stockUom: string;
+  stockValue: number;
+  valuationRate: number;
+  warehouse: string;
+};
+
+export type InventoryStockSummary = {
+  actualQtyTotal: number;
+  negativeCount: number;
+  outOfStockCount: number;
+  projectedQtyTotal: number;
+  reservedQtyTotal: number;
+  stockValueTotal: number;
+};
+
+export type InventoryStockSummaryParams = {
+  company?: string;
+  lowStockThreshold?: number;
+  page?: number;
+  pageSize?: number;
+  searchKey?: string;
+  stockStatus?: InventoryStockStatus;
+  warehouse?: string;
+};
+
+export type InventoryStockSummaryResult = PageResult<InventoryStockSummaryRow> & {
+  summary: InventoryStockSummary;
+};
+
 function mapStockLedgerEntry(row: Record<string, any>): StockLedgerEntry {
   return {
     actualQty: toNumber(row.actual_qty),
@@ -50,6 +96,49 @@ function mapStockLedgerEntry(row: Record<string, any>): StockLedgerEntry {
     voucherNo: String(row.voucher_no ?? ''),
     voucherType: String(row.voucher_type ?? ''),
     warehouse: String(row.warehouse ?? ''),
+  };
+}
+
+function emptyStockSummary(): InventoryStockSummary {
+  return {
+    actualQtyTotal: 0,
+    negativeCount: 0,
+    outOfStockCount: 0,
+    projectedQtyTotal: 0,
+    reservedQtyTotal: 0,
+    stockValueTotal: 0,
+  };
+}
+
+function mapInventoryStockSummaryRow(
+  row: Record<string, any>,
+): InventoryStockSummaryRow {
+  return {
+    actualQty: toNumber(row.actual_qty),
+    company: String(row.company ?? ''),
+    disabled: Boolean(row.disabled),
+    indentedQty: toNumber(row.indented_qty),
+    itemCode: String(row.item_code ?? ''),
+    itemName: String(row.item_name ?? row.item_code ?? ''),
+    orderedQty: toNumber(row.ordered_qty),
+    projectedQty: toNumber(row.projected_qty),
+    reservedQty: toNumber(row.reserved_qty),
+    stockUom: String(row.stock_uom ?? ''),
+    stockValue: toNumber(row.stock_value),
+    valuationRate: toNumber(row.valuation_rate),
+    warehouse: String(row.warehouse ?? ''),
+  };
+}
+
+function mapInventoryStockSummary(value: unknown): InventoryStockSummary {
+  const row = readObject(value);
+  return {
+    actualQtyTotal: toNumber(row.actual_qty_total),
+    negativeCount: toNumber(row.negative_count),
+    outOfStockCount: toNumber(row.out_of_stock_count),
+    projectedQtyTotal: toNumber(row.projected_qty_total),
+    reservedQtyTotal: toNumber(row.reserved_qty_total),
+    stockValueTotal: toNumber(row.stock_value_total),
   };
 }
 
@@ -77,6 +166,36 @@ export async function listStockLedgerEntries(
   return {
     hasMore: Boolean(pagination.has_more),
     items: rows.map((row) => mapStockLedgerEntry(readObject(row))),
+    total: toNumber(pagination.total_count, rows.length),
+  };
+}
+
+export async function listInventoryStockSummary(
+  params: InventoryStockSummaryParams = {},
+): Promise<InventoryStockSummaryResult> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'list_inventory_stock_summary_v1',
+    compactPayload({
+      company: toOptionalText(params.company),
+      low_stock_threshold: params.lowStockThreshold,
+      page: params.page ?? 1,
+      page_size: params.pageSize ?? 20,
+      search_key: toOptionalText(params.searchKey),
+      stock_status: params.stockStatus ?? 'all',
+      warehouse: toOptionalText(params.warehouse),
+    }),
+  );
+  const data = result.data ?? {};
+  const pagination = readObject(data.pagination);
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+
+  return {
+    hasMore: Boolean(pagination.has_more),
+    items: rows.map((row) => mapInventoryStockSummaryRow(readObject(row))),
+    summary: {
+      ...emptyStockSummary(),
+      ...mapInventoryStockSummary(data.summary),
+    },
     total: toNumber(pagination.total_count, rows.length),
   };
 }

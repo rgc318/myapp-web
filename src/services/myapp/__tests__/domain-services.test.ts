@@ -1,4 +1,5 @@
 import { callGatewayMethod } from '../api-client';
+import { listInventoryStockSummary } from '../inventory';
 import { listProducts, searchLinkOptions } from '../master-data';
 import {
   cancelPurchaseOrder,
@@ -306,6 +307,66 @@ describe('myapp domain services', () => {
     expect(result.items[0].priceSummary?.wholesaleRate).toBe(180);
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+  });
+
+  it('maps inventory stock summary rows', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        rows: [
+          {
+            actual_qty: '4',
+            company: 'rgc (Demo)',
+            item_code: 'SKU-1',
+            item_name: 'Camera',
+            projected_qty: '6',
+            reserved_qty: '1',
+            stock_uom: 'Nos',
+            stock_value: '80',
+            valuation_rate: '20',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        summary: {
+          actual_qty_total: '4',
+          negative_count: 0,
+          out_of_stock_count: 0,
+          projected_qty_total: '6',
+          reserved_qty_total: '1',
+          stock_value_total: '80',
+        },
+        pagination: { has_more: false, total_count: 1 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listInventoryStockSummary({
+      company: 'rgc (Demo)',
+      lowStockThreshold: 5,
+      stockStatus: 'low_stock',
+    });
+
+    expect(result.items[0]).toMatchObject({
+      actualQty: 4,
+      itemCode: 'SKU-1',
+      projectedQty: 6,
+      reservedQty: 1,
+      stockValue: 80,
+      valuationRate: 20,
+      warehouse: 'Stores - RD',
+    });
+    expect(result.summary.actualQtyTotal).toBe(4);
+    expect(result.total).toBe(1);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_inventory_stock_summary_v1',
+      {
+        company: 'rgc (Demo)',
+        low_stock_threshold: 5,
+        page: 1,
+        page_size: 20,
+        stock_status: 'low_stock',
+      },
+    );
   });
 
   it('maps customer sales context', async () => {

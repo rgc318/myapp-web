@@ -183,6 +183,11 @@ export default [
         component: './Inventory/Stock',
       },
       {
+        path: '/inventory/alerts',
+        name: 'alerts',
+        component: './Inventory/Alerts',
+      },
+      {
         path: '/inventory/stock/:itemCode',
         name: 'stock-detail',
         component: './Inventory/Stock/Detail',

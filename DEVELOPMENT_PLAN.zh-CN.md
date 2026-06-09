@@ -288,12 +288,14 @@
 
 - `/inventory/stock`
 - `/inventory/stock/:itemCode`
+- `/inventory/alerts`
 - `/inventory/ledger`
 - `/inventory-ledger`
 
 接口：
 
 - `myapp.api.gateway.list_products_v2`
+- `myapp.api.gateway.list_inventory_stock_summary_v1`
 - `myapp.api.gateway.list_stock_ledger_entries_v1`
 - `myapp.api.gateway.get_product_detail_v2`
 
@@ -305,6 +307,7 @@
 - 商品库存摘要
 - 商品库存详情
 - 仓库库存分布
+- 低库存 / 无库存 / 负库存预警
 
 验收：
 
@@ -312,6 +315,7 @@
 - 能从库存流水定位来源单据
 - 能按商品、公司、仓库查询当前库存
 - 能查看单个商品的仓库库存、单位换算和最近库存流水
+- 能按阈值查看低库存、无库存和负库存明细
 
 ## 阶段 6：主数据辅助页
 
@@ -360,8 +364,9 @@
 - 已新增 `/inventory/stock` 商品库存页，接入 `list_products_v2`，支持关键词、公司、仓库和仅有库存筛选。
 - `/inventory/stock` 已展示当前库存、公司总库存、采购价、零售价和仓库库存明细，并可跳转库存流水。
 - 已新增 `/inventory/stock/:itemCode` 商品库存详情页，接入 `get_product_detail_v2` 和最近库存流水查询。
+- 已新增 `/inventory/alerts` 库存预警页，接入 `list_inventory_stock_summary_v1`，支持低库存、无库存和负库存筛选。
 - 已新增 `/inventory/ledger` 库存流水页入口，原 `/inventory-ledger` 保留重定向。
-- 后端已新增 `myapp.api.gateway.list_stock_ledger_entries_v1`。
+- 后端已新增 `myapp.api.gateway.list_stock_ledger_entries_v1` 和 `myapp.api.gateway.list_inventory_stock_summary_v1`。
 - 当前页面已接入真实 `Stock Ledger Entry` 明细流水，支持公司、商品、仓库、日期、凭证类型和凭证编号筛选。
 
 ## 阶段 7：写操作增强

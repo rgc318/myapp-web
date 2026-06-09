@@ -243,6 +243,9 @@ const InventoryStockPage: React.FC = () => {
     <PageContainer
       title="商品库存"
       extra={[
+        <Button key="alerts" onClick={() => history.push('/inventory/alerts')}>
+          库存预警
+        </Button>,
         <Button key="ledger" onClick={() => history.push('/inventory/ledger')}>
           库存流水
         </Button>,
