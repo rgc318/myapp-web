@@ -148,7 +148,7 @@ const PurchaseOrderEditPage: React.FC = () => {
       setLines(editableLines);
       return detail;
     },
-    { refreshDeps: [orderName] },
+    { formatResult: (result) => result, refreshDeps: [orderName] },
   );
 
   const addProduct = (product: ProductSummary) => {

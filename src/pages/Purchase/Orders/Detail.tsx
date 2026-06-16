@@ -160,6 +160,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseOrderDetail(orderName),
     {
+      formatResult: (result) => result,
       refreshDeps: [orderName],
     },
   );

@@ -72,7 +72,7 @@ const Dashboard: React.FC = () => {
       company: DEFAULT_COMPANY,
     });
     return result.data as BusinessOverviewData;
-  });
+  }, { formatResult: (result) => result });
 
   const overviewData = data as BusinessOverviewData | undefined;
   const overview = overviewData?.overview;

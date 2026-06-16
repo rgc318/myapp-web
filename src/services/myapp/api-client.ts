@@ -61,6 +61,19 @@ function getFrappeErrorMessage(payload: any, fallback: string) {
   return fallback;
 }
 
+function isGatewayEnvelope(value: unknown): value is GatewayEnvelope {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const candidate = value as GatewayEnvelope;
+  return (
+    typeof candidate.ok === 'boolean' ||
+    typeof candidate.code === 'string' ||
+    typeof candidate.status === 'string'
+  );
+}
+
 export async function callFrappeMethod<T = unknown>(
   methodPath: string,
   payload?: Record<string, unknown>,
@@ -81,7 +94,24 @@ export async function callFrappeMethod<T = unknown>(
     },
   );
 
-  return response.message as T;
+  const payloadResponse = response as FrappeMethodResponse<T> & {
+    data?: FrappeMethodResponse<T>;
+  };
+
+  const frappeMessage = payloadResponse.message ?? payloadResponse.data?.message;
+  if (frappeMessage !== undefined) {
+    return frappeMessage as T;
+  }
+
+  if (isGatewayEnvelope(payloadResponse.data)) {
+    return payloadResponse.data as T;
+  }
+
+  if (isGatewayEnvelope(payloadResponse)) {
+    return payloadResponse as T;
+  }
+
+  return payloadResponse as T;
 }
 
 export async function callGatewayMethod<
@@ -98,6 +128,14 @@ export async function callGatewayMethod<
       payload,
       options,
     );
+
+    if (!isGatewayEnvelope(envelope)) {
+      return {
+        data: envelope as T,
+        meta: {} as M,
+        raw: envelope,
+      };
+    }
 
     if (envelope?.ok === false) {
       throw new MyAppApiError(envelope.message || '请求失败，请稍后重试。', {
@@ -145,4 +183,3 @@ export function createIdempotencyKey(prefix = 'web') {
 
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
-

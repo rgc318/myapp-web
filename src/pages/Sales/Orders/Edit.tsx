@@ -161,6 +161,7 @@ const SalesOrderEditPage: React.FC = () => {
       return detail;
     },
     {
+      formatResult: (result) => result,
       refreshDeps: [orderName],
     },
   );

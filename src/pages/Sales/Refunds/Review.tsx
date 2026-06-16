@@ -47,6 +47,7 @@ const SalesRefundReviewPage: React.FC = () => {
     () =>
       invoiceName ? getSalesInvoiceDetail(invoiceName) : Promise.resolve(null),
     {
+      formatResult: (result) => result,
       refreshDeps: [invoiceName],
     },
   );

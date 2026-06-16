@@ -88,6 +88,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => getSalesInvoiceDetail(invoiceName),
     {
+      formatResult: (result) => result,
       refreshDeps: [invoiceName],
     },
   );

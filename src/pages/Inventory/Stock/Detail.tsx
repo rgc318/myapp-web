@@ -137,6 +137,7 @@ const InventoryStockDetailPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => getProductDetail(itemCode, { company, warehouse }),
     {
+      formatResult: (result) => result,
       refreshDeps: [itemCode, company, warehouse],
     },
   );

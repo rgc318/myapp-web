@@ -86,6 +86,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => getDeliveryNoteDetail(deliveryNoteName),
     {
+      formatResult: (result) => result,
       refreshDeps: [deliveryNoteName],
     },
   );

@@ -49,6 +49,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
         ? getPurchaseInvoiceDetail(invoiceName)
         : Promise.resolve(null),
     {
+      formatResult: (result) => result,
       refreshDeps: [invoiceName],
     },
   );

@@ -99,6 +99,7 @@ const PurchaseReceiptDetailPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => getPurchaseReceiptDetail(receiptName),
     {
+      formatResult: (result) => result,
       refreshDeps: [receiptName],
     },
   );

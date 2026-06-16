@@ -182,6 +182,7 @@ const ReportsPage: React.FC = () => {
   const { data, error, loading, refresh } = useRequest(
     () => fetchBusinessReportOverview(requestFilters),
     {
+      formatResult: (result) => result,
       refreshDeps: [
         requestFilters.company,
         requestFilters.dateFrom,
