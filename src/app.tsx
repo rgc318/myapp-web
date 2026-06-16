@@ -10,6 +10,7 @@ import {
   Footer,
   Question,
   SelectLang,
+  WorkspacePreferenceButton,
 } from '@/components';
 import {
   getMyAppCurrentUser,
@@ -81,6 +82,7 @@ export const layout: RunTimeLayoutConfig = ({
 }) => {
   return {
     actionsRender: () => [
+      <WorkspacePreferenceButton key="workspace-preferences" />,
       <Question key="doc" />,
       <SelectLang key="SelectLang" />,
     ],

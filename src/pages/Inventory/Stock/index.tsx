@@ -3,14 +3,14 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, Link } from '@umijs/max';
 import { Button, Image, Space, Table, Tag } from 'antd';
 import React, { useRef } from 'react';
+import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   listProducts,
   type ProductSummary,
   type ProductWarehouseStockDetail,
 } from '@/services/myapp/master-data';
-import { formatCurrencyValue, formatDisplayUom } from '@/utils/myapp-display';
+import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
 
 function formatNumber(value: number | null | undefined) {
@@ -96,148 +96,162 @@ function warehouseStockTable(
   );
 }
 
-const columns: ProColumns<ProductSummary>[] = [
-  {
-    title: '关键词',
-    dataIndex: 'searchKey',
-    hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: '商品编码 / 名称 / 条码',
+function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
+  return [
+    {
+      title: '关键词',
+      dataIndex: 'searchKey',
+      hideInTable: true,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '商品编码 / 名称 / 条码',
+      },
     },
-  },
-  {
-    title: '公司',
-    dataIndex: 'company',
-    hideInTable: true,
-    initialValue: DEFAULT_COMPANY,
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: '仓库',
+    {
+      title: '公司',
+      dataIndex: 'company',
+      hideInTable: true,
+      initialValue: defaultCompany,
     },
-  },
-  {
-    title: '库存状态',
-    dataIndex: 'inStockOnly',
-    valueType: 'select',
-    hideInTable: true,
-    initialValue: 'all',
-    valueEnum: {
-      all: { text: '全部' },
-      in_stock: { text: '仅有库存' },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse',
+      hideInTable: true,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '仓库',
+      },
     },
-  },
-  {
-    title: '图片',
-    dataIndex: 'imageUrl',
-    search: false,
-    width: 80,
-    render: (_, record) =>
-      record.imageUrl ? (
-        <Image height={48} src={record.imageUrl} width={48} />
-      ) : (
-        '-'
+    {
+      title: '库存状态',
+      dataIndex: 'inStockOnly',
+      valueType: 'select',
+      hideInTable: true,
+      initialValue: 'all',
+      valueEnum: {
+        all: { text: '全部' },
+        in_stock: { text: '仅有库存' },
+      },
+    },
+    {
+      title: '图片',
+      dataIndex: 'imageUrl',
+      search: false,
+      width: 80,
+      render: (_, record) =>
+        record.imageUrl ? (
+          <Image height={48} src={record.imageUrl} width={48} />
+        ) : (
+          '-'
+        ),
+    },
+    {
+      title: '商品编码',
+      dataIndex: 'itemCode',
+      search: false,
+      width: 160,
+      render: (_, record) => (
+        <Link
+          to={stockDetailPath(
+            record.itemCode,
+            defaultCompany,
+            record.warehouse,
+          )}
+        >
+          {record.itemCode}
+        </Link>
       ),
-  },
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    search: false,
-    width: 160,
-    render: (_, record) => (
-      <Link
-        to={stockDetailPath(record.itemCode, DEFAULT_COMPANY, record.warehouse)}
-      >
-        {record.itemCode}
-      </Link>
-    ),
-  },
-  {
-    title: '商品名称',
-    dataIndex: 'itemName',
-    search: false,
-    ellipsis: true,
-  },
-  {
-    title: '规格',
-    dataIndex: 'specification',
-    search: false,
-    ellipsis: true,
-    width: 160,
-    renderText: (value) => value || '-',
-  },
-  {
-    title: '当前库存',
-    dataIndex: 'stockQty',
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) => formatNumber(record.stockQty),
-  },
-  {
-    title: '公司总库存',
-    dataIndex: 'totalQty',
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) => formatNumber(record.totalQty),
-  },
-  {
-    title: '单位',
-    dataIndex: 'stockUom',
-    search: false,
-    width: 100,
-    render: (_, record) => formatDisplayUom(record.stockUom),
-  },
-  {
-    title: '采购价',
-    dataIndex: ['priceSummary', 'standardBuyingRate'],
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) =>
-      formatCurrencyValue(record.priceSummary?.standardBuyingRate),
-  },
-  {
-    title: '零售价',
-    dataIndex: ['priceSummary', 'retailRate'],
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) => formatCurrencyValue(record.priceSummary?.retailRate),
-  },
-  {
-    title: '状态',
-    dataIndex: 'stockStatus',
-    search: false,
-    width: 100,
-    render: (_, record) => stockStatusTag(record.stockQty),
-  },
-  {
-    title: '操作',
-    valueType: 'option',
-    width: 120,
-    render: (_, record) => [
-      <Link
-        key="detail"
-        to={stockDetailPath(record.itemCode, DEFAULT_COMPANY, record.warehouse)}
-      >
-        详情
-      </Link>,
-      <Link key="ledger" to={ledgerPath(record.itemCode, record.warehouse)}>
-        查看流水
-      </Link>,
-    ],
-  },
-];
+    },
+    {
+      title: '商品名称',
+      dataIndex: 'itemName',
+      search: false,
+      ellipsis: true,
+    },
+    {
+      title: '规格',
+      dataIndex: 'specification',
+      search: false,
+      ellipsis: true,
+      width: 160,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '当前库存',
+      dataIndex: 'stockQty',
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) => formatNumber(record.stockQty),
+    },
+    {
+      title: '公司总库存',
+      dataIndex: 'totalQty',
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) => formatNumber(record.totalQty),
+    },
+    {
+      title: '单位',
+      dataIndex: 'stockUom',
+      search: false,
+      width: 100,
+      render: (_, record) =>
+        resolveDisplayUom(record.stockUom, record.stockUomDisplay),
+    },
+    {
+      title: '采购价',
+      dataIndex: ['priceSummary', 'standardBuyingRate'],
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.priceSummary?.standardBuyingRate),
+    },
+    {
+      title: '零售价',
+      dataIndex: ['priceSummary', 'retailRate'],
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.priceSummary?.retailRate),
+    },
+    {
+      title: '状态',
+      dataIndex: 'stockStatus',
+      search: false,
+      width: 100,
+      render: (_, record) => stockStatusTag(record.stockQty),
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      width: 120,
+      render: (_, record) => [
+        <Link
+          key="detail"
+          to={stockDetailPath(
+            record.itemCode,
+            defaultCompany,
+            record.warehouse,
+          )}
+        >
+          详情
+        </Link>,
+        <Link key="ledger" to={ledgerPath(record.itemCode, record.warehouse)}>
+          查看流水
+        </Link>,
+      ],
+    },
+  ];
+}
 
 const InventoryStockPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const { defaultCompany } = useWorkspacePreferences();
+  const columns = buildColumns(defaultCompany);
 
   return (
     <PageContainer
@@ -245,6 +259,13 @@ const InventoryStockPage: React.FC = () => {
       extra={[
         <Button key="alerts" onClick={() => history.push('/inventory/alerts')}>
           库存预警
+        </Button>,
+        <Button
+          key="adjustments"
+          type="primary"
+          onClick={() => history.push('/inventory/adjustments')}
+        >
+          库存调整
         </Button>,
         <Button key="ledger" onClick={() => history.push('/inventory/ledger')}>
           库存流水
@@ -257,6 +278,7 @@ const InventoryStockPage: React.FC = () => {
       <ProTable<ProductSummary>
         actionRef={actionRef}
         columns={columns}
+        key={defaultCompany}
         expandable={{
           expandedRowRender: (record) => (
             <Space direction="vertical" size={12} style={{ width: '100%' }}>
@@ -276,7 +298,7 @@ const InventoryStockPage: React.FC = () => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const result = await listProducts({
-            company: String(params.company ?? DEFAULT_COMPANY),
+            company: String(params.company ?? defaultCompany),
             disabled: 0,
             inStockOnly: params.inStockOnly === 'in_stock',
             limit: pageSize,

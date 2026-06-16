@@ -23,9 +23,11 @@ import {
 } from '@/utils/sales-order-editor';
 
 export function PurchaseOrderLinesTable({
+  company,
   lines,
   onChange,
 }: {
+  company?: string;
   lines: PurchaseOrderEditorLine[];
   onChange: (lines: PurchaseOrderEditorLine[]) => void;
 }) {
@@ -110,6 +112,7 @@ export function PurchaseOrderLinesTable({
         <RemoteLinkSelect
           doctype="Warehouse"
           extraFields={['company']}
+          filters={{ company }}
           onChange={(nextWarehouse) => {
             updateLine(record.key, { warehouse: nextWarehouse });
           }}

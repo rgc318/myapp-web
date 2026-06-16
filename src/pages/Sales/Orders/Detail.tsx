@@ -12,7 +12,6 @@ import {
   DatePicker,
   Empty,
   Input,
-  InputNumber,
   Modal,
   message,
   Skeleton,
@@ -20,25 +19,32 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
+import { SalesRollbackGuide } from '@/components/DownstreamRollbackGuide';
+import {
+  type InvoicePaymentDraft,
+  InvoicePaymentForm,
+} from '@/components/InvoicePaymentForm';
 import {
   buildLineQtyRow,
   LineQtyEditor,
   type LineQtyEditorRow,
 } from '@/components/LineQtyEditor';
-import { PaymentModeSelect } from '@/components/PaymentModeSelect';
+import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
   cancelSalesOrder,
   createSalesOrderInvoice,
+  getSalesInvoiceDetail,
   getSalesOrderDetail,
   quickCancelSalesOrderV2,
   recordSalesOrderPayment,
+  type SalesOrderDetail,
   type SalesOrderDetailItem,
   submitSalesOrderDelivery,
 } from '@/services/myapp/sales';
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  formatDisplayUom,
+  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -71,6 +77,7 @@ function buildSalesActionRows(
         maxQty: getMaxQty(item),
         orderedQty: item.qty,
         uom: item.uom,
+        uomDisplay: item.uomDisplay,
       }),
     )
     .filter((item) => item.maxQty > 0);
@@ -127,7 +134,7 @@ const itemColumns = [
     dataIndex: 'uom',
     width: 90,
     render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatDisplayUom(record.uom),
+      resolveDisplayUom(record.uom, record.uomDisplay),
   },
   {
     title: '单价',
@@ -157,13 +164,15 @@ const SalesOrderDetailPage: React.FC = () => {
   const params = useParams();
   const orderName = decodeURIComponent(String(params.name ?? ''));
   const [actionLoading, setActionLoading] = useState<string>();
-  const { data, error, loading, refresh } = useRequest(
-    () => getSalesOrderDetail(orderName),
-    {
-      formatResult: (result) => result,
-      refreshDeps: [orderName],
-    },
-  );
+  const {
+    data: detail,
+    error,
+    loading,
+    refresh,
+  } = useRequest(() => getSalesOrderDetail(orderName), {
+    formatResult: (result) => result,
+    refreshDeps: [orderName],
+  });
 
   const runOrderAction = (
     key: string,
@@ -192,13 +201,13 @@ const SalesOrderDetailPage: React.FC = () => {
   };
 
   const confirmSubmitDelivery = () => {
-    if (!data) {
+    if (!detail) {
       return;
     }
 
     let postingDate = dayjs().format('YYYY-MM-DD');
     let remarks = '';
-    let selectedRows = buildSalesActionRows(data.items, (item) =>
+    let selectedRows = buildSalesActionRows(detail.items, (item) =>
       Math.max(toQty(item.qty) - toQty(item.deliveredQty), 0),
     );
 
@@ -245,7 +254,7 @@ const SalesOrderDetailPage: React.FC = () => {
 
         setActionLoading('delivery');
         try {
-          await submitSalesOrderDelivery(data.name, {
+          await submitSalesOrderDelivery(detail.name, {
             deliveryItems,
             postingDate,
             remarks,
@@ -258,18 +267,18 @@ const SalesOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `创建销售发货单 ${data.name}`,
+      title: `创建销售发货单 ${detail.name}`,
       width: 900,
     });
   };
 
   const confirmCreateInvoice = () => {
-    if (!data) {
+    if (!detail) {
       return;
     }
 
     let remarks = '';
-    let selectedRows = buildSalesActionRows(data.items, (item) =>
+    let selectedRows = buildSalesActionRows(detail.items, (item) =>
       toQty(item.qty),
     );
 
@@ -309,7 +318,7 @@ const SalesOrderDetailPage: React.FC = () => {
 
         setActionLoading('invoice');
         try {
-          await createSalesOrderInvoice(data.name, {
+          await createSalesOrderInvoice(detail.name, {
             invoiceItems,
             remarks,
           });
@@ -321,54 +330,60 @@ const SalesOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `创建销售发票 ${data.name}`,
+      title: `创建销售发票 ${detail.name}`,
       width: 900,
     });
   };
 
   const confirmRecordPayment = () => {
-    if (!data) {
+    if (!detail) {
       return;
     }
 
-    const outstandingAmount = data.outstandingAmount ?? 0;
-    let paymentAmount = outstandingAmount;
-    let modeOfPayment = '';
+    const invoiceNames = detail.salesInvoices ?? [];
+    if (!invoiceNames.length) {
+      message.warning('请先创建销售发票后再登记收款');
+      return;
+    }
+
+    let draft: InvoicePaymentDraft = {
+      amount: 0,
+      modeOfPayment: '',
+      referenceName: invoiceNames[0],
+    };
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <InputNumber
-            autoFocus
-            controls={false}
-            defaultValue={outstandingAmount}
-            max={outstandingAmount}
-            min={0.01}
-            onChange={(value) => {
-              paymentAmount = Number(value ?? 0);
-            }}
-            precision={2}
-            prefix="¥"
-            style={{ width: '100%' }}
-          />
-          <PaymentModeSelect
-            onChange={(value) => {
-              modeOfPayment = value;
-            }}
-          />
-        </Space>
+        <InvoicePaymentForm
+          detailBasePath="/sales/invoices"
+          invoices={invoiceNames}
+          label="销售发票"
+          loadOutstandingAmount={async (invoiceName) => {
+            const invoice = await getSalesInvoiceDetail(invoiceName);
+            return invoice?.outstandingAmount ?? 0;
+          }}
+          onChange={(nextDraft) => {
+            draft = nextDraft;
+          }}
+        />
       ),
       okText: '确认收款',
       onOk: async () => {
-        if (paymentAmount <= 0 || paymentAmount > outstandingAmount) {
+        const paymentAmount = Number(draft.amount ?? 0);
+        if (paymentAmount <= 0) {
           message.error('收款金额必须大于 0 且不能超过未收金额');
           throw new Error('Invalid payment amount');
+        }
+        if (!draft.referenceName) {
+          message.error('请选择销售发票');
+          throw new Error('Missing payment reference');
         }
 
         setActionLoading('payment');
         try {
-          await recordSalesOrderPayment(data.name, paymentAmount, {
-            modeOfPayment,
+          await recordSalesOrderPayment(draft.referenceName, paymentAmount, {
+            modeOfPayment: draft.modeOfPayment,
+            referenceDoctype: 'Sales Invoice',
           });
           refresh();
         } catch (caught) {
@@ -378,25 +393,37 @@ const SalesOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `记录收款 ${data.name}`,
+      title:
+        invoiceNames.length > 1
+          ? `选择销售发票并记录收款 ${detail.name}`
+          : `记录收款 ${invoiceNames[0]}`,
     });
   };
 
   const confirmQuickCancelDownstream = () => {
-    if (!data) {
+    if (!detail) {
       return;
     }
 
     Modal.confirm({
       cancelText: '取消',
-      content:
-        '系统会按顺序回退收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔收款，后端会拒绝快捷回退，请改用分步处理。',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <span>
+            系统会按顺序回退收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔收款，后端会拒绝快捷回退。
+          </span>
+          <SalesRollbackGuide
+            deliveryNotes={detail.deliveryNotes}
+            salesInvoices={detail.salesInvoices}
+          />
+        </Space>
+      ),
       okText: '快捷回退',
       okType: 'danger',
       onOk: async () => {
         setActionLoading('quick-cancel');
         try {
-          const result = await quickCancelSalesOrderV2(data.name, {
+          const result = await quickCancelSalesOrderV2(detail.name, {
             rollbackPayment: true,
           });
           refresh();
@@ -427,13 +454,28 @@ const SalesOrderDetailPage: React.FC = () => {
             title: '快捷回退完成',
           });
         } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
+          const errorMessage =
+            caught instanceof Error ? caught.message : '操作失败';
+          message.error(errorMessage);
+          Modal.warning({
+            content: (
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <span>{errorMessage}</span>
+                <SalesRollbackGuide
+                  deliveryNotes={detail.deliveryNotes}
+                  salesInvoices={detail.salesInvoices}
+                />
+              </Space>
+            ),
+            title: '请改用分步回退',
+            width: 680,
+          });
           throw caught;
         } finally {
           setActionLoading(undefined);
         }
       },
-      title: `快捷回退销售订单 ${data.name} 的下游单据？`,
+      title: `快捷回退销售订单 ${detail.name} 的下游单据？`,
       width: 620,
     });
   };
@@ -448,6 +490,12 @@ const SalesOrderDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        <PrintDocumentButton
+          disabled={!orderName}
+          docname={orderName}
+          doctype="Sales Order"
+          key="print"
+        />,
       ]}
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -467,39 +515,42 @@ const SalesOrderDetailPage: React.FC = () => {
           />
         )}
 
-        {loading && !data ? (
+        {loading && !detail ? (
           <ProCard>
             <Skeleton active paragraph={{ rows: 8 }} />
           </ProCard>
         ) : null}
 
-        {!loading && !error && !data ? (
+        {!loading && !error && !detail ? (
           <ProCard>
             <Empty description="未找到销售订单" />
           </ProCard>
         ) : null}
 
-        {data ? (
+        {detail ? (
           <>
             <StatisticCard.Group direction="row">
               <StatisticCard
                 statistic={{
                   title: '订单金额',
-                  value: formatCurrencyValue(data.amount, data.currency),
+                  value: formatCurrencyValue(detail.amount, detail.currency),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '已收金额',
-                  value: formatCurrencyValue(data.paidAmount, data.currency),
+                  value: formatCurrencyValue(
+                    detail.paidAmount,
+                    detail.currency,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '未收金额',
                   value: formatCurrencyValue(
-                    data.outstandingAmount,
-                    data.currency,
+                    detail.outstandingAmount,
+                    detail.currency,
                   ),
                 }}
               />
@@ -507,7 +558,7 @@ const SalesOrderDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard title="基本信息">
-                <ProDescriptions column={2} dataSource={data}>
+                <ProDescriptions column={2} dataSource={detail}>
                   <ProDescriptions.Item label="客户" dataIndex="customer" />
                   <ProDescriptions.Item label="公司" dataIndex="company" />
                   <ProDescriptions.Item
@@ -519,19 +570,19 @@ const SalesOrderDetailPage: React.FC = () => {
                     dataIndex="deliveryDate"
                   />
                   <ProDescriptions.Item label="单据状态">
-                    <StatusTag value={data.documentStatus} />
+                    <StatusTag value={detail.documentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="履约状态">
-                    <StatusTag value={data.fulfillmentStatus} />
+                    <StatusTag value={detail.fulfillmentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="收款状态">
-                    <StatusTag value={data.paymentStatus} />
+                    <StatusTag value={detail.paymentStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="完成状态">
-                    <StatusTag value={data.completionStatus} />
+                    <StatusTag value={detail.completionStatus} />
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="币种">
-                    {formatCurrencyCode(data.currency)}
+                    {formatCurrencyCode(detail.currency)}
                   </ProDescriptions.Item>
                 </ProDescriptions>
               </ProCard>
@@ -539,12 +590,12 @@ const SalesOrderDetailPage: React.FC = () => {
               <ProCard title="履约动作">
                 <Space wrap>
                   <Link
-                    to={`/sales/orders/${encodeURIComponent(data.name)}/edit`}
+                    to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
                   >
                     <Button>编辑订单</Button>
                   </Link>
                   <Button
-                    disabled={!data.canSubmitDelivery}
+                    disabled={!detail.canSubmitDelivery}
                     loading={actionLoading === 'delivery'}
                     onClick={confirmSubmitDelivery}
                     type="primary"
@@ -552,7 +603,7 @@ const SalesOrderDetailPage: React.FC = () => {
                     创建发货单
                   </Button>
                   <Button
-                    disabled={!data.canCreateSalesInvoice}
+                    disabled={!detail.canCreateSalesInvoice}
                     loading={actionLoading === 'invoice'}
                     onClick={confirmCreateInvoice}
                   >
@@ -560,8 +611,8 @@ const SalesOrderDetailPage: React.FC = () => {
                   </Button>
                   <Button
                     disabled={
-                      !data.canRecordPayment ||
-                      (data.outstandingAmount ?? 0) <= 0
+                      !detail.canRecordPayment ||
+                      (detail.outstandingAmount ?? 0) <= 0
                     }
                     loading={actionLoading === 'payment'}
                     onClick={confirmRecordPayment}
@@ -571,7 +622,8 @@ const SalesOrderDetailPage: React.FC = () => {
                   <Button
                     danger
                     disabled={
-                      !data.deliveryNotes.length && !data.salesInvoices.length
+                      !detail.deliveryNotes.length &&
+                      !detail.salesInvoices.length
                     }
                     loading={actionLoading === 'quick-cancel'}
                     onClick={confirmQuickCancelDownstream}
@@ -580,13 +632,13 @@ const SalesOrderDetailPage: React.FC = () => {
                   </Button>
                   <Button
                     danger
-                    disabled={!data.canCancelOrder}
+                    disabled={!detail.canCancelOrder}
                     loading={actionLoading === 'cancel'}
                     onClick={() =>
                       runOrderAction(
                         'cancel',
-                        `取消销售订单 ${data.name}？`,
-                        () => cancelSalesOrder(data.name),
+                        `取消销售订单 ${detail.name}？`,
+                        () => cancelSalesOrder(detail.name),
                         true,
                       )
                     }
@@ -598,7 +650,7 @@ const SalesOrderDetailPage: React.FC = () => {
             </ProCard>
 
             <ProCard title="收货信息">
-              <ProDescriptions column={2} dataSource={data}>
+              <ProDescriptions column={2} dataSource={detail}>
                 <ProDescriptions.Item
                   label="联系人"
                   dataIndex="contactDisplay"
@@ -623,17 +675,17 @@ const SalesOrderDetailPage: React.FC = () => {
             <ProCard title="关联单据">
               <ProDescriptions column={2}>
                 <ProDescriptions.Item label="发货单">
-                  {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
+                  {docLinks(detail.deliveryNotes, '/sales/delivery-notes')}
                 </ProDescriptions.Item>
                 <ProDescriptions.Item label="销售发票">
-                  {docLinks(data.salesInvoices, '/sales/invoices')}
+                  {docLinks(detail.salesInvoices, '/sales/invoices')}
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>
 
             <ProTable<SalesOrderDetailItem>
               columns={itemColumns}
-              dataSource={data.items}
+              dataSource={detail.items}
               pagination={false}
               rowKey={(record) => `${record.itemCode}-${record.warehouse}`}
               search={false}

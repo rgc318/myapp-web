@@ -16,6 +16,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React from 'react';
+import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { getBusinessReportOverview } from '@/services/myapp/gateway';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
@@ -37,8 +38,6 @@ type BusinessOverviewData = {
   };
   overview?: BusinessOverview;
 };
-
-const DEFAULT_COMPANY = 'rgc (Demo)';
 
 function toNumber(value: number | string | null | undefined) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -67,12 +66,16 @@ function formatDateRange(meta: BusinessOverviewData['meta']) {
 }
 
 const Dashboard: React.FC = () => {
-  const { data, error, loading, refresh } = useRequest(async () => {
-    const result = await getBusinessReportOverview({
-      company: DEFAULT_COMPANY,
-    });
-    return result.data as BusinessOverviewData;
-  }, { formatResult: (result) => result });
+  const { defaultCompany } = useWorkspacePreferences();
+  const { data, error, loading, refresh } = useRequest(
+    async () => {
+      const result = await getBusinessReportOverview({
+        company: defaultCompany,
+      });
+      return result.data as BusinessOverviewData;
+    },
+    { formatResult: (result) => result, refreshDeps: [defaultCompany] },
+  );
 
   const overviewData = data as BusinessOverviewData | undefined;
   const overview = overviewData?.overview;
@@ -92,7 +95,7 @@ const Dashboard: React.FC = () => {
           <Space direction="vertical" size={4}>
             <Typography.Text type="secondary">当前公司</Typography.Text>
             <Typography.Title level={4} style={{ margin: 0 }}>
-              {overviewData?.meta?.company || DEFAULT_COMPANY}
+              {overviewData?.meta?.company || defaultCompany}
             </Typography.Title>
             <Typography.Text type="secondary">
               {formatDateRange(overviewData?.meta)}

@@ -62,10 +62,20 @@ export default [
         hideInMenu: true,
       },
       {
+        path: '/sales/delivery-notes',
+        name: 'delivery-notes',
+        component: './Sales/DeliveryNotes',
+      },
+      {
         path: '/sales/delivery-notes/:name',
         name: 'delivery-note-detail',
         component: './Sales/DeliveryNotes/Detail',
         hideInMenu: true,
+      },
+      {
+        path: '/sales/invoices',
+        name: 'invoices',
+        component: './Sales/Invoices',
       },
       {
         path: '/sales/invoices/:name',
@@ -121,10 +131,20 @@ export default [
         hideInMenu: true,
       },
       {
+        path: '/purchase/receipts',
+        name: 'receipts',
+        component: './Purchase/Receipts',
+      },
+      {
         path: '/purchase/receipts/:name',
         name: 'receipt-detail',
         component: './Purchase/Receipts/Detail',
         hideInMenu: true,
+      },
+      {
+        path: '/purchase/invoices',
+        name: 'invoices',
+        component: './Purchase/Invoices',
       },
       {
         path: '/purchase/invoices/:name',
@@ -186,6 +206,11 @@ export default [
         path: '/inventory/alerts',
         name: 'alerts',
         component: './Inventory/Alerts',
+      },
+      {
+        path: '/inventory/adjustments',
+        name: 'adjustments',
+        component: './Inventory/Adjustments',
       },
       {
         path: '/inventory/stock/:itemCode',

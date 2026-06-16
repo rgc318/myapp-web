@@ -1,5 +1,6 @@
 import { callGatewayMethod } from './api-client';
 import { resolveMediaUrl } from './media-url';
+import { runGatewayMutation } from './mutation';
 import {
   compactPayload,
   readObject,
@@ -12,6 +13,7 @@ import {
 
 export type ListOptions = {
   disabled?: 0 | 1 | boolean;
+  enabled?: 0 | 1 | boolean;
   limit?: number;
   searchKey?: string;
   start?: number;
@@ -34,6 +36,7 @@ export type ProductSummary = {
   allUoms: string[];
   barcode: string;
   brand: string;
+  description: string;
   disabled: boolean;
   imageUrl: string;
   itemCode: string;
@@ -79,20 +82,63 @@ export type ProductSummary = {
   globalWarehouseStockDetails: ProductWarehouseStockDetail[];
 };
 
+export type SaveProductPayload = {
+  barcode?: string | null;
+  brand?: string | null;
+  currency?: string | null;
+  description?: string | null;
+  disabled?: boolean;
+  image?: string | null;
+  itemCode?: string | null;
+  itemGroup?: string | null;
+  itemName: string;
+  retailDefaultUom?: string | null;
+  standardBuyingRate?: number | null;
+  standardSellingRate?: number | null;
+  stockUom?: string | null;
+  valuationRate?: number | null;
+  wholesaleDefaultUom?: string | null;
+};
+
 export type PartySummary = {
+  defaultCurrency: string | null;
   disabled: boolean;
   displayName: string;
   email: string | null;
   group: string | null;
   mobileNo: string | null;
   name: string;
+  remarks: string | null;
   type: string | null;
 };
 
+export type SavePartyPayload = {
+  defaultCurrency?: string | null;
+  disabled?: boolean;
+  email?: string | null;
+  group?: string | null;
+  mobileNo?: string | null;
+  name: string;
+  remarks?: string | null;
+  type?: string | null;
+};
+
 export type UomSummary = {
+  description: string | null;
   disabled: boolean;
+  displayName: string;
+  enabled: boolean;
   mustBeWholeNumber: boolean;
   name: string;
+  symbol: string | null;
+  uomName: string;
+};
+
+export type SaveUomPayload = {
+  description?: string | null;
+  enabled?: boolean;
+  mustBeWholeNumber?: boolean;
+  symbol?: string | null;
   uomName: string;
 };
 
@@ -101,6 +147,8 @@ export type LinkOption = {
   label: string;
   value: string;
 };
+
+export type LinkOptionFilters = Record<string, string | number | boolean | null | undefined>;
 
 function mapProduct(row: Record<string, any>): ProductSummary {
   const allUoms = mapUomNames(row.all_uoms);
@@ -111,6 +159,7 @@ function mapProduct(row: Record<string, any>): ProductSummary {
     allUoms,
     barcode: String(row.barcode ?? ''),
     brand: String(row.brand ?? ''),
+    description: String(row.description ?? ''),
     disabled: Boolean(row.disabled),
     imageUrl: resolveMediaUrl(
       typeof row.image === 'string'
@@ -323,34 +372,57 @@ function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
 
 function mapCustomer(row: Record<string, any>): PartySummary {
   return {
+    defaultCurrency:
+      typeof row.default_currency === 'string' ? row.default_currency : null,
     disabled: Boolean(row.disabled),
     displayName: String(row.customer_name ?? row.display_name ?? row.name ?? ''),
     email: typeof row.email_id === 'string' ? row.email_id : null,
     group: typeof row.customer_group === 'string' ? row.customer_group : null,
     mobileNo: typeof row.mobile_no === 'string' ? row.mobile_no : null,
     name: String(row.customer ?? row.name ?? ''),
+    remarks: typeof row.remarks === 'string' ? row.remarks : null,
     type: typeof row.customer_type === 'string' ? row.customer_type : null,
   };
 }
 
 function mapSupplier(row: Record<string, any>): PartySummary {
   return {
+    defaultCurrency:
+      typeof row.default_currency === 'string' ? row.default_currency : null,
     disabled: Boolean(row.disabled),
     displayName: String(row.supplier_name ?? row.display_name ?? row.name ?? ''),
     email: typeof row.email_id === 'string' ? row.email_id : null,
     group: typeof row.supplier_group === 'string' ? row.supplier_group : null,
     mobileNo: typeof row.mobile_no === 'string' ? row.mobile_no : null,
     name: String(row.supplier ?? row.name ?? ''),
+    remarks: typeof row.remarks === 'string' ? row.remarks : null,
     type: typeof row.supplier_type === 'string' ? row.supplier_type : null,
   };
 }
 
 function mapUom(row: Record<string, any>): UomSummary {
+  const hasEnabled = row.enabled !== undefined && row.enabled !== null;
+  const enabled = hasEnabled ? Boolean(Number(row.enabled)) : !Boolean(row.disabled);
+  const name = String(row.name ?? row.uom_name ?? '');
+  const uomName = String(row.uom_name ?? row.name ?? '');
+  const displayName =
+    typeof row.display_name === 'string' && row.display_name.trim()
+      ? row.display_name
+      : uomName || name;
+
   return {
-    disabled: Boolean(row.disabled),
-    mustBeWholeNumber: Boolean(row.must_be_whole_number),
-    name: String(row.name ?? row.uom_name ?? ''),
-    uomName: String(row.uom_name ?? row.name ?? ''),
+    description:
+      typeof row.description === 'string' && row.description.trim()
+        ? row.description
+        : null,
+    disabled: !enabled,
+    displayName,
+    enabled,
+    mustBeWholeNumber: Boolean(toOptionalNumber(row.must_be_whole_number)),
+    name,
+    symbol:
+      typeof row.symbol === 'string' && row.symbol.trim() ? row.symbol : null,
+    uomName,
   };
 }
 
@@ -362,6 +434,12 @@ function pageResult<T>(raw: unknown, mapper: (row: Record<string, any>) => T): P
     items: rows.map(mapper),
     total: meta.total,
   };
+}
+
+function definedPayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null),
+  ) as Partial<T>;
 }
 
 export async function listProducts(options: ProductListOptions = {}) {
@@ -395,6 +473,84 @@ export async function getProductDetail(
   return result.data ? mapProduct(readObject(result.data)) : null;
 }
 
+function productSavePayload(payload: SaveProductPayload) {
+  const sellingPrices =
+    payload.standardSellingRate === undefined || payload.standardSellingRate === null
+      ? undefined
+      : [
+          {
+            currency: toOptionalText(payload.currency),
+            price_list: 'Standard Selling',
+            rate: payload.standardSellingRate,
+          },
+        ];
+  const buyingPrices =
+    payload.standardBuyingRate === undefined || payload.standardBuyingRate === null
+      ? undefined
+      : [
+          {
+            currency: toOptionalText(payload.currency),
+            price_list: 'Standard Buying',
+            rate: payload.standardBuyingRate,
+          },
+        ];
+  const stockUom = toOptionalText(payload.stockUom);
+
+  return definedPayload({
+    barcode: payload.barcode ?? '',
+    brand: payload.brand ?? '',
+    currency: payload.currency ?? '',
+    description: payload.description ?? '',
+    disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+    image: payload.image === undefined ? undefined : payload.image,
+    item_group: payload.itemGroup ?? '',
+    item_name: payload.itemName,
+    retail_default_uom: payload.retailDefaultUom ?? stockUom ?? '',
+    selling_prices: sellingPrices,
+    standard_rate: payload.standardSellingRate ?? undefined,
+    stock_uom: stockUom,
+    uom_conversions: stockUom
+      ? [{ conversion_factor: 1, uom: stockUom }]
+      : undefined,
+    valuation_rate: payload.valuationRate ?? undefined,
+    wholesale_default_uom: payload.wholesaleDefaultUom ?? stockUom ?? '',
+    buying_prices: buyingPrices,
+  });
+}
+
+export async function createProduct(payload: SaveProductPayload) {
+  return runGatewayMutation<ProductSummary>('create_product_v2', {
+    payload: definedPayload({
+      ...productSavePayload(payload),
+      item_code: payload.itemCode ?? undefined,
+    }),
+    successMessage: '商品已创建',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
+export async function updateProduct(
+  itemCode: string,
+  payload: SaveProductPayload,
+) {
+  return runGatewayMutation<ProductSummary>('update_product_v2', {
+    payload: definedPayload({
+      ...productSavePayload(payload),
+      item_code: itemCode,
+    }),
+    successMessage: '商品已更新',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
+export async function setProductDisabled(itemCode: string, disabled: boolean) {
+  return runGatewayMutation<ProductSummary>('disable_product_v2', {
+    payload: { disabled: disabled ? 1 : 0, item_code: itemCode },
+    successMessage: disabled ? '商品已停用' : '商品已启用',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
 export async function listCustomers(options: ListOptions = {}) {
   const result = await callGatewayMethod<unknown>(
     'list_customers_v2',
@@ -414,6 +570,52 @@ export async function getCustomerDetail(customer: string) {
     { customer },
   );
   return result.data ? mapCustomer(readObject(result.data)) : null;
+}
+
+export async function createCustomer(payload: SavePartyPayload) {
+  return runGatewayMutation<PartySummary>('create_customer_v2', {
+    payload: compactPayload({
+      customer_group: toOptionalText(payload.group),
+      customer_name: payload.name,
+      customer_type: toOptionalText(payload.type) ?? 'Company',
+      contact_email: toOptionalText(payload.email),
+      contact_phone: toOptionalText(payload.mobileNo),
+      default_currency: toOptionalText(payload.defaultCurrency),
+      disabled: payload.disabled ? 1 : 0,
+      remarks: payload.remarks ?? '',
+    }),
+    successMessage: '客户已创建',
+    transform: (raw) => mapCustomer(readObject(raw)),
+  });
+}
+
+export async function updateCustomer(
+  customer: string,
+  payload: Omit<SavePartyPayload, 'name'> & { name?: string },
+) {
+  return runGatewayMutation<PartySummary>('update_customer_v2', {
+    payload: definedPayload({
+      customer,
+      customer_group: payload.group ?? '',
+      customer_name: payload.name,
+      customer_type: payload.type ?? '',
+      contact_email: payload.email ?? '',
+      contact_phone: payload.mobileNo ?? '',
+      default_currency: payload.defaultCurrency ?? '',
+      disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+      remarks: payload.remarks ?? '',
+    }),
+    successMessage: '客户已更新',
+    transform: (raw) => mapCustomer(readObject(raw)),
+  });
+}
+
+export async function setCustomerDisabled(customer: string, disabled: boolean) {
+  return runGatewayMutation<PartySummary>('disable_customer_v2', {
+    payload: { customer, disabled: disabled ? 1 : 0 },
+    successMessage: disabled ? '客户已停用' : '客户已启用',
+    transform: (raw) => mapCustomer(readObject(raw)),
+  });
 }
 
 export async function listSuppliers(options: ListOptions = {}) {
@@ -437,11 +639,71 @@ export async function getSupplierDetail(supplier: string) {
   return result.data ? mapSupplier(readObject(result.data)) : null;
 }
 
+export async function createSupplier(payload: SavePartyPayload) {
+  return runGatewayMutation<PartySummary>('create_supplier_v2', {
+    payload: compactPayload({
+      default_currency: toOptionalText(payload.defaultCurrency),
+      disabled: payload.disabled ? 1 : 0,
+      contact_email: toOptionalText(payload.email),
+      contact_phone: toOptionalText(payload.mobileNo),
+      email_id: toOptionalText(payload.email),
+      mobile_no: toOptionalText(payload.mobileNo),
+      remarks: payload.remarks ?? '',
+      supplier_group: toOptionalText(payload.group),
+      supplier_name: payload.name,
+      supplier_type: toOptionalText(payload.type) ?? 'Company',
+    }),
+    successMessage: '供应商已创建',
+    transform: (raw) => mapSupplier(readObject(raw)),
+  });
+}
+
+export async function updateSupplier(
+  supplier: string,
+  payload: Omit<SavePartyPayload, 'name'> & { name?: string },
+) {
+  return runGatewayMutation<PartySummary>('update_supplier_v2', {
+    payload: definedPayload({
+      default_currency: payload.defaultCurrency ?? '',
+      disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+      contact_email: payload.email ?? '',
+      contact_phone: payload.mobileNo ?? '',
+      email_id: payload.email ?? '',
+      mobile_no: payload.mobileNo ?? '',
+      remarks: payload.remarks ?? '',
+      supplier,
+      supplier_group: payload.group ?? '',
+      supplier_name: payload.name,
+      supplier_type: payload.type ?? '',
+    }),
+    successMessage: '供应商已更新',
+    transform: (raw) => mapSupplier(readObject(raw)),
+  });
+}
+
+export async function setSupplierDisabled(supplier: string, disabled: boolean) {
+  return runGatewayMutation<PartySummary>('disable_supplier_v2', {
+    payload: { disabled: disabled ? 1 : 0, supplier },
+    successMessage: disabled ? '供应商已停用' : '供应商已启用',
+    transform: (raw) => mapSupplier(readObject(raw)),
+  });
+}
+
+function mapMutationUom(raw: unknown) {
+  return mapUom(readObject(raw));
+}
+
 export async function listUoms(options: ListOptions = {}) {
+  const enabled =
+    options.enabled === undefined && options.disabled !== undefined
+      ? options.disabled
+        ? 0
+        : 1
+      : options.enabled;
   const result = await callGatewayMethod<unknown>(
     'list_uoms_v2',
     compactPayload({
-      disabled: options.disabled,
+      enabled,
       limit: options.limit ?? 80,
       search_key: toOptionalText(options.searchKey),
       start: options.start ?? 0,
@@ -450,17 +712,67 @@ export async function listUoms(options: ListOptions = {}) {
   return pageResult(result.data, mapUom);
 }
 
+export async function createUom(payload: SaveUomPayload) {
+  return runGatewayMutation<UomSummary>('create_uom_v2', {
+    payload: compactPayload({
+      description: toOptionalText(payload.description),
+      enabled: payload.enabled === false ? 0 : 1,
+      must_be_whole_number: payload.mustBeWholeNumber ? 1 : 0,
+      symbol: toOptionalText(payload.symbol),
+      uom_name: payload.uomName,
+    }),
+    successMessage: '单位已创建',
+    transform: mapMutationUom,
+  });
+}
+
+export async function updateUom(
+  uom: string,
+  payload: Omit<SaveUomPayload, 'uomName'>,
+) {
+  const updatePayload: Record<string, unknown> = { uom };
+  if (payload.description !== undefined) {
+    updatePayload.description = payload.description ?? '';
+  }
+  if (payload.enabled !== undefined) {
+    updatePayload.enabled = payload.enabled ? 1 : 0;
+  }
+  if (payload.mustBeWholeNumber !== undefined) {
+    updatePayload.must_be_whole_number = payload.mustBeWholeNumber ? 1 : 0;
+  }
+  if (payload.symbol !== undefined) {
+    updatePayload.symbol = payload.symbol ?? '';
+  }
+
+  return runGatewayMutation<UomSummary>('update_uom_v2', {
+    payload: updatePayload,
+    successMessage: '单位已更新',
+    transform: mapMutationUom,
+  });
+}
+
+export async function setUomDisabled(uom: string, disabled: boolean) {
+  return runGatewayMutation<UomSummary>('disable_uom_v2', {
+    payload: { disabled: disabled ? 1 : 0, uom },
+    successMessage: disabled ? '单位已停用' : '单位已启用',
+    transform: mapMutationUom,
+  });
+}
+
 export async function searchLinkOptions(
   doctype: string,
   query = '',
   extraFields: string[] = [],
+  limit = 20,
+  filters: LinkOptionFilters = {},
 ) {
   const result = await callGatewayMethod<unknown>(
     'search_link_options_v1',
     compactPayload({
       doctype,
       extra_fields: extraFields,
-      limit: 20,
+      filters,
+      limit,
       query: toOptionalText(query),
     }),
   );

@@ -1,6 +1,6 @@
 import { InputNumber, Table, Typography } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
-import { formatDisplayUom } from '@/utils/myapp-display';
+import { resolveDisplayUom } from '@/utils/myapp-display';
 
 export type LineQtyEditorRow = {
   actionQty: number;
@@ -11,6 +11,7 @@ export type LineQtyEditorRow = {
   maxQty: number;
   orderedQty: number;
   uom: string;
+  uomDisplay?: string | null;
 };
 
 function toQty(value: number | null | undefined) {
@@ -89,7 +90,8 @@ export function LineQtyEditor({
       },
       {
         dataIndex: 'uom',
-        render: (value: string) => formatDisplayUom(value),
+        render: (_: string, record: LineQtyEditorRow) =>
+          resolveDisplayUom(record.uom, record.uomDisplay),
         title: '单位',
         width: 80,
       },

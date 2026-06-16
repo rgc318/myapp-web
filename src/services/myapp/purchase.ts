@@ -70,6 +70,7 @@ export type PurchaseDocumentItem = {
   rate: number | null;
   receivedQty?: number | null;
   uom: string;
+  uomDisplay: string | null;
   warehouse: string;
 };
 
@@ -312,6 +313,8 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
         rate: toOptionalNumber(item.rate),
         receivedQty: toOptionalNumber(item.received_qty),
         uom: String(item.uom ?? ''),
+        uomDisplay:
+          typeof item.uom_display === 'string' ? item.uom_display : null,
         warehouse: String(item.warehouse ?? ''),
       }))
     : [];

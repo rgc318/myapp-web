@@ -1,10 +1,14 @@
 export * as apiBase from './api-base';
 export * from './api-client';
 export * as auth from './auth';
+export * as documents from './documents';
 export * as gateway from './gateway';
 export * as inventory from './inventory';
 export * as masterData from './master-data';
+export * as media from './media';
 export * as mutation from './mutation';
 export * as purchase from './purchase';
+export * as printing from './printing';
 export * as reports from './reports';
 export * as sales from './sales';
+export * as workspace from './workspace';

@@ -18,6 +18,7 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import { PaymentModeSelect } from '@/components/PaymentModeSelect';
+import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
   cancelPurchaseInvoice,
   cancelSupplierPaymentEntry,
@@ -28,7 +29,7 @@ import {
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  formatDisplayUom,
+  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -65,7 +66,7 @@ const itemColumns = [
     dataIndex: 'uom',
     width: 90,
     render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatDisplayUom(record.uom),
+      resolveDisplayUom(record.uom, record.uomDisplay),
   },
   {
     title: '单价',
@@ -216,6 +217,12 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        <PrintDocumentButton
+          disabled={!invoiceName}
+          docname={invoiceName}
+          doctype="Purchase Invoice"
+          key="print"
+        />,
         data?.documentStatus !== 'cancelled' ? (
           <Button
             key="return"

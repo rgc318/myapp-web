@@ -14,6 +14,10 @@ import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
 import {
+  FALLBACK_COMPANY,
+  useWorkspacePreferences,
+} from '@/hooks/useWorkspacePreferences';
+import {
   type BusinessReport,
   type CashflowTrendRow,
   fetchBusinessReportOverview,
@@ -23,7 +27,6 @@ import {
 } from '@/services/myapp/reports';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const DEFAULT_LIMIT = 8;
 
 type ReportFilters = {
@@ -44,13 +47,13 @@ function formatNumber(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
-function normalizeFilters(values: ReportFilters) {
+function normalizeFilters(values: ReportFilters, defaultCompany: string) {
   const dateRange = Array.isArray(values.dateRange)
     ? values.dateRange
     : currentMonthRange();
 
   return {
-    company: values.company?.trim() || DEFAULT_COMPANY,
+    company: values.company?.trim() || defaultCompany,
     dateFrom: dateRange[0],
     dateTo: dateRange[1],
     limit: DEFAULT_LIMIT,
@@ -174,11 +177,24 @@ function MiniTable<T extends Record<string, any>>({
 }
 
 const ReportsPage: React.FC = () => {
+  const { defaultCompany } = useWorkspacePreferences();
   const [filters, setFilters] = useState<ReportFilters>({
-    company: DEFAULT_COMPANY,
+    company: defaultCompany,
     dateRange: currentMonthRange(),
   });
-  const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
+  React.useEffect(() => {
+    setFilters((current) => ({
+      ...current,
+      company:
+        !current.company || current.company === FALLBACK_COMPANY
+          ? defaultCompany
+          : current.company,
+    }));
+  }, [defaultCompany]);
+  const requestFilters = useMemo(
+    () => normalizeFilters(filters, defaultCompany),
+    [defaultCompany, filters],
+  );
   const { data, error, loading, refresh } = useRequest(
     () => fetchBusinessReportOverview(requestFilters),
     {
@@ -208,6 +224,7 @@ const ReportsPage: React.FC = () => {
         <ProCard>
           <ProForm<ReportFilters>
             initialValues={filters}
+            key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
               setFilters(values);

@@ -289,6 +289,7 @@
 - `/inventory/stock`
 - `/inventory/stock/:itemCode`
 - `/inventory/alerts`
+- `/inventory/adjustments`
 - `/inventory/ledger`
 - `/inventory-ledger`
 
@@ -356,15 +357,16 @@
 
 - 已新增 `src/services/myapp/master-data.ts`。
 - 已覆盖商品、客户、供应商和 UOM 的列表/详情查询模型，可支撑后续商品查询页和筛选选择器。
-- 已新增 `/master-data/products` 商品列表。
-- 已新增 `/master-data/customers` 客户列表。
-- 已新增 `/master-data/suppliers` 供应商列表。
-- 已新增 `/master-data/uoms` 计量单位列表。
-- 当前主数据页面只做查询辅助，不开放新增、编辑和停用操作。
+- 已新增 `/master-data/products` 商品列表，并接入关键词 / 公司 / 仓库 / 状态筛选、新增、编辑、启用、停用、图片上传、图片替换和图片删除。
+- 已新增 `/master-data/customers` 客户列表，并接入关键词 / 状态筛选、新增、编辑、启用和停用。
+- 已新增 `/master-data/suppliers` 供应商列表，并接入关键词 / 状态筛选、新增、编辑、启用和停用。
+- 已新增 `/master-data/uoms` 计量单位列表，并接入关键词 / 状态筛选、新增、编辑、启用和停用。
+- 当前商品、客户、供应商和计量单位已开放轻量维护；商品图片维护已接入后端 media gateway；库存目标数量调整已接入，转仓和盘点仍归后续库存写操作模块。
 - 已新增 `/inventory/stock` 商品库存页，接入 `list_products_v2`，支持关键词、公司、仓库和仅有库存筛选。
 - `/inventory/stock` 已展示当前库存、公司总库存、采购价、零售价和仓库库存明细，并可跳转库存流水。
 - 已新增 `/inventory/stock/:itemCode` 商品库存详情页，接入 `get_product_detail_v2` 和最近库存流水查询。
 - 已新增 `/inventory/alerts` 库存预警页，接入 `list_inventory_stock_summary_v1`，支持低库存、无库存和负库存筛选。
+- 已新增 `/inventory/adjustments` 库存调整页，支持按商品、公司、仓库设置目标库存数量，底层复用 `update_product_v2` 的正式库存调整链路。
 - 已新增 `/inventory/ledger` 库存流水页入口，原 `/inventory-ledger` 保留重定向。
 - 后端已新增 `myapp.api.gateway.list_stock_ledger_entries_v1` 和 `myapp.api.gateway.list_inventory_stock_summary_v1`。
 - 当前页面已接入真实 `Stock Ledger Entry` 明细流水，支持公司、商品、仓库、日期、凭证类型和凭证编号筛选。
@@ -434,12 +436,13 @@
 
 当前阶段 0、阶段 1、阶段 2 和阶段 3 的基础查询页面已经完成到可以继续业务页面开发的状态。销售模块已经从查询详情进入交易主流程开发；采购模块也已开始补主流程，当前已完成采购订单新建、编辑和退货第一版。后续页面基本是按接口映射和 mobile 业务规则推进，不应再因为认证、代理、错误格式和模板服务返工。
 
-阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；采购订单详情在单张关联采购发票场景可登记供应商付款；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；采购发票详情可按未付金额登记供应商付款；采购收货单详情可基于收货单创建采购发票；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；采购订单编辑页已接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；采购订单详情已接入 `quick_cancel_purchase_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；采购退货页已接入 `get_return_source_context_v2` 和 `process_purchase_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退；采购退款核对页已接入来源采购发票付款状态核对和最近付款回退。后续阶段 7 仍可继续补待处理确认和主数据轻量编辑。
+阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，选择具体发票后按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；订单详情登记收付款已接入 `InvoicePaymentForm`，可在多张销售 / 采购发票场景选择具体发票，并按该发票未结金额填写收付款金额；快捷回退遇到多下游单据时已接入 `DownstreamRollbackGuide`，展示可点击的发票和发货 / 收货单分步处理路径；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；采购发票详情可按未付金额登记供应商付款；采购收货单详情可基于收货单创建采购发票；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；采购订单编辑页已接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；采购订单详情已接入 `quick_cancel_purchase_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；采购退货页已接入 `get_return_source_context_v2` 和 `process_purchase_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退；采购退款核对页已接入来源采购发票付款状态核对和最近付款回退；销售订单、销售发货单、销售发票、采购订单、采购收货单和采购发票详情页已接入打印预览和 PDF 下载；销售发货单、销售发票、采购收货单和采购发票列表已通过受限 `list_business_documents_v1` 网关接入。后续阶段 7 仍可继续补待处理确认和真实浏览器联调缺口。
 
 当前交接摘要：
 
 - 前端 `main` 当前有本地 ahead 提交和未推送的销售新建开发提交，推送前应确认本轮提交已通过测试。
 - 后端 `apps/myapp` 在 `develop`，新增 `search_link_options_v1` 供 Web 通过 JWT 查询付款方式等 Link 选项。
+- 后端已新增受限单据列表网关 `list_business_documents_v1`，供 Web 查询销售发货单、销售发票、采购收货单和采购发票列表。
 - 本轮完整验证已通过：Jest 关键测试、`npm run tsc`、`npm run biome:lint`、`npm run build`。
 - 下一会话优先确认是否推送前端 ahead 提交，然后做浏览器联调销售退货和退款核对流程。
 
@@ -457,7 +460,7 @@
 - 页面水印开关：`MYAPP_WEB_ENABLE_WATERMARK`，默认本地 dev 关闭、生产开启。
 - Web API 分层：`api-client`、`gateway`、`reports`、`sales`、`purchase`、`master-data`、`mutation`。
 - 通用页面状态组件：loading、empty、error、retry。
-- 通用业务展示工具：状态中文标签、金额 / 币种单位、计量单位。
+- 通用业务展示工具：状态中文标签、金额 / 币种单位、计量单位显示和单位换算。
 - 基础权限点：销售、采购、财务、库存、报表、主数据。
 - 幂等写操作 helper：取消、确认、付款等动作统一使用 `Idempotency-Key`。
 - PWA 默认关闭，并在 localhost 清理旧 service worker/cache，避免开发期命中过期资源。
@@ -465,17 +468,21 @@
 - `/sales/orders/new` 已作为销售交易主流程第一步接入，支持客户上下文、商品选择、批发 / 零售单位价格、单位换算、保存订单和快捷下单。
 - `/purchase/orders/new` 已作为采购交易主流程第一步接入，支持供应商上下文、商品选择、采购默认价、单位换算、保存订单和快捷采购。
 - `/purchase/orders/:name/edit` 已作为采购交易主流程编辑页接入，支持头部字段和商品明细替换保存。
-- 通用选择组件已抽出：`RemoteLinkSelect`、`ProductSelect`、`PaymentModeSelect`、`LineQtyEditor`。
+- 通用选择 / 表格组件已抽出：`RemoteLinkSelect`、`ProductSelect`、`PaymentModeSelect`、`LineQtyEditor`、`PartyManagementPage`。
+- 打印入口已抽出：`PrintDocumentButton`；打印服务已抽出：`services/myapp/printing.ts`。
+- 工作偏好入口已抽出：`WorkspacePreferenceButton`，支持维护当前用户默认公司和默认仓库。
+- 计量单位工具已抽出：`src/utils/display-uom.ts`、`src/utils/uom-conversion.ts`。
 - 销售订单行通用工具已抽出：`src/utils/sales-order-editor.ts`。
 - 采购订单行通用工具已抽出：`src/utils/purchase-order-editor.ts`。
 - 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
+- 用户默认公司 / 仓库偏好已接入 service、顶部入口、销售 / 采购新建页和主要查询页。
 - 生产部署说明：同域部署、Nginx/Caddy 示例、缓存策略和上线验收。
 
 未完成但不阻塞继续开发：
 
 - Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
 - 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
-- Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，采购订单新建、编辑和退货已接入，待处理确认和主数据编辑尚未接入。
+- Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，采购订单新建、编辑和退货已接入，商品、客户、供应商和计量单位轻量编辑已接入，商品图片上传 / 替换 / 删除已接入，库存目标数量调整已接入，销售 / 采购核心单据打印预览和 PDF 下载已接入，待处理确认、转仓和盘点尚未接入。
 - 销售订单新建、编辑、快捷回退、退货和退款核对已接入；独立客户退款打款接口后端暂未提供，当前不在 Web 中伪造完成状态。
 - 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
 - 跨域生产部署未实测，第一阶段推荐同域反向代理。

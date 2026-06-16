@@ -1,6 +1,31 @@
 import { callGatewayMethod } from '../api-client';
-import { listInventoryStockSummary } from '../inventory';
-import { listProducts, searchLinkOptions } from '../master-data';
+import {
+  adjustInventoryStock,
+  listInventoryStockSummary,
+} from '../inventory';
+import { listBusinessDocuments } from '../documents';
+import {
+  createCustomer,
+  createProduct,
+  createSupplier,
+  createUom,
+  listProducts,
+  listUoms,
+  searchLinkOptions,
+  setCustomerDisabled,
+  setProductDisabled,
+  setSupplierDisabled,
+  setUomDisabled,
+  updateCustomer,
+  updateProduct,
+  updateSupplier,
+  updateUom,
+} from '../master-data';
+import {
+  deleteItemImage,
+  replaceItemImage,
+  uploadItemImage,
+} from '../media';
 import {
   cancelPurchaseOrder,
   cancelPurchaseInvoice,
@@ -21,6 +46,10 @@ import {
   updatePurchaseOrderItemsV2,
   updatePurchaseOrderV2,
 } from '../purchase';
+import {
+  fetchPrintFile,
+  fetchPrintPreview,
+} from '../printing';
 import { fetchCashflowEntries, fetchSalesReport } from '../reports';
 import {
   cancelDeliveryNote,
@@ -41,6 +70,10 @@ import {
   updateSalesOrderItemsV2,
   updateSalesOrderV2,
 } from '../sales';
+import {
+  getCurrentUserWorkspacePreferences,
+  updateCurrentUserWorkspacePreferences,
+} from '../workspace';
 
 jest.mock('../api-client', () => ({
   callGatewayMethod: jest.fn(),
@@ -56,6 +89,68 @@ const mockedCallGatewayMethod = callGatewayMethod as unknown as jest.Mock;
 describe('myapp domain services', () => {
   beforeEach(() => {
     mockedCallGatewayMethod.mockReset();
+  });
+
+  it('maps business document list rows', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            amount: 120,
+            business_status: 'Paid',
+            company: 'rgc (Demo)',
+            detail_path: '/sales/invoices',
+            docstatus: 1,
+            doctype: 'Sales Invoice',
+            document_status: 'Submitted',
+            due_date: '2026-06-08',
+            is_return: 0,
+            modified: '2026-06-01 10:00:00',
+            name: 'SI-0001',
+            outstanding_amount: 0,
+            paid_amount: 120,
+            party: 'CUST-0001',
+            party_name: '客户 A',
+            posting_date: '2026-06-01',
+            return_against: null,
+          },
+        ],
+        pagination: { total_count: 1 },
+        summary: { total_count: 1, visible_count: 1 },
+      },
+    });
+
+    const result = await listBusinessDocuments({
+      company: 'rgc (Demo)',
+      docstatus: 'submitted',
+      doctype: 'Sales Invoice',
+      limit: 20,
+      searchKey: 'SI',
+      start: 0,
+    });
+
+    expect(result.items[0]).toMatchObject({
+      amount: 120,
+      businessStatus: 'Paid',
+      detailPath: '/sales/invoices',
+      documentStatus: 'Submitted',
+      isReturn: false,
+      name: 'SI-0001',
+      partyName: '客户 A',
+    });
+    expect(result.summary.visibleCount).toBe(1);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_business_documents_v1',
+      {
+        company: 'rgc (Demo)',
+        docstatus: 'submitted',
+        doctype: 'Sales Invoice',
+        limit: 20,
+        search_key: 'SI',
+        sort_by: 'latest',
+        start: 0,
+      },
+    );
   });
 
   it('maps sales order search rows', async () => {
@@ -369,6 +464,200 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('runs inventory stock adjustment through product stock gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: { item_code: 'SKU-1', item_name: '测试商品' },
+      meta: {},
+      raw: {},
+    });
+
+    await adjustInventoryStock({
+      company: 'rgc (Demo)',
+      itemCode: 'SKU-1',
+      postingDate: '2026-06-15',
+      targetQty: 12,
+      uom: 'Box',
+      valuationRate: 8.5,
+      warehouse: 'Stores - RD',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'update_product_v2',
+      {
+        company: 'rgc (Demo)',
+        item_code: 'SKU-1',
+        posting_date: '2026-06-15',
+        valuation_rate: 8.5,
+        warehouse: 'Stores - RD',
+        warehouse_stock_qty: 12,
+        warehouse_stock_uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('maps print preview and file metadata', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          available_templates: [
+            {
+              is_default: true,
+              key: 'standard',
+              label: '标准模板',
+              print_format: 'myapp Sales Order Standard',
+              source: 'managed',
+            },
+          ],
+          docname: 'SO-0001',
+          doctype: 'Sales Order',
+          html: '<html>ok</html>',
+          mime_type: 'text/html',
+          output: 'html',
+          template: {
+            is_default: true,
+            key: 'standard',
+            label: '标准模板',
+            print_format: 'myapp Sales Order Standard',
+            source: 'managed',
+          },
+          title: 'Sales Order SO-0001',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          available_templates: [],
+          docname: 'SO-0001',
+          doctype: 'Sales Order',
+          filename: 'SO-0001.pdf',
+          file_size: 2048,
+          mime_type: 'application/pdf',
+          template: {
+            key: 'standard',
+            label: '标准模板',
+          },
+          title: 'Sales Order SO-0001',
+        },
+      });
+
+    const preview = await fetchPrintPreview({
+      docname: 'SO-0001',
+      doctype: 'Sales Order',
+    });
+    const file = await fetchPrintFile({
+      docname: 'SO-0001',
+      doctype: 'Sales Order',
+    });
+
+    expect(preview.html).toBe('<html>ok</html>');
+    expect(preview.template.printFormat).toBe('myapp Sales Order Standard');
+    expect(preview.availableTemplates[0].isDefault).toBe(true);
+    expect(file.filename).toBe('SO-0001.pdf');
+    expect(file.fileSize).toBe(2048);
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'get_print_preview_v1',
+      {
+        doctype: 'Sales Order',
+        docname: 'SO-0001',
+        output: 'html',
+      },
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'get_print_file_v1',
+      {
+        archive: 0,
+        doctype: 'Sales Order',
+        docname: 'SO-0001',
+      },
+    );
+  });
+
+  it('runs item image mutations through gateway', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          attached_to_doctype: null,
+          attached_to_name: null,
+          file_id: 'FILE-001',
+          file_name: 'item.png',
+          file_url: '/files/item.png',
+          is_private: 0,
+          storage_provider: 'frappe',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          attached_to_doctype: 'Item',
+          attached_to_name: 'ITEM-001',
+          file_id: 'FILE-002',
+          file_name: 'item-new.png',
+          file_url: '/files/item-new.png',
+          is_private: 0,
+          storage_provider: 'frappe',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          deleted: true,
+          item_code: 'ITEM-001',
+          previous_file_url: '/files/item-new.png',
+          reason: null,
+        },
+      });
+
+    const uploaded = await uploadItemImage({
+      contentType: 'image/png',
+      fileContentBase64: 'abc123',
+      filename: 'item.png',
+    });
+    const replaced = await replaceItemImage({
+      contentType: 'image/png',
+      fileContentBase64: 'def456',
+      filename: 'item-new.png',
+      itemCode: 'ITEM-001',
+    });
+    const deleted = await deleteItemImage('ITEM-001');
+
+    expect(uploaded).toMatchObject({
+      fileId: 'FILE-001',
+      fileUrl: '/files/item.png',
+      previewUrl: 'http://api.example.test/files/item.png',
+    });
+    expect(replaced.attachedToName).toBe('ITEM-001');
+    expect(deleted.deleted).toBe(true);
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'upload_item_image',
+      {
+        content_type: 'image/png',
+        file_content_base64: 'abc123',
+        filename: 'item.png',
+        is_private: 0,
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'replace_item_image',
+      {
+        content_type: 'image/png',
+        file_content_base64: 'def456',
+        filename: 'item-new.png',
+        is_private: 0,
+        item_code: 'ITEM-001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'delete_item_image',
+      { item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
   it('maps customer sales context', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {
@@ -608,9 +897,402 @@ describe('myapp domain services', () => {
       {
         doctype: 'Mode of Payment',
         extra_fields: [],
+        filters: {},
         limit: 20,
         query: 'Ca',
       },
+    );
+  });
+
+  it('passes whitelisted link option filters', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: [{ description: 'rgc (Demo)', label: 'Stores - RD', value: 'Stores - RD' }],
+      meta: {},
+      raw: {},
+    });
+
+    await searchLinkOptions('Warehouse', '', ['company'], 20, {
+      company: 'rgc (Demo)',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_link_options_v1',
+      {
+        doctype: 'Warehouse',
+        extra_fields: ['company'],
+        filters: { company: 'rgc (Demo)' },
+        limit: 20,
+      },
+    );
+  });
+
+  it('maps workspace preferences and updates them through gateway', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          default_company: 'rgc (Demo)',
+          default_warehouse: 'Stores - RD',
+          user: 'demo@example.com',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          default_company: 'rgc (Demo)',
+          default_warehouse: 'Stores - RD',
+          user: 'demo@example.com',
+        },
+      });
+
+    const preferences = await getCurrentUserWorkspacePreferences();
+    const updated = await updateCurrentUserWorkspacePreferences({
+      defaultCompany: 'rgc (Demo)',
+      defaultWarehouse: 'Stores - RD',
+    });
+
+    expect(preferences).toEqual({
+      defaultCompany: 'rgc (Demo)',
+      defaultWarehouse: 'Stores - RD',
+      user: 'demo@example.com',
+    });
+    expect(updated.data.defaultWarehouse).toBe('Stores - RD');
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'get_current_user_workspace_preferences_v1',
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_current_user_workspace_preferences_v1',
+      {
+        default_company: 'rgc (Demo)',
+        default_warehouse: 'Stores - RD',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('maps uom rows using backend enabled display fields', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        data: [
+          {
+            description: '整箱包装单位',
+            display_name: '箱',
+            enabled: '1',
+            must_be_whole_number: '0',
+            name: 'Box',
+            symbol: '箱',
+            uom_name: 'Box',
+          },
+        ],
+        pagination: { has_more: false, total_count: 1 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listUoms({ enabled: 1, searchKey: 'Box' });
+
+    expect(result.items[0]).toMatchObject({
+      description: '整箱包装单位',
+      disabled: false,
+      displayName: '箱',
+      enabled: true,
+      mustBeWholeNumber: false,
+      name: 'Box',
+      symbol: '箱',
+      uomName: 'Box',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith('list_uoms_v2', {
+      enabled: 1,
+      limit: 80,
+      search_key: 'Box',
+      start: 0,
+    });
+  });
+
+  it('runs uom mutations through gateway with enabled fields', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { display_name: '箱', enabled: 1, name: 'Box', uom_name: 'Box' },
+    });
+
+    await createUom({
+      description: '整箱包装单位',
+      enabled: true,
+      mustBeWholeNumber: true,
+      symbol: '箱',
+      uomName: 'Box',
+    });
+    await updateUom('Box', {
+      description: '',
+      enabled: false,
+      mustBeWholeNumber: false,
+      symbol: '',
+    });
+    await setUomDisabled('Box', true);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'create_uom_v2',
+      {
+        description: '整箱包装单位',
+        enabled: 1,
+        must_be_whole_number: 1,
+        symbol: '箱',
+        uom_name: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_uom_v2',
+      {
+        description: '',
+        enabled: 0,
+        must_be_whole_number: 0,
+        symbol: '',
+        uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'disable_uom_v2',
+      { disabled: 1, uom: 'Box' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs customer mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { customer_name: 'ACME', name: 'ACME' },
+    });
+
+    await createCustomer({
+      defaultCurrency: 'CNY',
+      email: 'buyer@example.test',
+      group: 'Commercial',
+      mobileNo: '13800000000',
+      name: 'ACME',
+      remarks: '重点客户',
+      type: 'Company',
+    });
+    await updateCustomer('ACME', {
+      defaultCurrency: '',
+      disabled: false,
+      email: '',
+      group: '',
+      mobileNo: '',
+      name: 'ACME Trading',
+      remarks: '',
+      type: 'Company',
+    });
+    await setCustomerDisabled('ACME', true);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'create_customer_v2',
+      {
+        customer_group: 'Commercial',
+        customer_name: 'ACME',
+        customer_type: 'Company',
+        contact_email: 'buyer@example.test',
+        contact_phone: '13800000000',
+        default_currency: 'CNY',
+        disabled: 0,
+        remarks: '重点客户',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_customer_v2',
+      {
+        customer: 'ACME',
+        customer_group: '',
+        customer_name: 'ACME Trading',
+        customer_type: 'Company',
+        contact_email: '',
+        contact_phone: '',
+        default_currency: '',
+        disabled: 0,
+        remarks: '',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'disable_customer_v2',
+      { customer: 'ACME', disabled: 1 },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs supplier mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { name: 'SUP-001', supplier_name: 'Best Supply' },
+    });
+
+    await createSupplier({
+      defaultCurrency: 'CNY',
+      email: 'seller@example.test',
+      group: 'All Supplier Groups',
+      mobileNo: '13900000000',
+      name: 'Best Supply',
+      remarks: '常用供应商',
+      type: 'Company',
+    });
+    await updateSupplier('SUP-001', {
+      defaultCurrency: '',
+      disabled: false,
+      email: '',
+      group: '',
+      mobileNo: '',
+      name: 'Best Supply Ltd',
+      remarks: '',
+      type: 'Company',
+    });
+    await setSupplierDisabled('SUP-001', false);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'create_supplier_v2',
+      {
+        default_currency: 'CNY',
+        disabled: 0,
+        contact_email: 'seller@example.test',
+        contact_phone: '13900000000',
+        email_id: 'seller@example.test',
+        mobile_no: '13900000000',
+        remarks: '常用供应商',
+        supplier_group: 'All Supplier Groups',
+        supplier_name: 'Best Supply',
+        supplier_type: 'Company',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_supplier_v2',
+      {
+        default_currency: '',
+        disabled: 0,
+        contact_email: '',
+        contact_phone: '',
+        email_id: '',
+        mobile_no: '',
+        remarks: '',
+        supplier: 'SUP-001',
+        supplier_group: '',
+        supplier_name: 'Best Supply Ltd',
+        supplier_type: 'Company',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'disable_supplier_v2',
+      { disabled: 0, supplier: 'SUP-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs product mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
+    });
+
+    await createProduct({
+      barcode: 'BAR-001',
+      brand: 'Brand A',
+      currency: 'CNY',
+      description: '商品描述',
+      image: '/files/new-item.png',
+      itemCode: 'ITEM-001',
+      itemGroup: 'All Item Groups',
+      itemName: '新品',
+      retailDefaultUom: 'Nos',
+      standardBuyingRate: 8,
+      standardSellingRate: 12,
+      stockUom: 'Nos',
+      valuationRate: 7,
+      wholesaleDefaultUom: 'Box',
+    });
+    await updateProduct('ITEM-001', {
+      barcode: '',
+      brand: '',
+      currency: 'CNY',
+      description: '',
+      disabled: false,
+      itemGroup: '',
+      itemName: '新品2',
+      retailDefaultUom: 'Nos',
+      standardBuyingRate: 9,
+      standardSellingRate: 13,
+      stockUom: 'Nos',
+      valuationRate: 8,
+      wholesaleDefaultUom: 'Box',
+    });
+    await setProductDisabled('ITEM-001', true);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'create_product_v2',
+      {
+        barcode: 'BAR-001',
+        brand: 'Brand A',
+        buying_prices: [
+          { currency: 'CNY', price_list: 'Standard Buying', rate: 8 },
+        ],
+        currency: 'CNY',
+        description: '商品描述',
+        image: '/files/new-item.png',
+        item_code: 'ITEM-001',
+        item_group: 'All Item Groups',
+        item_name: '新品',
+        retail_default_uom: 'Nos',
+        selling_prices: [
+          { currency: 'CNY', price_list: 'Standard Selling', rate: 12 },
+        ],
+        standard_rate: 12,
+        stock_uom: 'Nos',
+        uom_conversions: [{ conversion_factor: 1, uom: 'Nos' }],
+        valuation_rate: 7,
+        wholesale_default_uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_product_v2',
+      {
+        barcode: '',
+        brand: '',
+        buying_prices: [
+          { currency: 'CNY', price_list: 'Standard Buying', rate: 9 },
+        ],
+        currency: 'CNY',
+        description: '',
+        disabled: 0,
+        item_code: 'ITEM-001',
+        item_group: '',
+        item_name: '新品2',
+        retail_default_uom: 'Nos',
+        selling_prices: [
+          { currency: 'CNY', price_list: 'Standard Selling', rate: 13 },
+        ],
+        standard_rate: 13,
+        stock_uom: 'Nos',
+        uom_conversions: [{ conversion_factor: 1, uom: 'Nos' }],
+        valuation_rate: 8,
+        wholesale_default_uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'disable_product_v2',
+      { disabled: 1, item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });
 
@@ -1038,6 +1720,26 @@ describe('myapp domain services', () => {
       3,
       'cancel_payment_entry',
       { payment_entry_name: 'PE-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('records sales payment against a selected sales invoice', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'PE-0001' } });
+
+    await recordSalesOrderPayment('SI-0001', 88, {
+      modeOfPayment: 'Bank',
+      referenceDoctype: 'Sales Invoice',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'update_payment_status',
+      {
+        mode_of_payment: 'Bank',
+        paid_amount: 88,
+        reference_doctype: 'Sales Invoice',
+        reference_name: 'SI-0001',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

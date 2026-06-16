@@ -273,6 +273,7 @@ const PurchaseOrderEditPage: React.FC = () => {
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
+                  filters={{ company }}
                   placeholder="搜索仓库"
                 />
               </Form.Item>
@@ -324,7 +325,11 @@ const PurchaseOrderEditPage: React.FC = () => {
           }
           title="采购明细"
         >
-          <PurchaseOrderLinesTable lines={lines} onChange={setLines} />
+          <PurchaseOrderLinesTable
+            company={company}
+            lines={lines}
+            onChange={setLines}
+          />
         </ProCard>
 
         <ProCard>

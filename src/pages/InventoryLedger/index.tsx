@@ -4,13 +4,13 @@ import { Link, useLocation } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef } from 'react';
+import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
 } from '@/services/myapp/inventory';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const PAGE_SIZE = 20;
 
 function formatNumber(value: number | null | undefined) {
@@ -87,156 +87,159 @@ function voucherLink(record: StockLedgerEntry) {
   );
 }
 
-const columns: ProColumns<StockLedgerEntry>[] = [
-  {
-    title: '公司',
-    dataIndex: 'company',
-    hideInTable: true,
-    initialValue: DEFAULT_COMPANY,
-  },
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: '商品编码',
+function buildColumns(defaultCompany: string): ProColumns<StockLedgerEntry>[] {
+  return [
+    {
+      title: '公司',
+      dataIndex: 'company',
+      hideInTable: true,
+      initialValue: defaultCompany,
     },
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: '仓库',
+    {
+      title: '商品编码',
+      dataIndex: 'itemCode',
+      hideInTable: true,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '商品编码',
+      },
     },
-  },
-  {
-    title: '日期',
-    dataIndex: 'dateRange',
-    valueType: 'dateRange',
-    hideInTable: true,
-    initialValue: last30DaysRange(),
-  },
-  {
-    title: '凭证类型',
-    dataIndex: 'voucherType',
-    valueType: 'select',
-    hideInTable: true,
-    valueEnum: {
-      'Delivery Note': { text: '销售发货单' },
-      'Purchase Receipt': { text: '采购收货单' },
-      'Sales Invoice': { text: '销售发票' },
-      'Purchase Invoice': { text: '采购发票' },
-      'Sales Order': { text: '销售订单' },
-      'Purchase Order': { text: '采购订单' },
-      'Stock Entry': { text: '库存调整' },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse',
+      hideInTable: true,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '仓库',
+      },
     },
-  },
-  {
-    title: '凭证编号',
-    dataIndex: 'voucherNo',
-    hideInTable: true,
-    fieldProps: {
-      allowClear: true,
-      placeholder: '凭证编号',
+    {
+      title: '日期',
+      dataIndex: 'dateRange',
+      valueType: 'dateRange',
+      hideInTable: true,
+      initialValue: last30DaysRange(),
     },
-  },
-  {
-    title: '日期',
-    dataIndex: 'postingDate',
-    search: false,
-    width: 120,
-  },
-  {
-    title: '时间',
-    dataIndex: 'postingTime',
-    search: false,
-    width: 100,
-    renderText: (value) => value || '-',
-  },
-  {
-    title: '商品名称',
-    dataIndex: 'itemName',
-    search: false,
-    ellipsis: true,
-  },
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    search: false,
-    width: 160,
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    search: false,
-    ellipsis: true,
-    width: 180,
-  },
-  {
-    title: '方向',
-    dataIndex: 'actualQtyDirection',
-    search: false,
-    width: 90,
-    render: (_, record) => qtyTag(record.actualQty),
-  },
-  {
-    title: '变动数量',
-    dataIndex: 'actualQty',
-    align: 'right',
-    search: false,
-    width: 110,
-    render: (_, record) => signedText(record.actualQty),
-  },
-  {
-    title: '变动后数量',
-    dataIndex: 'qtyAfterTransaction',
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) => formatNumber(record.qtyAfterTransaction),
-  },
-  {
-    title: '入库单价',
-    dataIndex: 'incomingRate',
-    align: 'right',
-    search: false,
-    width: 120,
-    render: (_, record) => formatCurrencyValue(record.incomingRate),
-  },
-  {
-    title: '库存价值变动',
-    dataIndex: 'stockValueDifference',
-    align: 'right',
-    search: false,
-    width: 140,
-    render: (_, record) => signedCurrencyText(record.stockValueDifference),
-  },
-  {
-    title: '凭证类型',
-    dataIndex: 'voucherType',
-    search: false,
-    width: 150,
-  },
-  {
-    title: '凭证编号',
-    dataIndex: 'voucherNo',
-    search: false,
-    ellipsis: true,
-    width: 180,
-    render: (_, record) => voucherLink(record),
-  },
-];
+    {
+      title: '凭证类型',
+      dataIndex: 'voucherType',
+      valueType: 'select',
+      hideInTable: true,
+      valueEnum: {
+        'Delivery Note': { text: '销售发货单' },
+        'Purchase Receipt': { text: '采购收货单' },
+        'Sales Invoice': { text: '销售发票' },
+        'Purchase Invoice': { text: '采购发票' },
+        'Sales Order': { text: '销售订单' },
+        'Purchase Order': { text: '采购订单' },
+        'Stock Entry': { text: '库存调整' },
+      },
+    },
+    {
+      title: '凭证编号',
+      dataIndex: 'voucherNo',
+      hideInTable: true,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '凭证编号',
+      },
+    },
+    {
+      title: '日期',
+      dataIndex: 'postingDate',
+      search: false,
+      width: 120,
+    },
+    {
+      title: '时间',
+      dataIndex: 'postingTime',
+      search: false,
+      width: 100,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '商品名称',
+      dataIndex: 'itemName',
+      search: false,
+      ellipsis: true,
+    },
+    {
+      title: '商品编码',
+      dataIndex: 'itemCode',
+      search: false,
+      width: 160,
+    },
+    {
+      title: '仓库',
+      dataIndex: 'warehouse',
+      search: false,
+      ellipsis: true,
+      width: 180,
+    },
+    {
+      title: '方向',
+      dataIndex: 'actualQtyDirection',
+      search: false,
+      width: 90,
+      render: (_, record) => qtyTag(record.actualQty),
+    },
+    {
+      title: '变动数量',
+      dataIndex: 'actualQty',
+      align: 'right',
+      search: false,
+      width: 110,
+      render: (_, record) => signedText(record.actualQty),
+    },
+    {
+      title: '变动后数量',
+      dataIndex: 'qtyAfterTransaction',
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) => formatNumber(record.qtyAfterTransaction),
+    },
+    {
+      title: '入库单价',
+      dataIndex: 'incomingRate',
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) => formatCurrencyValue(record.incomingRate),
+    },
+    {
+      title: '库存价值变动',
+      dataIndex: 'stockValueDifference',
+      align: 'right',
+      search: false,
+      width: 140,
+      render: (_, record) => signedCurrencyText(record.stockValueDifference),
+    },
+    {
+      title: '凭证类型',
+      dataIndex: 'voucherType',
+      search: false,
+      width: 150,
+    },
+    {
+      title: '凭证编号',
+      dataIndex: 'voucherNo',
+      search: false,
+      ellipsis: true,
+      width: 180,
+      render: (_, record) => voucherLink(record),
+    },
+  ];
+}
 
 const InventoryLedgerPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const { defaultCompany } = useWorkspacePreferences();
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const initialItemCode = query.get('itemCode') ?? undefined;
   const initialWarehouse = query.get('warehouse') ?? undefined;
-  const tableColumns = columns.map((column) => {
+  const tableColumns = buildColumns(defaultCompany).map((column) => {
     if (column.dataIndex === 'itemCode') {
       return { ...column, initialValue: initialItemCode };
     }
@@ -258,6 +261,7 @@ const InventoryLedgerPage: React.FC = () => {
       <ProTable<StockLedgerEntry>
         actionRef={actionRef}
         columns={tableColumns}
+        key={`${defaultCompany}:${initialItemCode ?? ''}:${initialWarehouse ?? ''}`}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,
@@ -269,7 +273,7 @@ const InventoryLedgerPage: React.FC = () => {
             ? params.dateRange
             : [];
           const result = await listStockLedgerEntries({
-            company: String(params.company ?? DEFAULT_COMPANY),
+            company: String(params.company ?? defaultCompany),
             dateFrom: formatDateParam(dateRange[0]),
             dateTo: formatDateParam(dateRange[1]),
             itemCode: String(params.itemCode ?? ''),

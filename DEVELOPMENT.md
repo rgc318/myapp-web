@@ -4,6 +4,7 @@ Chinese implementation docs:
 
 - `WEB_DEVELOPMENT.zh-CN.md`: JWT-only backend integration and page/API mapping
 - `DEVELOPMENT_PLAN.zh-CN.md`: phased Web implementation plan
+- `REQUEST_RESULT_CONTRACT.zh-CN.md`: `useRequest` result formatting and domain service return contract
 
 ## Role
 
@@ -17,7 +18,7 @@ Main scenarios:
 - purchase order creation and later edit/return workflows
 - finance and inventory lookup
 - dashboard and reporting
-- print preview and later management features
+- print preview, PDF download, and later management features
 
 ## Tech Stack
 
@@ -114,6 +115,10 @@ Reusable business components should be used before adding page-local selectors o
 - `src/components/ProductSelect.tsx`: product search selector returning normalized product data.
 - `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
 - `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
+- `src/components/PartyManagementPage.tsx`: shared lightweight Customer/Supplier maintenance page with status filtering and idempotent mutations.
+- `src/components/UomSelect.tsx`: UOM selector backed by `list_uoms_v2`; use it for product and order form UOM fields instead of broad Link queries.
+- `src/components/WorkspacePreferenceButton.tsx`: user-level default company and warehouse preference entry.
+- `src/utils/display-uom.ts` and `src/utils/uom-conversion.ts`: shared UOM display and stock-unit conversion helpers.
 - `src/utils/sales-order-editor.ts`: sales order line model, wholesale/retail default UOM and price, UOM conversion, line amount, and total calculation.
 - `src/components/PurchaseOrderLinesTable.tsx` and `src/utils/purchase-order-editor.ts`: purchase order line editing, purchase default price, UOM conversion reference, line amount, and total calculation.
 
@@ -233,5 +238,5 @@ Priority:
 Note:
 
 - `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
-- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, purchase order query/detail, reporting entry, payment list, finance lookup, inventory stock/ledger lookup, and master-data lookup pages.
+- The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, sales delivery note and invoice list/detail, purchase order query/detail/create/edit/return/refund-review, purchase receipt and invoice list/detail, reporting entry, payment list, finance lookup, inventory stock/ledger/alerts/adjustments lookup, master-data lightweight maintenance including product image upload/replace/delete, and print preview/PDF download for core sales and purchase documents.
 - Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.

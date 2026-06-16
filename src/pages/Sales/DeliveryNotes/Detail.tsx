@@ -8,6 +8,7 @@ import {
 import { Link, useParams, useRequest } from '@umijs/max';
 import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
 import React, { useState } from 'react';
+import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
   cancelDeliveryNote,
   getDeliveryNoteDetail,
@@ -16,7 +17,7 @@ import {
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  formatDisplayUom,
+  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -53,7 +54,7 @@ const itemColumns = [
     dataIndex: 'uom',
     width: 90,
     render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatDisplayUom(record.uom),
+      resolveDisplayUom(record.uom, record.uomDisplay),
   },
   {
     title: '单价',
@@ -122,6 +123,12 @@ const DeliveryNoteDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        <PrintDocumentButton
+          disabled={!deliveryNoteName}
+          docname={deliveryNoteName}
+          doctype="Delivery Note"
+          key="print"
+        />,
         <Button key="return">
           <Link
             to={`/sales/returns/new?sourceDoctype=${encodeURIComponent('Delivery Note')}&sourceName=${encodeURIComponent(deliveryNoteName)}`}

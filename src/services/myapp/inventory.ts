@@ -6,6 +6,7 @@ import {
   toOptionalText,
   type PageResult,
 } from './api-utils';
+import { runGatewayMutation } from './mutation';
 
 export type StockLedgerEntry = {
   actualQty: number;
@@ -53,6 +54,7 @@ export type InventoryStockSummaryRow = {
   projectedQty: number;
   reservedQty: number;
   stockUom: string;
+  stockUomDisplay: string | null;
   stockValue: number;
   valuationRate: number;
   warehouse: string;
@@ -79,6 +81,16 @@ export type InventoryStockSummaryParams = {
 
 export type InventoryStockSummaryResult = PageResult<InventoryStockSummaryRow> & {
   summary: InventoryStockSummary;
+};
+
+export type InventoryStockAdjustmentPayload = {
+  company?: string;
+  itemCode: string;
+  postingDate?: string;
+  targetQty: number;
+  uom?: string;
+  valuationRate?: number | null;
+  warehouse: string;
 };
 
 function mapStockLedgerEntry(row: Record<string, any>): StockLedgerEntry {
@@ -124,6 +136,8 @@ function mapInventoryStockSummaryRow(
     projectedQty: toNumber(row.projected_qty),
     reservedQty: toNumber(row.reserved_qty),
     stockUom: String(row.stock_uom ?? ''),
+    stockUomDisplay:
+      typeof row.stock_uom_display === 'string' ? row.stock_uom_display : null,
     stockValue: toNumber(row.stock_value),
     valuationRate: toNumber(row.valuation_rate),
     warehouse: String(row.warehouse ?? ''),
@@ -198,4 +212,22 @@ export async function listInventoryStockSummary(
     },
     total: toNumber(pagination.total_count, rows.length),
   };
+}
+
+export async function adjustInventoryStock(
+  payload: InventoryStockAdjustmentPayload,
+) {
+  return runGatewayMutation<Record<string, unknown>>('update_product_v2', {
+    payload: compactPayload({
+      company: toOptionalText(payload.company),
+      item_code: payload.itemCode,
+      posting_date: toOptionalText(payload.postingDate),
+      valuation_rate: payload.valuationRate ?? undefined,
+      warehouse: payload.warehouse,
+      warehouse_stock_qty: payload.targetQty,
+      warehouse_stock_uom: toOptionalText(payload.uom),
+    }),
+    successMessage: '库存已调整',
+    transform: (raw) => readObject(raw),
+  });
 }

@@ -1,4 +1,12 @@
 import type { ProductSummary } from '@/services/myapp/master-data';
+import { resolveDisplayUomFromMap } from '@/utils/display-uom';
+import {
+  convertQtyToStockQty,
+  formatConvertedQty,
+  getConversionFactorToStockUnit,
+} from '@/utils/uom-conversion';
+
+export { convertQtyToStockQty, getConversionFactorToStockUnit };
 
 export type SalesMode = 'wholesale' | 'retail';
 
@@ -55,11 +63,7 @@ export function resolveUomDisplay(
   displays?: Record<string, string> | null,
   directDisplay?: string | null,
 ) {
-  const normalizedUom = typeof uom === 'string' ? uom.trim() : '';
-  if (!normalizedUom) {
-    return '';
-  }
-  return directDisplay || displays?.[normalizedUom] || normalizedUom;
+  return resolveDisplayUomFromMap(uom, displays, directDisplay);
 }
 
 export function getProductAvailableUoms(product: ProductSummary) {
@@ -106,48 +110,8 @@ export function getProductModeDefaultPrice(
   ]);
 }
 
-export function getConversionFactorToStockUnit(options: {
-  stockUom?: string | null;
-  uom?: string | null;
-  uomConversions?: ProductSummary['uomConversions'] | null;
-}) {
-  const stockUom = options.stockUom?.trim();
-  const targetUom = options.uom?.trim() || stockUom;
-
-  if (!stockUom || !targetUom) {
-    return null;
-  }
-  if (stockUom === targetUom) {
-    return 1;
-  }
-
-  const matched = options.uomConversions?.find(
-    (entry) => entry.uom.trim() === targetUom,
-  );
-  return matched?.conversionFactor ?? null;
-}
-
-export function convertQtyToStockQty(options: {
-  qty: number;
-  stockUom?: string | null;
-  uom?: string | null;
-  uomConversions?: ProductSummary['uomConversions'] | null;
-}) {
-  if (!Number.isFinite(options.qty)) {
-    return null;
-  }
-
-  const factor = getConversionFactorToStockUnit(options);
-  return factor === null ? null : options.qty * factor;
-}
-
 export function formatQty(value: number | null | undefined) {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return '-';
-  }
-  return Number.isInteger(value)
-    ? String(value)
-    : value.toFixed(2).replace(/\.?0+$/, '');
+  return formatConvertedQty(value) || '-';
 }
 
 export function buildSalesOrderLineFromProduct(options: {

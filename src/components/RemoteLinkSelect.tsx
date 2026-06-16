@@ -1,7 +1,8 @@
 import { Select } from 'antd';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   type LinkOption,
+  type LinkOptionFilters,
   searchLinkOptions,
 } from '@/services/myapp/master-data';
 
@@ -15,14 +16,20 @@ export function RemoteLinkSelect({
   disabled,
   doctype,
   extraFields,
+  filters,
+  limit = 20,
   placeholder,
+  style,
   value,
   onChange,
 }: {
   disabled?: boolean;
   doctype: string;
   extraFields?: string[];
+  filters?: LinkOptionFilters;
+  limit?: number;
   placeholder?: string;
+  style?: React.CSSProperties;
   value?: string;
   onChange?: (value: string) => void;
 }) {
@@ -32,11 +39,24 @@ export function RemoteLinkSelect({
   const loadOptions = async (query = '') => {
     setFetching(true);
     try {
-      setOptions(await searchLinkOptions(doctype, query, extraFields));
+      setOptions(
+        await searchLinkOptions(doctype, query, extraFields, limit, filters),
+      );
     } finally {
       setFetching(false);
     }
   };
+
+  const selectOptions = useMemo(() => {
+    const mapped = options.map((option) => ({
+      label: optionLabel(option),
+      value: option.value,
+    }));
+    if (value && !mapped.some((option) => option.value === value)) {
+      return [{ label: value, value }, ...mapped];
+    }
+    return mapped;
+  }, [options, value]);
 
   return (
     <Select
@@ -53,12 +73,10 @@ export function RemoteLinkSelect({
       onSearch={(query) => {
         void loadOptions(query);
       }}
-      options={options.map((option) => ({
-        label: optionLabel(option),
-        value: option.value,
-      }))}
+      options={selectOptions}
       placeholder={placeholder}
       showSearch
+      style={style}
       value={value || undefined}
     />
   );

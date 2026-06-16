@@ -11,6 +11,7 @@ const product: ProductSummary = {
   allUoms: ['Nos', 'Box'],
   barcode: '',
   brand: '',
+  description: '',
   disabled: false,
   imageUrl: '',
   itemCode: 'SKU-1',

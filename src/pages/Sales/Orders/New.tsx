@@ -19,6 +19,10 @@ import {
   RemoteLinkSelect,
   SalesOrderLinesTable,
 } from '@/components';
+import {
+  FALLBACK_COMPANY,
+  useWorkspacePreferences,
+} from '@/hooks/useWorkspacePreferences';
 import type { ProductSummary } from '@/services/myapp/master-data';
 import {
   createSalesOrderV2,
@@ -35,7 +39,6 @@ import {
   type SalesOrderEditorLine,
 } from '@/utils/sales-order-editor';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const today = dayjs();
 
 type FormValues = {
@@ -56,12 +59,25 @@ const SalesOrderNewPage: React.FC = () => {
   const [lines, setLines] = useState<SalesOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [lastCustomer, setLastCustomer] = useState('');
+  const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const defaultSalesMode =
     Form.useWatch('defaultSalesMode', form) ?? 'wholesale';
   const customer = Form.useWatch('customer', form);
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getOrderLinesTotal(lines), [lines]);
+
+  React.useEffect(() => {
+    const currentCompany = form.getFieldValue('company');
+    const currentWarehouse = form.getFieldValue('warehouse');
+    form.setFieldsValue({
+      company:
+        !currentCompany || currentCompany === FALLBACK_COMPANY
+          ? defaultCompany
+          : currentCompany,
+      warehouse: currentWarehouse || defaultWarehouse,
+    });
+  }, [defaultCompany, defaultWarehouse, form]);
 
   React.useEffect(() => {
     if (!customer || customer === lastCustomer) {
@@ -180,7 +196,7 @@ const SalesOrderNewPage: React.FC = () => {
           <Form<FormValues>
             form={form}
             initialValues={{
-              company: DEFAULT_COMPANY,
+              company: defaultCompany,
               defaultSalesMode: 'wholesale',
               deliveryDate: today,
               transactionDate: today,
@@ -206,13 +222,25 @@ const SalesOrderNewPage: React.FC = () => {
                 name="company"
                 rules={[{ required: true, message: '请选择公司' }]}
               >
-                <RemoteLinkSelect doctype="Company" placeholder="搜索公司" />
+                <RemoteLinkSelect
+                  doctype="Company"
+                  placeholder="搜索公司"
+                  value={company}
+                  onChange={(nextCompany) => {
+                    form.setFieldsValue({ company: nextCompany });
+                  }}
+                />
               </Form.Item>
               <Form.Item label="默认仓库" name="warehouse">
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
+                  filters={{ company }}
                   placeholder="搜索仓库"
+                  value={warehouse}
+                  onChange={(nextWarehouse) => {
+                    form.setFieldsValue({ warehouse: nextWarehouse });
+                  }}
                 />
               </Form.Item>
               <Form.Item label="销售模式" name="defaultSalesMode">
@@ -267,7 +295,11 @@ const SalesOrderNewPage: React.FC = () => {
           }
           title={`商品明细（默认${getSalesModeLabel(defaultSalesMode)}）`}
         >
-          <SalesOrderLinesTable lines={lines} onChange={setLines} />
+          <SalesOrderLinesTable
+            company={company}
+            lines={lines}
+            onChange={setLines}
+          />
         </ProCard>
 
         <ProCard>

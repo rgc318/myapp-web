@@ -14,13 +14,16 @@ import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
 import {
+  FALLBACK_COMPANY,
+  useWorkspacePreferences,
+} from '@/hooks/useWorkspacePreferences';
+import {
   type BusinessReport,
   fetchReceivablePayableReport,
   type PartySummaryRow,
 } from '@/services/myapp/reports';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const DEFAULT_LIMIT = 50;
 
 type FinanceMode = 'receivable' | 'payable';
@@ -37,13 +40,13 @@ function currentMonthRange() {
   ];
 }
 
-function normalizeFilters(values: FinanceFilters) {
+function normalizeFilters(values: FinanceFilters, defaultCompany: string) {
   const dateRange = Array.isArray(values.dateRange)
     ? values.dateRange
     : currentMonthRange();
 
   return {
-    company: values.company?.trim() || DEFAULT_COMPANY,
+    company: values.company?.trim() || defaultCompany,
     dateFrom: dateRange[0],
     dateTo: dateRange[1],
     limit: DEFAULT_LIMIT,
@@ -94,12 +97,25 @@ const columns: ProColumns<PartySummaryRow>[] = [
 ];
 
 const FinancePage: React.FC = () => {
+  const { defaultCompany } = useWorkspacePreferences();
   const [mode, setMode] = useState<FinanceMode>('receivable');
   const [filters, setFilters] = useState<FinanceFilters>({
-    company: DEFAULT_COMPANY,
+    company: defaultCompany,
     dateRange: currentMonthRange(),
   });
-  const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
+  React.useEffect(() => {
+    setFilters((current) => ({
+      ...current,
+      company:
+        !current.company || current.company === FALLBACK_COMPANY
+          ? defaultCompany
+          : current.company,
+    }));
+  }, [defaultCompany]);
+  const requestFilters = useMemo(
+    () => normalizeFilters(filters, defaultCompany),
+    [defaultCompany, filters],
+  );
   const { data, error, loading, refresh } = useRequest(
     () => fetchReceivablePayableReport(requestFilters),
     {
@@ -134,6 +150,7 @@ const FinancePage: React.FC = () => {
         <ProCard>
           <ProForm<FinanceFilters>
             initialValues={filters}
+            key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
               setFilters(values);

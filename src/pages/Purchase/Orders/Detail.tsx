@@ -12,7 +12,6 @@ import {
   DatePicker,
   Empty,
   Input,
-  InputNumber,
   Modal,
   message,
   Skeleton,
@@ -20,15 +19,21 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
+import { PurchaseRollbackGuide } from '@/components/DownstreamRollbackGuide';
+import {
+  type InvoicePaymentDraft,
+  InvoicePaymentForm,
+} from '@/components/InvoicePaymentForm';
 import {
   buildLineQtyRow,
   LineQtyEditor,
   type LineQtyEditorRow,
 } from '@/components/LineQtyEditor';
-import { PaymentModeSelect } from '@/components/PaymentModeSelect';
+import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
   cancelPurchaseOrder,
   createPurchaseOrderInvoice,
+  getPurchaseInvoiceDetail,
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
   quickCancelPurchaseOrderV2,
@@ -38,7 +43,7 @@ import {
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  formatDisplayUom,
+  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -71,6 +76,7 @@ function buildPurchaseActionRows(
         maxQty: getMaxQty(item),
         orderedQty: item.qty,
         uom: item.uom,
+        uomDisplay: item.uomDisplay,
       }),
     )
     .filter((item) => item.maxQty > 0);
@@ -127,7 +133,7 @@ const itemColumns = [
     dataIndex: 'uom',
     width: 90,
     render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatDisplayUom(record.uom),
+      resolveDisplayUom(record.uom, record.uomDisplay),
   },
   {
     title: '单价',
@@ -336,52 +342,44 @@ const PurchaseOrderDetailPage: React.FC = () => {
       message.warning('请先创建采购发票后再登记付款');
       return;
     }
-    if (invoiceNames.length > 1) {
-      message.warning(
-        '当前订单关联多张采购发票，请进入具体采购发票详情登记付款',
-      );
-      return;
-    }
 
-    const paymentReferenceName = invoiceNames[0];
-    const outstandingAmount = data.outstandingAmount ?? 0;
-    let paymentAmount = outstandingAmount;
-    let modeOfPayment = '';
+    let draft: InvoicePaymentDraft = {
+      amount: 0,
+      modeOfPayment: '',
+      referenceName: invoiceNames[0],
+    };
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
-          <InputNumber
-            autoFocus
-            controls={false}
-            defaultValue={outstandingAmount}
-            max={outstandingAmount}
-            min={0.01}
-            onChange={(value) => {
-              paymentAmount = Number(value ?? 0);
-            }}
-            precision={2}
-            prefix="¥"
-            style={{ width: '100%' }}
-          />
-          <PaymentModeSelect
-            onChange={(value) => {
-              modeOfPayment = value;
-            }}
-          />
-        </Space>
+        <InvoicePaymentForm
+          detailBasePath="/purchase/invoices"
+          invoices={invoiceNames}
+          label="采购发票"
+          loadOutstandingAmount={async (invoiceName) => {
+            const invoice = await getPurchaseInvoiceDetail(invoiceName);
+            return invoice?.outstandingAmount ?? 0;
+          }}
+          onChange={(nextDraft) => {
+            draft = nextDraft;
+          }}
+        />
       ),
       okText: '确认付款',
       onOk: async () => {
-        if (paymentAmount <= 0 || paymentAmount > outstandingAmount) {
+        const paymentAmount = Number(draft.amount ?? 0);
+        if (paymentAmount <= 0) {
           message.error('付款金额必须大于 0 且不能超过未付金额');
           throw new Error('Invalid payment amount');
+        }
+        if (!draft.referenceName) {
+          message.error('请选择采购发票');
+          throw new Error('Missing payment reference');
         }
 
         setActionLoading('payment');
         try {
-          await recordSupplierPayment(paymentReferenceName, paymentAmount, {
-            modeOfPayment,
+          await recordSupplierPayment(draft.referenceName, paymentAmount, {
+            modeOfPayment: draft.modeOfPayment,
           });
           refresh();
         } catch (caught) {
@@ -391,7 +389,10 @@ const PurchaseOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `记录付款 ${paymentReferenceName}`,
+      title:
+        invoiceNames.length > 1
+          ? `选择采购发票并记录付款 ${data.name}`
+          : `记录付款 ${invoiceNames[0]}`,
     });
   };
 
@@ -402,8 +403,17 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
     Modal.confirm({
       cancelText: '取消',
-      content:
-        '系统会按顺序回退供应商付款、采购发票和采购收货单。若当前订单存在多张发票、收货单或多笔付款，后端会拒绝快捷回退，请改用分步处理。',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <span>
+            系统会按顺序回退供应商付款、采购发票和采购收货单。若当前订单存在多张发票、收货单或多笔付款，后端会拒绝快捷回退。
+          </span>
+          <PurchaseRollbackGuide
+            purchaseInvoices={data.purchaseInvoices}
+            purchaseReceipts={data.purchaseReceipts}
+          />
+        </Space>
+      ),
       okText: '快捷回退',
       okType: 'danger',
       onOk: async () => {
@@ -443,7 +453,22 @@ const PurchaseOrderDetailPage: React.FC = () => {
             title: '快捷回退完成',
           });
         } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
+          const errorMessage =
+            caught instanceof Error ? caught.message : '操作失败';
+          message.error(errorMessage);
+          Modal.warning({
+            content: (
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <span>{errorMessage}</span>
+                <PurchaseRollbackGuide
+                  purchaseInvoices={data.purchaseInvoices}
+                  purchaseReceipts={data.purchaseReceipts}
+                />
+              </Space>
+            ),
+            title: '请改用分步回退',
+            width: 680,
+          });
           throw caught;
         } finally {
           setActionLoading(undefined);
@@ -476,6 +501,12 @@ const PurchaseOrderDetailPage: React.FC = () => {
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,
+        <PrintDocumentButton
+          disabled={!orderName}
+          docname={orderName}
+          doctype="Purchase Order"
+          key="print"
+        />,
       ]}
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>

@@ -86,6 +86,7 @@ export type SalesOrderDetailItem = {
   salesMode: SalesMode;
   specification: string;
   uom: string;
+  uomDisplay: string | null;
   warehouse: string;
 };
 
@@ -312,7 +313,9 @@ function normalizeItems(value: unknown): SalesOrderDetailItem[] {
         salesOrderItem: String(item.sales_order_item ?? item.name ?? ''),
         salesMode: item.sales_mode === 'retail' ? 'retail' : 'wholesale',
         specification: String(item.specification ?? ''),
-        uom: String(item.uom_display ?? item.uom ?? ''),
+        uom: String(item.uom ?? ''),
+        uomDisplay:
+          typeof item.uom_display === 'string' ? item.uom_display : null,
         warehouse: String(item.warehouse ?? ''),
       }))
     : [];
@@ -753,9 +756,9 @@ export async function createSalesOrderInvoice(
 }
 
 export async function recordSalesOrderPayment(
-  orderName: string,
+  referenceName: string,
   paidAmount: number,
-  options: { modeOfPayment?: string } = {},
+  options: { modeOfPayment?: string; referenceDoctype?: string } = {},
 ) {
   const modeOfPayment = options.modeOfPayment?.trim();
 
@@ -763,8 +766,8 @@ export async function recordSalesOrderPayment(
     payload: {
       ...(modeOfPayment ? { mode_of_payment: modeOfPayment } : {}),
       paid_amount: paidAmount,
-      reference_doctype: 'Sales Order',
-      reference_name: orderName,
+      reference_doctype: options.referenceDoctype ?? 'Sales Order',
+      reference_name: referenceName,
     },
     successMessage: '销售收款已记录',
   });

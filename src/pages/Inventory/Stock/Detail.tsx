@@ -8,6 +8,7 @@ import {
 import { history, Link, useLocation, useParams, useRequest } from '@umijs/max';
 import { Alert, Button, Empty, Image, Skeleton, Space, Table } from 'antd';
 import React from 'react';
+import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -17,9 +18,7 @@ import {
   type ProductSummary,
   type ProductWarehouseStockDetail,
 } from '@/services/myapp/master-data';
-import { formatCurrencyValue, formatDisplayUom } from '@/utils/myapp-display';
-
-const DEFAULT_COMPANY = 'rgc (Demo)';
+import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
@@ -39,6 +38,13 @@ function signedText(value: number) {
   const color = value > 0 ? '#15803d' : value < 0 ? '#b45309' : undefined;
   const prefix = value > 0 ? '+' : '';
   return <span style={{ color }}>{`${prefix}${formatNumber(value)}`}</span>;
+}
+
+function productUomDisplay(
+  uom: string | null | undefined,
+  displayName?: string | null,
+) {
+  return resolveDisplayUom(uom, displayName);
 }
 
 function WarehouseStockTable({
@@ -129,9 +135,10 @@ const recentLedgerColumns = [
 const InventoryStockDetailPage: React.FC = () => {
   const params = useParams();
   const location = useLocation();
+  const { defaultCompany } = useWorkspacePreferences();
   const query = new URLSearchParams(location.search);
   const itemCode = decodeURIComponent(String(params.itemCode ?? ''));
-  const company = query.get('company') || DEFAULT_COMPANY;
+  const company = query.get('company') || defaultCompany;
   const warehouse = query.get('warehouse') || undefined;
 
   const { data, error, loading, refresh } = useRequest(
@@ -196,14 +203,20 @@ const InventoryStockDetailPage: React.FC = () => {
                 statistic={{
                   title: warehouse ? '当前仓库库存' : '当前库存',
                   value: formatNumber(data.stockQty),
-                  suffix: formatDisplayUom(data.stockUom),
+                  suffix: productUomDisplay(
+                    data.stockUom,
+                    data.stockUomDisplay,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '公司总库存',
                   value: formatNumber(data.totalQty),
-                  suffix: formatDisplayUom(data.stockUom),
+                  suffix: productUomDisplay(
+                    data.stockUom,
+                    data.stockUomDisplay,
+                  ),
                 }}
               />
               <StatisticCard
@@ -245,13 +258,19 @@ const InventoryStockDetailPage: React.FC = () => {
                   <ProDescriptions.Item label="商品组" dataIndex="itemGroup" />
                   <ProDescriptions.Item label="条码" dataIndex="barcode" />
                   <ProDescriptions.Item label="库存单位">
-                    {formatDisplayUom(data.stockUom)}
+                    {productUomDisplay(data.stockUom, data.stockUomDisplay)}
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="批发默认单位">
-                    {formatDisplayUom(data.wholesaleDefaultUom)}
+                    {productUomDisplay(
+                      data.wholesaleDefaultUom,
+                      data.wholesaleDefaultUomDisplay,
+                    )}
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="零售默认单位">
-                    {formatDisplayUom(data.retailDefaultUom)}
+                    {productUomDisplay(
+                      data.retailDefaultUom,
+                      data.retailDefaultUomDisplay,
+                    )}
                   </ProDescriptions.Item>
                   <ProDescriptions.Item label="最后修改" dataIndex="modified" />
                 </ProDescriptions>
@@ -271,7 +290,8 @@ const InventoryStockDetailPage: React.FC = () => {
                   {
                     dataIndex: 'uom',
                     title: '单位',
-                    render: (value) => formatDisplayUom(value),
+                    render: (value) =>
+                      productUomDisplay(value, data.allUomDisplays[value]),
                   },
                   {
                     align: 'right',

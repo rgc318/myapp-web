@@ -18,6 +18,10 @@ import {
   PurchaseOrderLinesTable,
   RemoteLinkSelect,
 } from '@/components';
+import {
+  FALLBACK_COMPANY,
+  useWorkspacePreferences,
+} from '@/hooks/useWorkspacePreferences';
 import type { ProductSummary } from '@/services/myapp/master-data';
 import {
   createPurchaseOrderV2,
@@ -32,7 +36,6 @@ import {
   recalculatePurchaseOrderLine,
 } from '@/utils/purchase-order-editor';
 
-const DEFAULT_COMPANY = 'rgc (Demo)';
 const today = dayjs();
 
 type FormValues = {
@@ -54,10 +57,23 @@ const PurchaseOrderNewPage: React.FC = () => {
   const [lines, setLines] = useState<PurchaseOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [lastSupplier, setLastSupplier] = useState('');
+  const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const supplier = Form.useWatch('supplier', form);
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getPurchaseOrderLinesTotal(lines), [lines]);
+
+  React.useEffect(() => {
+    const currentCompany = form.getFieldValue('company');
+    const currentWarehouse = form.getFieldValue('warehouse');
+    form.setFieldsValue({
+      company:
+        !currentCompany || currentCompany === FALLBACK_COMPANY
+          ? defaultCompany
+          : currentCompany,
+      warehouse: currentWarehouse || defaultWarehouse,
+    });
+  }, [defaultCompany, defaultWarehouse, form]);
 
   React.useEffect(() => {
     if (!supplier || supplier === lastSupplier) {
@@ -165,7 +181,7 @@ const PurchaseOrderNewPage: React.FC = () => {
           <Form<FormValues>
             form={form}
             initialValues={{
-              company: DEFAULT_COMPANY,
+              company: defaultCompany,
               scheduleDate: today,
               transactionDate: today,
             }}
@@ -190,13 +206,25 @@ const PurchaseOrderNewPage: React.FC = () => {
                 name="company"
                 rules={[{ required: true, message: '请选择公司' }]}
               >
-                <RemoteLinkSelect doctype="Company" placeholder="搜索公司" />
+                <RemoteLinkSelect
+                  doctype="Company"
+                  placeholder="搜索公司"
+                  value={company}
+                  onChange={(nextCompany) => {
+                    form.setFieldsValue({ company: nextCompany });
+                  }}
+                />
               </Form.Item>
               <Form.Item label="默认仓库" name="warehouse">
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
+                  filters={{ company }}
                   placeholder="搜索仓库"
+                  value={warehouse}
+                  onChange={(nextWarehouse) => {
+                    form.setFieldsValue({ warehouse: nextWarehouse });
+                  }}
                 />
               </Form.Item>
               <Form.Item label="币种" name="currency">
@@ -247,7 +275,11 @@ const PurchaseOrderNewPage: React.FC = () => {
           }
           title="采购明细"
         >
-          <PurchaseOrderLinesTable lines={lines} onChange={setLines} />
+          <PurchaseOrderLinesTable
+            company={company}
+            lines={lines}
+            onChange={setLines}
+          />
         </ProCard>
 
         <ProCard>
