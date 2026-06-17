@@ -64,6 +64,7 @@
 
 - 提供业务入口和基础经营概览
 - 形成稳定的桌面端信息架构
+- 样式、布局和图表优先沿用 Ant Design Pro 官方页面实现
 
 页面：
 
@@ -72,28 +73,42 @@
 接口：
 
 - `myapp.api.gateway.get_business_report_overview_v1`
-- 后续按需接入 `get_sales_report_v1`
-- 后续按需接入 `get_purchase_report_v1`
+- `myapp.api.gateway.get_sales_report_v1`
+- `myapp.api.gateway.get_purchase_report_v1`
+- `myapp.api.gateway.get_receivable_payable_report_v1`
+- `myapp.api.gateway.get_cashflow_report_v1`
+- `myapp.api.gateway.list_inventory_stock_summary_v1`
 
 任务：
 
 - 首页 KPI 区
-- 待处理单据摘要
-- 销售 / 采购 / 财务 / 库存入口
+- 销售 / 采购趋势图
+- 客户 / 供应商排行
+- 经营关注事项
+- 销售额类别占比
+- 库存资产和库存预警
 - 页面 loading、empty、error 状态
+
+UI 规范：
+
+- 本地官方参考项目位于 `/home/rgc318/python-project/ant-design-pro`。
+- Dashboard、报表、分析类页面优先参考官方 `src/pages/dashboard/analysis`。
+- 优先使用官方同类组件组合和 `@ant-design/plots`，不要优先手写自定义图表和页面布局。
+- 只替换官方 mock 数据和业务文案，业务接口仍走本项目 domain service。
 
 验收：
 
 - 首页不再显示模板欢迎页
 - 后端不可用时有明确错误状态
-- 页面可作为后续模块导航入口
+- 页面符合 Ant Design Pro 官方分析页的信息架构和视觉密度
 
 当前状态：
 
 - `/dashboard` 已添加为根路由目标。
-- 第一版经营概览已接入 `get_business_report_overview_v1`。
-- 已具备 loading、error、empty 和刷新按钮。
-- UI 仍使用 ProComponents 基础组件，后续在不大幅破坏模板结构的前提下逐步企业化。
+- 经营概览已组合接入总览、销售、采购、应收应付、现金流和库存汇总接口。
+- 已按官方 `dashboard/analysis` 结构改造为顶部 KPI 卡片、中部趋势图与排行、底部关注事项和占比图。
+- 已新增 `@ant-design/plots`，图表使用官方图表组件。
+- 已具备 loading、error、empty、刷新和日期范围筛选。
 
 ## 阶段 2：销售查询模块
 

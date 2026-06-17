@@ -36,6 +36,7 @@
   ],
   "dependencies": {
     "@ant-design/icons": "^6.1.0",
+    "@ant-design/plots": "^2.6.8",
     "@ant-design/pro-components": "3.1.2-0",
     "antd": "^6.2.2",
     "antd-style": "^4.1.0",

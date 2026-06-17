@@ -25,6 +25,29 @@ Main scenarios:
 - React
 - Ant Design Pro
 - TypeScript
+- `@ant-design/plots` for dashboard/reporting charts
+
+## UI Implementation Rule
+
+This project is an Ant Design Pro application. For page layout, dashboard density, chart presentation, card structure, table action areas, date filters, and responsive behavior, prefer the official Ant Design Pro implementation before writing custom styles.
+
+Local official reference project:
+
+- `/home/rgc318/python-project/ant-design-pro`
+
+Primary references:
+
+- `/home/rgc318/python-project/ant-design-pro/src/pages/dashboard/analysis`
+- `/home/rgc318/python-project/ant-design-pro/src/pages/dashboard/workplace`
+- `/home/rgc318/python-project/ant-design-pro/src/components`
+
+Rules:
+
+- Check the local official project before adding or redesigning a page.
+- Dashboard, reporting, and analytics pages should follow the official `dashboard/analysis` structure and use official-style `Card`, `Row`, `Col`, `Tabs`, `StatisticCard`, `Table`, `Segmented`, `RangePicker`, and `@ant-design/plots` components.
+- Replace official mock data with real domain services, but preserve the official information architecture, spacing, component composition, and responsive grid unless the business requirement clearly demands otherwise.
+- Avoid hand-written SVG charts, arbitrary page-level styling, and custom visual systems when an official Ant Design Pro pattern already covers the use case.
+- Backend integration, field mapping, permissions, and error handling must still use this project's `src/services/myapp/*` domain layer.
 
 ## Related Backend Docs
 
@@ -77,16 +100,19 @@ Detailed request/response contracts should be read from the backend API document
 - Key requirement:
   - keep login flow simple and aligned with the backend authentication strategy
 
-### Dashboard Placeholder
+### Dashboard
 
 - Goal:
-  - provide a first landing page without blocking the rest of the web build
-- First phase content:
-  - sales summary placeholder
-  - purchase summary placeholder
-  - pending document counters
+  - provide an Ant Design Pro-style operations dashboard backed by real reporting APIs
+- Current content:
+  - KPI cards
+  - sales and purchase trend charts
+  - customer and supplier rankings
+  - receivable/payable focus table
+  - sales category share chart
+  - inventory value and alert summary
 - Note:
-  - detailed charts can be implemented later after core pages are stable
+  - the dashboard should continue to follow the official `dashboard/analysis` page structure rather than custom chart/layout code
 
 ### Sales Document List
 
@@ -240,3 +266,4 @@ Note:
 - `npm run start:dev -- --port 8001` is the preferred local command when a fixed port is needed.
 - The web foundation now has real JWT login, dashboard, sales order query/detail/create/edit/return/refund-review, sales delivery note and invoice list/detail, purchase order query/detail/create/edit/return/refund-review, purchase receipt and invoice list/detail, reporting entry, payment list, finance lookup, inventory stock/ledger/alerts/adjustments lookup, master-data lightweight maintenance including product image upload/replace/delete, and print preview/PDF download for core sales and purchase documents.
 - Some Ant Design Pro template pages are still present and should be cleaned after the business query pages stabilize.
+- For UI optimization, keep using the local official Ant Design Pro project as the baseline instead of inventing custom layouts.

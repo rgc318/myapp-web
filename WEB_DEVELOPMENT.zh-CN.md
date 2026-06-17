@@ -22,6 +22,36 @@
 - 前端直连云存储
 - 继续使用 Ant Design Pro 模板 mock API
 
+### 1.1 UI 与布局开发规范
+
+本项目基于 Ant Design Pro。页面结构、布局密度、卡片组织、图表样式、表格操作区、日期筛选区和状态呈现应优先沿用 Ant Design Pro 官方实现，不优先自行发明新的视觉结构。
+
+本地官方参考项目：
+
+```text
+/home/rgc318/python-project/ant-design-pro
+```
+
+重点参考目录：
+
+```text
+/home/rgc318/python-project/ant-design-pro/src/pages/dashboard/analysis
+/home/rgc318/python-project/ant-design-pro/src/pages/dashboard/workplace
+/home/rgc318/python-project/ant-design-pro/src/components
+```
+
+开发规则：
+
+- 新增或优化页面前，先检查官方 Ant Design Pro 项目是否已有相近页面、组件或布局。
+- Dashboard、报表、统计、分析类页面优先参考官方 `dashboard/analysis`，使用官方同类组件组合，例如 `Card`、`Row`、`Col`、`Tabs`、`StatisticCard`、`Table`、`Segmented`、`RangePicker` 和 `@ant-design/plots`。
+- 表单、列表、详情、结果页、异常页等页面优先参考官方对应模块，不从零手写一套布局。
+- 可以替换官方 mock 数据和业务文案，但应尽量保留官方的信息架构、间距、响应式栅格和组件用法。
+- 不要为了短期实现方便大量使用自定义 SVG、手写图表、任意颜色块和页面级样式；只有官方组件无法覆盖明确业务需求时，才新增局部样式。
+- 页面视觉优化应先“套官方结构 + 接真实业务数据”，再按业务反馈小步调整。
+- 业务接口、字段映射、权限和错误处理必须使用本项目已有 service/domain 层，不能照搬官方 mock API。
+
+当前首页 `/dashboard` 已按官方 `dashboard/analysis` 的结构改造：顶部 KPI 卡片、中部趋势图与排行、底部关注事项与占比图，并使用 `@ant-design/plots` 接真实报表和库存接口数据。
+
 ## 2. 后端文档来源
 
 后端文档是接口事实来源：
@@ -430,19 +460,28 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 接口：
 
 - `myapp.api.gateway.get_business_report_overview_v1`
-- 后续按需接 `get_sales_report_v1`、`get_purchase_report_v1`
+- `myapp.api.gateway.get_sales_report_v1`
+- `myapp.api.gateway.get_purchase_report_v1`
+- `myapp.api.gateway.get_receivable_payable_report_v1`
+- `myapp.api.gateway.get_cashflow_report_v1`
+- `myapp.api.gateway.list_inventory_stock_summary_v1`
 
-第一阶段字段：
+当前字段：
 
 - 销售总览
 - 采购总览
 - 应收应付摘要
-- 待处理单据数量
+- 资金流入 / 流出与净现金流
+- 销售 / 采购趋势
+- 客户 / 供应商排行
+- 商品销售额类别占比
+- 库存资产和库存预警
 
 说明：
 
-- 第一阶段可以先做稳定布局和占位状态
-- 图表不阻塞单据查询页开发
+- 首页按 Ant Design Pro 官方 `dashboard/analysis` 的页面结构实现。
+- 图表使用 `@ant-design/plots`，不要回退到手写 SVG/CSS 图表，除非官方图表无法满足明确业务需求。
+- 页面层只消费 domain service 返回的驼峰字段，不直接处理后端蛇形字段或 Frappe 外层包络。
 
 ### 6.3 销售单据列表
 
