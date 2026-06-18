@@ -11,8 +11,11 @@ const mockSetInitialState = jest.fn();
 
 jest.mock('@umijs/max', () => ({
   FormattedMessage: ({ defaultMessage, id }: any) => defaultMessage || id,
+  getAllLocales: () => ['zh-CN', 'en-US'],
+  getLocale: () => 'zh-CN',
   Helmet: ({ children }: any) => children,
   SelectLang: () => null,
+  setLocale: jest.fn(),
   useIntl: () => ({
     formatMessage: ({ defaultMessage, id }: any) => defaultMessage || id,
   }),

@@ -3,7 +3,9 @@ import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, Link } from '@umijs/max';
 import { Button, Image, Space, Table, Tag } from 'antd';
 import React, { useRef } from 'react';
+import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   listProducts,
   type ProductSummary,
@@ -112,6 +114,15 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '仓库',
@@ -298,7 +309,7 @@ const InventoryStockPage: React.FC = () => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const result = await listProducts({
-            company: String(params.company ?? defaultCompany),
+            company: toOptionalText(params.company),
             disabled: 0,
             inStockOnly: params.inStockOnly === 'in_stock',
             limit: pageSize,

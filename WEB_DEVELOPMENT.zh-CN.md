@@ -346,6 +346,8 @@ Idempotency-Key: <uuid>
   - 通过 `search_link_options_v1` 查询 Frappe Link 选项。
   - 适用于 Customer、Company、Warehouse、Mode of Payment 等受后端白名单控制的 Link 字段。
   - 页面只传 `doctype`、`extraFields`、`filters`、`placeholder`、`limit` 和 `onChange`。
+  - 作为筛选项使用时，应支持聚焦 / 展开即加载初始候选项，输入关键字后远程联想刷新候选项；不要把 Company、Customer、Supplier、Warehouse 等 Link 筛选退化成普通文本输入框。
+  - ProTable 搜索表单中使用当前版本支持的 `formItemRender` 承载该组件，不使用类型不兼容的 `renderFormItem`。
   - `filters` 只能使用后端白名单字段，例如仓库按当前公司过滤、付款方式按启用状态过滤。
   - 当前会保留已有 value 作为临时选项，避免编辑页或禁用态 Link 字段无法显示当前值。
 - `src/components/WorkspacePreferenceButton.tsx`
@@ -398,6 +400,8 @@ Idempotency-Key: <uuid>
   - 读取当前用户默认公司和默认仓库。
   - 新建销售 / 采购订单页已优先使用该偏好，客户 / 供应商上下文建议仍可覆盖为更具体的业务默认值。
   - Dashboard、销售 / 采购订单列表、报表、财务、收付款、库存流水、商品库存、库存预警和商品主数据查询已使用该偏好作为默认公司。
+  - 在查询页中，默认公司只用于搜索表单初始值。请求组装必须尊重用户当前筛选值：用户清空公司后应传 `undefined` / 空筛选以查询全部公司数据，不能再用 `params.company ?? defaultCompany` 兜底。
+  - 页面请求参数建议用 `toOptionalText(params.company)` 这类归一化工具处理空值，避免空字符串、`null`、`undefined` 的语义不一致。
 
 ### 4.7 权限和页面状态
 

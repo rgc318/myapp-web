@@ -4,7 +4,9 @@ import { history, Link } from '@umijs/max';
 import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
+import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type PurchaseOrderSearchSummary,
   type PurchaseOrderSummary,
@@ -49,6 +51,15 @@ function buildColumns(
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '订单日期',
@@ -194,7 +205,7 @@ const PurchaseOrdersPage: React.FC = () => {
               ? params.dateRange
               : [];
             const result = await searchPurchaseOrders({
-              company: String(params.company ?? defaultCompany),
+              company: toOptionalText(params.company),
               dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
               limit: pageSize,

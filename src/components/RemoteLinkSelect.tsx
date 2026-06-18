@@ -1,5 +1,5 @@
 import { Select } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   type LinkOption,
   type LinkOptionFilters,
@@ -35,15 +35,54 @@ export function RemoteLinkSelect({
 }) {
   const [fetching, setFetching] = useState(false);
   const [options, setOptions] = useState<LinkOption[]>([]);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const requestRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const loadOptions = async (query = '') => {
+    const requestId = requestRef.current + 1;
+    requestRef.current = requestId;
     setFetching(true);
     try {
-      setOptions(
-        await searchLinkOptions(doctype, query, extraFields, limit, filters),
+      const nextOptions = await searchLinkOptions(
+        doctype,
+        query,
+        extraFields,
+        limit,
+        filters,
       );
+      if (requestId === requestRef.current) {
+        setOptions(nextOptions);
+      }
     } finally {
-      setFetching(false);
+      if (requestId === requestRef.current) {
+        setFetching(false);
+      }
+    }
+  };
+
+  const scheduleSearch = (query: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      void loadOptions(query);
+    }, 250);
+  };
+
+  const loadInitialOptions = () => {
+    if (!options.length) {
+      void loadOptions();
     }
   };
 
@@ -65,14 +104,13 @@ export function RemoteLinkSelect({
       filterOption={false}
       loading={fetching}
       onChange={(nextValue) => onChange?.(nextValue ?? '')}
-      onDropdownVisibleChange={(open) => {
-        if (open && !options.length) {
-          void loadOptions();
+      onFocus={loadInitialOptions}
+      onOpenChange={(open) => {
+        if (open) {
+          loadInitialOptions();
         }
       }}
-      onSearch={(query) => {
-        void loadOptions(query);
-      }}
+      onSearch={scheduleSearch}
       options={selectOptions}
       placeholder={placeholder}
       showSearch

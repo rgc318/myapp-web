@@ -4,7 +4,9 @@ import { Link, useLocation } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef } from 'react';
+import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -94,6 +96,15 @@ function buildColumns(defaultCompany: string): ProColumns<StockLedgerEntry>[] {
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '商品编码',
@@ -273,7 +284,7 @@ const InventoryLedgerPage: React.FC = () => {
             ? params.dateRange
             : [];
           const result = await listStockLedgerEntries({
-            company: String(params.company ?? defaultCompany),
+            company: toOptionalText(params.company),
             dateFrom: formatDateParam(dateRange[0]),
             dateTo: formatDateParam(dateRange[1]),
             itemCode: String(params.itemCode ?? ''),

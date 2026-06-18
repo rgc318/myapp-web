@@ -5,12 +5,14 @@ import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessDocumentDoctype,
   type BusinessDocumentSummary,
   listBusinessDocuments,
 } from '@/services/myapp/documents';
 import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
+import { RemoteLinkSelect } from './RemoteLinkSelect';
 
 const PAGE_SIZE = 20;
 
@@ -67,6 +69,15 @@ function buildColumns(
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '日期范围',
@@ -199,7 +210,7 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
               ? params.dateRange
               : [];
             const result = await listBusinessDocuments({
-              company: String(params.company ?? defaultCompany),
+              company: toOptionalText(params.company),
               dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
               docstatus: params.docstatus as any,

@@ -489,6 +489,7 @@ UI 规范：
 - `/purchase/orders/new` 已作为采购交易主流程第一步接入，支持供应商上下文、商品选择、采购默认价、单位换算、保存订单和快捷采购。
 - `/purchase/orders/:name/edit` 已作为采购交易主流程编辑页接入，支持头部字段和商品明细替换保存。
 - 通用选择 / 表格组件已抽出：`RemoteLinkSelect`、`ProductSelect`、`PaymentModeSelect`、`LineQtyEditor`、`PartyManagementPage`。
+- `RemoteLinkSelect` 已作为 Company、Customer、Supplier、Warehouse 等 Link 字段的标准远程联想组件；列表筛选中的 Link 字段不应退回普通输入框。
 - 打印入口已抽出：`PrintDocumentButton`；打印服务已抽出：`services/myapp/printing.ts`。
 - 工作偏好入口已抽出：`WorkspacePreferenceButton`，支持维护当前用户默认公司和默认仓库。
 - 计量单位工具已抽出：`src/utils/display-uom.ts`、`src/utils/uom-conversion.ts`。
@@ -496,6 +497,7 @@ UI 规范：
 - 采购订单行通用工具已抽出：`src/utils/purchase-order-editor.ts`。
 - 基础测试：API client、token storage、字段映射、权限、登录页 JWT 行为。
 - 用户默认公司 / 仓库偏好已接入 service、顶部入口、销售 / 采购新建页和主要查询页。
+- 查询页中默认公司只作为初始筛选值；用户清空公司筛选后应查询全部公司数据，请求层不再用默认公司兜底。
 - 生产部署说明：同域部署、Nginx/Caddy 示例、缓存策略和上线验收。
 
 未完成但不阻塞继续开发：

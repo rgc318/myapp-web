@@ -8,7 +8,9 @@ import {
 import { history, Link } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
+import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type InventoryStockStatus,
   type InventoryStockSummary,
@@ -75,6 +77,15 @@ function buildColumns(
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '仓库',
@@ -274,7 +285,7 @@ const InventoryAlertsPage: React.FC = () => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const result = await listInventoryStockSummary({
-            company: String(params.company ?? defaultCompany),
+            company: toOptionalText(params.company),
             lowStockThreshold: Number(
               params.lowStockThreshold ?? DEFAULT_LOW_STOCK_THRESHOLD,
             ),

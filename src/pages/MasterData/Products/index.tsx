@@ -15,8 +15,10 @@ import {
 } from 'antd';
 import React, { useRef, useState } from 'react';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   createProduct,
   listProducts,
@@ -63,6 +65,15 @@ function buildColumns({
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Company"
+          onChange={onChange}
+          placeholder="搜索公司"
+          style={{ width: '100%' }}
+          value={value}
+        />
+      ),
     },
     {
       title: '仓库',
@@ -291,7 +302,7 @@ const ProductsPage: React.FC = () => {
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const disabledFilter = String(params.disabledFilter ?? 'enabled');
           const result = await listProducts({
-            company: String(params.company ?? defaultCompany),
+            company: toOptionalText(params.company),
             disabled:
               disabledFilter === 'enabled'
                 ? 0

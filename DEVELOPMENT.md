@@ -166,12 +166,14 @@ Detailed request/response contracts should be read from the backend API document
 Reusable business components should be used before adding page-local selectors or duplicated UOM logic.
 
 - `src/components/RemoteLinkSelect.tsx`: backend-backed Frappe Link selector for Customer, Company, Warehouse, Mode of Payment, and similar fields.
+  Use it for Link-like table filters instead of plain text inputs. In ProTable search forms, wire it through `formItemRender`; focus/open should load initial options and typing should refresh options through remote search.
 - `src/components/ProductSelect.tsx`: product search selector returning normalized product data.
 - `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
 - `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
 - `src/components/PartyManagementPage.tsx`: shared lightweight Customer/Supplier maintenance page with status filtering and idempotent mutations.
 - `src/components/UomSelect.tsx`: UOM selector backed by `list_uoms_v2`; use it for product and order form UOM fields instead of broad Link queries.
 - `src/components/WorkspacePreferenceButton.tsx`: user-level default company and warehouse preference entry.
+  Default company is only an initial query value. If the user clears the company filter, requests must send no company filter and return all companies; do not fall back with `params.company ?? defaultCompany`.
 - `src/utils/display-uom.ts` and `src/utils/uom-conversion.ts`: shared UOM display and stock-unit conversion helpers.
 - `src/utils/sales-order-editor.ts`: sales order line model, wholesale/retail default UOM and price, UOM conversion, line amount, and total calculation.
 - `src/components/PurchaseOrderLinesTable.tsx` and `src/utils/purchase-order-editor.ts`: purchase order line editing, purchase default price, UOM conversion reference, line amount, and total calculation.
