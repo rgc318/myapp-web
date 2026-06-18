@@ -341,6 +341,50 @@ describe('myapp domain services', () => {
     expect(result.summary.visibleCount).toBe(24);
   });
 
+  it('passes cancelled visibility when searching cancelled purchase orders', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchPurchaseOrders({
+      excludeCancelled: false,
+      statusFilter: 'cancelled',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_purchase_orders_v2',
+      expect.objectContaining({
+        exclude_cancelled: 0,
+        status_filter: 'cancelled',
+      }),
+    );
+  });
+
+  it('passes newest order sorting to purchase order search', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchPurchaseOrders({ sortBy: 'order_date_desc' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_purchase_orders_v2',
+      expect.objectContaining({ sort_by: 'order_date_desc' }),
+    );
+  });
+
   it('maps report and cashflow envelopes', async () => {
     mockedCallGatewayMethod
       .mockResolvedValueOnce({

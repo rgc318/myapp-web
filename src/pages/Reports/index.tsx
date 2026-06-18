@@ -4,7 +4,6 @@ import {
   ProCard,
   ProForm,
   ProFormDateRangePicker,
-  ProFormText,
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
@@ -13,10 +12,12 @@ import { Button, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
+import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import {
   FALLBACK_COMPANY,
   useWorkspacePreferences,
 } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessReport,
   type CashflowTrendRow,
@@ -47,13 +48,13 @@ function formatNumber(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
-function normalizeFilters(values: ReportFilters, defaultCompany: string) {
+function normalizeFilters(values: ReportFilters) {
   const dateRange = Array.isArray(values.dateRange)
     ? values.dateRange
     : currentMonthRange();
 
   return {
-    company: values.company?.trim() || defaultCompany,
+    company: toOptionalText(values.company),
     dateFrom: dateRange[0],
     dateTo: dateRange[1],
     limit: DEFAULT_LIMIT,
@@ -186,15 +187,10 @@ const ReportsPage: React.FC = () => {
     setFilters((current) => ({
       ...current,
       company:
-        !current.company || current.company === FALLBACK_COMPANY
-          ? defaultCompany
-          : current.company,
+        current.company === FALLBACK_COMPANY ? defaultCompany : current.company,
     }));
   }, [defaultCompany]);
-  const requestFilters = useMemo(
-    () => normalizeFilters(filters, defaultCompany),
-    [defaultCompany, filters],
-  );
+  const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
   const { data, error, loading, refresh } = useRequest(
     () => fetchBusinessReportOverview(requestFilters),
     {
@@ -210,6 +206,7 @@ const ReportsPage: React.FC = () => {
   const report = data as BusinessReport | undefined;
   const overview = report?.overview;
   const meta = report?.meta;
+  const companyLabel = meta?.company || requestFilters.company || '全部公司';
 
   return (
     <PageContainer
@@ -227,7 +224,10 @@ const ReportsPage: React.FC = () => {
             key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
-              setFilters(values);
+              setFilters({
+                ...values,
+                company: toOptionalText(values.company) ?? undefined,
+              });
             }}
             submitter={{
               searchConfig: {
@@ -236,15 +236,13 @@ const ReportsPage: React.FC = () => {
               render: (_, doms) => doms[1],
             }}
           >
-            <ProFormText
-              fieldProps={{
-                allowClear: true,
-              }}
-              label="公司"
-              name="company"
-              placeholder="公司"
-              width="md"
-            />
+            <ProForm.Item label="公司" name="company">
+              <RemoteLinkSelect
+                doctype="Company"
+                placeholder="搜索公司"
+                style={{ width: 328 }}
+              />
+            </ProForm.Item>
             <ProFormDateRangePicker label="日期" name="dateRange" />
           </ProForm>
         </ProCard>
@@ -264,7 +262,7 @@ const ReportsPage: React.FC = () => {
               <Space direction="vertical" size={4}>
                 <Typography.Text type="secondary">统计范围</Typography.Text>
                 <Typography.Title level={4} style={{ margin: 0 }}>
-                  {meta?.company || requestFilters.company}
+                  {companyLabel}
                 </Typography.Title>
                 <Typography.Text type="secondary">
                   {meta?.dateFrom || requestFilters.dateFrom} 至{' '}

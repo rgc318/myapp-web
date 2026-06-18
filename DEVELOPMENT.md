@@ -169,6 +169,17 @@ Sales order status and sorting conventions:
 - `order_date_desc` means newest order by `transaction_date`; `latest` means latest update by `modified`.
 - Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
 
+Purchase order status and sorting conventions:
+
+- `completed` means fully received and fully invoiced/paid.
+- `cancelled` searches must pass `excludeCancelled: false`; the normal effective-order view excludes cancelled rows.
+- `order_date_desc` means newest purchase order by `transaction_date`; `latest` means latest update by `modified`.
+
+Company filters:
+
+- Default company is only an initial search value. If the user clears the company field, pass an empty value so the backend searches all companies.
+- Use `RemoteLinkSelect` for company fields in query forms; avoid free-text company inputs on business pages.
+
 ### Shared Components
 
 Reusable business components should be used before adding page-local selectors or duplicated UOM logic.

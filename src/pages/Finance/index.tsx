@@ -4,7 +4,6 @@ import {
   ProCard,
   ProForm,
   ProFormDateRangePicker,
-  ProFormText,
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
@@ -13,10 +12,12 @@ import { Button, Segmented, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
+import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import {
   FALLBACK_COMPANY,
   useWorkspacePreferences,
 } from '@/hooks/useWorkspacePreferences';
+import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessReport,
   fetchReceivablePayableReport,
@@ -40,13 +41,13 @@ function currentMonthRange() {
   ];
 }
 
-function normalizeFilters(values: FinanceFilters, defaultCompany: string) {
+function normalizeFilters(values: FinanceFilters) {
   const dateRange = Array.isArray(values.dateRange)
     ? values.dateRange
     : currentMonthRange();
 
   return {
-    company: values.company?.trim() || defaultCompany,
+    company: toOptionalText(values.company),
     dateFrom: dateRange[0],
     dateTo: dateRange[1],
     limit: DEFAULT_LIMIT,
@@ -107,15 +108,10 @@ const FinancePage: React.FC = () => {
     setFilters((current) => ({
       ...current,
       company:
-        !current.company || current.company === FALLBACK_COMPANY
-          ? defaultCompany
-          : current.company,
+        current.company === FALLBACK_COMPANY ? defaultCompany : current.company,
     }));
   }, [defaultCompany]);
-  const requestFilters = useMemo(
-    () => normalizeFilters(filters, defaultCompany),
-    [defaultCompany, filters],
-  );
+  const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
   const { data, error, loading, refresh } = useRequest(
     () => fetchReceivablePayableReport(requestFilters),
     {
@@ -136,6 +132,7 @@ const FinancePage: React.FC = () => {
   const totalAmount = sumRows(rows, 'totalAmount');
   const outstandingAmount = sumRows(rows, 'outstandingAmount');
   const meta = report?.meta;
+  const companyLabel = meta?.company || requestFilters.company || '全部公司';
 
   return (
     <PageContainer
@@ -153,7 +150,10 @@ const FinancePage: React.FC = () => {
             key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
-              setFilters(values);
+              setFilters({
+                ...values,
+                company: toOptionalText(values.company) ?? undefined,
+              });
             }}
             submitter={{
               searchConfig: {
@@ -162,13 +162,13 @@ const FinancePage: React.FC = () => {
               render: (_, doms) => doms[1],
             }}
           >
-            <ProFormText
-              fieldProps={{ allowClear: true }}
-              label="公司"
-              name="company"
-              placeholder="公司"
-              width="md"
-            />
+            <ProForm.Item label="公司" name="company">
+              <RemoteLinkSelect
+                doctype="Company"
+                placeholder="搜索公司"
+                style={{ width: 328 }}
+              />
+            </ProForm.Item>
             <ProFormDateRangePicker label="日期" name="dateRange" />
           </ProForm>
         </ProCard>
@@ -196,9 +196,8 @@ const FinancePage: React.FC = () => {
                     value={mode}
                   />
                   <Typography.Text type="secondary">
-                    {meta?.company || requestFilters.company}，
-                    {meta?.dateFrom || requestFilters.dateFrom} 至{' '}
-                    {meta?.dateTo || requestFilters.dateTo}
+                    {companyLabel}，{meta?.dateFrom || requestFilters.dateFrom}{' '}
+                    至 {meta?.dateTo || requestFilters.dateTo}
                   </Typography.Text>
                 </Space>
               </Space>

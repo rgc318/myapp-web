@@ -141,6 +141,7 @@ function buildColumns(
       valueEnum: {
         unfinished_first: { text: '未完成优先' },
         latest: { text: '最近更新' },
+        order_date_desc: { text: '最新订单' },
         oldest: { text: '最早订单' },
         amount_desc: { text: '金额从高到低' },
         amount_asc: { text: '金额从低到高' },
@@ -211,15 +212,17 @@ const PurchaseOrdersPage: React.FC = () => {
             const dateRange = Array.isArray(params.dateRange)
               ? params.dateRange
               : [];
+            const statusFilter = params.statusFilter as any;
             const result = await searchPurchaseOrders({
               company: toOptionalText(params.company),
               dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
+              excludeCancelled: statusFilter !== 'cancelled',
               limit: pageSize,
               searchKey: String(params.searchKey ?? ''),
               sortBy: params.sortBy as any,
               start: (current - 1) * pageSize,
-              statusFilter: params.statusFilter as any,
+              statusFilter,
             });
 
             setSummary(result.summary);

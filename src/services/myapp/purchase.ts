@@ -19,6 +19,7 @@ export type PurchaseOrderStatusFilter =
 export type PurchaseOrderSort =
   | 'unfinished_first'
   | 'latest'
+  | 'order_date_desc'
   | 'oldest'
   | 'amount_desc'
   | 'amount_asc';
