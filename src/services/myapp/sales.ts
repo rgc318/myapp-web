@@ -20,16 +20,23 @@ export type SalesOrderSort =
   | 'amount_asc';
 
 export type SalesOrderSummary = {
+  canCancelOrder: boolean;
+  canCreateSalesInvoice: boolean;
+  canRecordPayment: boolean;
+  canSubmitDelivery: boolean;
   name: string;
   customer: string;
   company: string;
   transactionDate: string;
+  deliveryDate: string;
   amount: number | null;
   outstandingAmount: number | null;
   documentStatus: string;
   fulfillmentStatus: string;
   paymentStatus: string;
   completionStatus: string;
+  isDeliveryOverdue: boolean;
+  deliveryOverdueDays: number;
   modified: string;
 };
 
@@ -285,18 +292,27 @@ function normalizeSummaryRow(row: Record<string, any>): SalesOrderSummary {
   const fulfillment = row.fulfillment ?? {};
   const payment = row.payment ?? {};
   const completion = row.completion ?? {};
+  const actions = row.actions ?? {};
+  const risk = row.risk ?? {};
 
   return {
+    canCancelOrder: Boolean(actions.can_cancel_sales_order),
+    canCreateSalesInvoice: Boolean(actions.can_create_sales_invoice),
+    canRecordPayment: Boolean(actions.can_record_payment),
+    canSubmitDelivery: Boolean(actions.can_submit_delivery),
     name: String(row.order_name ?? row.name ?? ''),
     customer: String(row.customer_name ?? row.customer ?? ''),
     company: String(row.company ?? ''),
     transactionDate: String(row.transaction_date ?? ''),
+    deliveryDate: String(row.delivery_date ?? ''),
     amount: toNumber(row.order_amount_estimate ?? row.grand_total),
     outstandingAmount: toNumber(row.outstanding_amount),
     documentStatus: String(row.document_status ?? ''),
     fulfillmentStatus: String(fulfillment.status ?? ''),
     paymentStatus: String(payment.status ?? ''),
     completionStatus: String(completion.status ?? ''),
+    isDeliveryOverdue: Boolean(risk.is_delivery_overdue),
+    deliveryOverdueDays: Number(risk.delivery_overdue_days ?? 0),
     modified: String(row.modified ?? ''),
   };
 }

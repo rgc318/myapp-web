@@ -158,8 +158,14 @@ describe('myapp domain services', () => {
       data: {
         items: [
           {
+            actions: {
+              can_create_sales_invoice: true,
+              can_record_payment: true,
+              can_submit_delivery: true,
+            },
             company: 'rgc (Demo)',
             customer_name: 'ACME',
+            delivery_date: '2026-06-08',
             document_status: 'submitted',
             fulfillment: { status: 'pending' },
             modified: '2026-06-04 10:00:00',
@@ -167,6 +173,10 @@ describe('myapp domain services', () => {
             order_name: 'SO-0001',
             outstanding_amount: '20.5',
             payment: { status: 'unpaid' },
+            risk: {
+              delivery_overdue_days: 2,
+              is_delivery_overdue: true,
+            },
             transaction_date: '2026-06-04',
           },
         ],
@@ -181,7 +191,13 @@ describe('myapp domain services', () => {
 
     expect(result.items[0]).toMatchObject({
       amount: 120.5,
+      canCreateSalesInvoice: true,
+      canRecordPayment: true,
+      canSubmitDelivery: true,
       customer: 'ACME',
+      deliveryDate: '2026-06-08',
+      deliveryOverdueDays: 2,
+      isDeliveryOverdue: true,
       name: 'SO-0001',
       outstandingAmount: 20.5,
       paymentStatus: 'unpaid',
@@ -191,6 +207,25 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ search_key: 'SO-0001' }),
+    );
+  });
+
+  it('passes customer filter to sales order search', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchSalesOrders({ customer: 'ACME' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_sales_orders_v2',
+      expect.objectContaining({ customer: 'ACME' }),
     );
   });
 

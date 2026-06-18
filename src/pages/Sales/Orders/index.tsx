@@ -9,7 +9,7 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
-import { Button, Empty, Space, Typography } from 'antd';
+import { Button, Dropdown, Empty, Space, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
@@ -23,6 +23,12 @@ import {
 import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 
 const PAGE_SIZE = 20;
+type OrderActionKey = 'delivery' | 'invoice' | 'payment';
+
+function orderDetailPath(record: SalesOrderSummary, action?: OrderActionKey) {
+  const basePath = `/sales/orders/${encodeURIComponent(record.name)}`;
+  return action ? `${basePath}?action=${action}` : basePath;
+}
 
 function orderStatusLabel(record: SalesOrderSummary) {
   if (record.documentStatus === 'cancelled') {
@@ -59,6 +65,20 @@ function paymentStatusLabel(record: SalesOrderSummary) {
   return undefined;
 }
 
+function orderActionCandidates(record: SalesOrderSummary) {
+  return [
+    record.canSubmitDelivery
+      ? { key: 'delivery' as const, label: '去发货' }
+      : null,
+    record.canCreateSalesInvoice
+      ? { key: 'invoice' as const, label: '去开票' }
+      : null,
+    record.canRecordPayment ? { key: 'payment' as const, label: '去收款' } : null,
+  ].filter(
+    (item): item is { key: OrderActionKey; label: string } => Boolean(item),
+  );
+}
+
 function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
   return [
     {
@@ -84,8 +104,23 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
     {
       title: '客户',
       dataIndex: 'customer',
-      search: false,
       ellipsis: true,
+      formItemRender: (_, { onChange, value }, form) => (
+        <RemoteLinkSelect
+          doctype="Customer"
+          onChange={(nextValue) => {
+            const customer = toOptionalText(nextValue);
+            form.setFieldValue?.('customer', customer);
+            onChange?.(customer);
+          }}
+          placeholder="搜索客户"
+          style={{ width: '100%' }}
+          value={
+            toOptionalText(value) ??
+            toOptionalText(form.getFieldValue?.('customer'))
+          }
+        />
+      ),
     },
     {
       title: '公司',
@@ -120,6 +155,20 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       dataIndex: 'transactionDate',
       search: false,
       width: 120,
+    },
+    {
+      title: '交货日期',
+      dataIndex: 'deliveryDate',
+      search: false,
+      width: 150,
+      render: (_, record) => (
+        <Space size={6}>
+          <span>{record.deliveryDate || '-'}</span>
+          {record.isDeliveryOverdue ? (
+            <Tag color="error">逾期 {record.deliveryOverdueDays} 天</Tag>
+          ) : null}
+        </Space>
+      ),
     },
     {
       title: '状态',
@@ -211,12 +260,37 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
     {
       title: '操作',
       valueType: 'option',
-      width: 80,
-      render: (_, record) => (
-        <Link to={`/sales/orders/${encodeURIComponent(record.name)}`}>
-          查看
-        </Link>
-      ),
+      width: 120,
+      render: (_, record) => {
+        const actionItems = orderActionCandidates(record);
+        const primaryAction = actionItems[0];
+        const secondaryItems = [
+          { key: 'view', label: <Link to={orderDetailPath(record)}>查看</Link> },
+          ...actionItems.slice(1).map((item) => ({
+            key: item.key,
+            label: (
+              <Link to={orderDetailPath(record, item.key)}>{item.label}</Link>
+            ),
+          })),
+        ];
+
+        if (!primaryAction) {
+          return <Link to={orderDetailPath(record)}>查看</Link>;
+        }
+
+        return (
+          <Space size={8}>
+            <Link to={orderDetailPath(record, primaryAction.key)}>
+              {primaryAction.label}
+            </Link>
+            <Dropdown menu={{ items: secondaryItems }} trigger={['click']}>
+              <Button size="small" type="link">
+                更多
+              </Button>
+            </Dropdown>
+          </Space>
+        );
+      },
     },
   ];
 }
@@ -229,9 +303,19 @@ const SalesOrdersPage: React.FC = () => {
   const columns = buildColumns(defaultCompany);
   const pendingCount =
     (summary?.deliveryCount ?? 0) + (summary?.paymentCount ?? 0);
+  const applyStatusFilter = (
+    statusFilter: 'all' | 'unfinished' | 'delivering' | 'paying',
+  ) => {
+    formRef.current?.setFieldsValue({
+      sortBy: statusFilter === 'all' ? 'latest' : 'unfinished_first',
+      statusFilter,
+    });
+    void actionRef.current?.reload(true);
+  };
   const showAllOrders = () => {
     formRef.current?.setFieldsValue({
       company: undefined,
+      customer: undefined,
       dateRange: undefined,
       searchKey: undefined,
       sortBy: 'latest',
@@ -255,27 +339,34 @@ const SalesOrdersPage: React.FC = () => {
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <StatisticCard.Group direction="row">
           <StatisticCard
+            onClick={() => applyStatusFilter('unfinished')}
             statistic={{
               description: '发货、收款等仍需处理的订单',
               title: '待处理订单',
               value: summary?.unfinishedCount ?? 0,
             }}
+            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
+            onClick={() => applyStatusFilter('delivering')}
             statistic={{
               description: '需要继续推进出库履约',
               title: '待发货',
               value: summary?.deliveryCount ?? 0,
             }}
+            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
+            onClick={() => applyStatusFilter('paying')}
             statistic={{
               description: '已履约或开票后仍待回款',
               title: '待收款',
               value: summary?.paymentCount ?? 0,
             }}
+            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
+            onClick={() => applyStatusFilter('all')}
             statistic={{
               description: `已完成 ${summary?.completedCount ?? 0}，已作废 ${
                 summary?.cancelledCount ?? 0
@@ -283,6 +374,7 @@ const SalesOrdersPage: React.FC = () => {
               title: '当前结果',
               value: summary?.visibleCount ?? 0,
             }}
+            style={{ cursor: 'pointer' }}
           />
         </StatisticCard.Group>
 
@@ -320,6 +412,7 @@ const SalesOrdersPage: React.FC = () => {
             const statusFilter = params.statusFilter as any;
             const result = await searchSalesOrders({
               company: toOptionalText(params.company),
+              customer: toOptionalText(params.customer),
               dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
               excludeCancelled: statusFilter !== 'cancelled',

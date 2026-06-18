@@ -8,6 +8,7 @@ jest.mock('@umijs/max', () => ({
     const React = jest.requireActual('react');
     return React.createElement('a', null, children);
   },
+  useLocation: () => ({ search: '' }),
   useParams: () => ({ name: 'SAL-ORD-2026-01204' }),
   useRequest: (service: any) => {
     const React = jest.requireActual('react');

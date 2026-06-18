@@ -5,7 +5,7 @@ import {
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
-import { Link, useParams, useRequest } from '@umijs/max';
+import { Link, useLocation, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -16,9 +16,10 @@ import {
   message,
   Skeleton,
   Space,
+  Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { SalesRollbackGuide } from '@/components/DownstreamRollbackGuide';
 import {
   type InvoicePaymentDraft,
@@ -106,6 +107,19 @@ function quickCancelStepLabel(step: string) {
   return step;
 }
 
+function actionTargetLabel(actionTarget: string | null) {
+  if (actionTarget === 'delivery') {
+    return '创建发货单';
+  }
+  if (actionTarget === 'invoice') {
+    return '创建销售发票';
+  }
+  if (actionTarget === 'payment') {
+    return '记录收款';
+  }
+  return null;
+}
+
 const itemColumns = [
   {
     title: '商品编码',
@@ -162,8 +176,17 @@ const itemColumns = [
 
 const SalesOrderDetailPage: React.FC = () => {
   const params = useParams();
+  const location = useLocation();
   const orderName = decodeURIComponent(String(params.name ?? ''));
+  const actionPanelRef = useRef<HTMLDivElement | null>(null);
   const [actionLoading, setActionLoading] = useState<string>();
+  const actionTarget = useMemo(() => {
+    const value = new URLSearchParams(location.search).get('action');
+    return ['delivery', 'invoice', 'payment'].includes(String(value))
+      ? String(value)
+      : null;
+  }, [location.search]);
+  const actionTargetText = actionTargetLabel(actionTarget);
   const {
     data: detail,
     error,
@@ -173,6 +196,18 @@ const SalesOrderDetailPage: React.FC = () => {
     formatResult: (result) => result,
     refreshDeps: [orderName],
   });
+
+  useEffect(() => {
+    if (!detail || !actionTarget) {
+      return;
+    }
+    window.setTimeout(() => {
+      actionPanelRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }, 120);
+  }, [actionTarget, detail]);
 
   const runOrderAction = (
     key: string,
@@ -587,66 +622,81 @@ const SalesOrderDetailPage: React.FC = () => {
                 </ProDescriptions>
               </ProCard>
 
-              <ProCard title="履约动作">
-                <Space wrap>
-                  <Link
-                    to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
-                  >
-                    <Button>编辑订单</Button>
-                  </Link>
-                  <Button
-                    disabled={!detail.canSubmitDelivery}
-                    loading={actionLoading === 'delivery'}
-                    onClick={confirmSubmitDelivery}
-                    type="primary"
-                  >
-                    创建发货单
-                  </Button>
-                  <Button
-                    disabled={!detail.canCreateSalesInvoice}
-                    loading={actionLoading === 'invoice'}
-                    onClick={confirmCreateInvoice}
-                  >
-                    创建销售发票
-                  </Button>
-                  <Button
-                    disabled={
-                      !detail.canRecordPayment ||
-                      (detail.outstandingAmount ?? 0) <= 0
-                    }
-                    loading={actionLoading === 'payment'}
-                    onClick={confirmRecordPayment}
-                  >
-                    记录收款
-                  </Button>
-                  <Button
-                    danger
-                    disabled={
-                      !detail.deliveryNotes.length &&
-                      !detail.salesInvoices.length
-                    }
-                    loading={actionLoading === 'quick-cancel'}
-                    onClick={confirmQuickCancelDownstream}
-                  >
-                    快捷回退下游
-                  </Button>
-                  <Button
-                    danger
-                    disabled={!detail.canCancelOrder}
-                    loading={actionLoading === 'cancel'}
-                    onClick={() =>
-                      runOrderAction(
-                        'cancel',
-                        `取消销售订单 ${detail.name}？`,
-                        () => cancelSalesOrder(detail.name),
-                        true,
-                      )
-                    }
-                  >
-                    取消销售订单
-                  </Button>
-                </Space>
-              </ProCard>
+              <div ref={actionPanelRef}>
+                <ProCard
+                  title={
+                    <Space size={8}>
+                      <span>履约动作</span>
+                      {actionTargetText ? (
+                        <Typography.Text type="secondary">
+                          当前入口：{actionTargetText}
+                        </Typography.Text>
+                      ) : null}
+                    </Space>
+                  }
+                >
+                  <Space wrap>
+                    <Link
+                      to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
+                    >
+                      <Button>编辑订单</Button>
+                    </Link>
+                    <Button
+                      disabled={!detail.canSubmitDelivery}
+                      loading={actionLoading === 'delivery'}
+                      onClick={confirmSubmitDelivery}
+                      type={actionTarget === 'delivery' ? 'primary' : 'default'}
+                    >
+                      创建发货单
+                    </Button>
+                    <Button
+                      disabled={!detail.canCreateSalesInvoice}
+                      loading={actionLoading === 'invoice'}
+                      onClick={confirmCreateInvoice}
+                      type={actionTarget === 'invoice' ? 'primary' : 'default'}
+                    >
+                      创建销售发票
+                    </Button>
+                    <Button
+                      disabled={
+                        !detail.canRecordPayment ||
+                        (detail.outstandingAmount ?? 0) <= 0
+                      }
+                      loading={actionLoading === 'payment'}
+                      onClick={confirmRecordPayment}
+                      type={actionTarget === 'payment' ? 'primary' : 'default'}
+                    >
+                      记录收款
+                    </Button>
+                    <Button
+                      danger
+                      disabled={
+                        !detail.deliveryNotes.length &&
+                        !detail.salesInvoices.length
+                      }
+                      loading={actionLoading === 'quick-cancel'}
+                      onClick={confirmQuickCancelDownstream}
+                    >
+                      快捷回退下游
+                    </Button>
+                    <Button
+                      danger
+                      disabled={!detail.canCancelOrder}
+                      loading={actionLoading === 'cancel'}
+                      onClick={() =>
+                        runOrderAction(
+                          'cancel',
+                          `取消销售订单 ${detail.name}？`,
+                          () => cancelSalesOrder(detail.name),
+                          true,
+                        )
+                      }
+                    >
+                      取消销售订单
+                    </Button>
+                  </Space>
+                </ProCard>
+              </div>
             </ProCard>
 
             <ProCard title="收货信息">

@@ -587,7 +587,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 只表示已全部发货且已全部开票收款结清，不以未收金额为 0 单独判定。
 - `/sales/orders` 列表展示状态时不要直接把后端技术值 `fulfillment.status = pending` 展示成泛化“待处理”，销售语义应显示为“待发货”。
 - `/sales/orders` 公司和客户筛选均应使用 `RemoteLinkSelect`；统计卡可作为状态筛选快捷入口，目标筛选值必须和后端 `status_filter` 保持一致。
-- `/sales/orders` 行内操作入口必须消费 `search_sales_orders_v2` 摘要中的 `actions`，不要在列表页重复推导能否发货、开票、收款或作废。
+- `/sales/orders` 行内操作入口必须消费 `search_sales_orders_v2` 摘要中的 `actions`，不要在列表页重复推导能否发货、开票、收款或作废；可通过 `?action=delivery|invoice|payment` 让详情页定位到对应动作区。
+- `/sales/orders` 交货逾期等风险提示必须消费后端摘要中的 `risk` 字段，例如 `is_delivery_overdue` 和 `delivery_overdue_days`。
 - `/purchase/orders` 排序与销售订单保持同一语义：`order_date_desc` 是“最新订单”，按采购订单日期倒序；`latest` 是“最近更新”，按最后修改时间倒序。
 - `/purchase/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 表示已全部收货且已开票付款结清。
 - 报表、财务和各业务列表的公司筛选统一使用 `RemoteLinkSelect`；默认公司只作为初始筛选值，用户清空公司后必须查询全部公司，不能再回退默认公司。
