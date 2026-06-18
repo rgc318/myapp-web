@@ -9,7 +9,17 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
-import { Button, Dropdown, Empty, Space, Tag, Typography } from 'antd';
+import {
+  Badge,
+  Button,
+  Card,
+  Dropdown,
+  Empty,
+  Space,
+  Tabs,
+  Tag,
+  Typography,
+} from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
@@ -24,6 +34,53 @@ import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 
 const PAGE_SIZE = 20;
 type OrderActionKey = 'delivery' | 'invoice' | 'payment';
+type StatusViewKey =
+  | 'all'
+  | 'unfinished'
+  | 'delivering'
+  | 'paying'
+  | 'completed'
+  | 'cancelled';
+type SalesOrderListFilters = {
+  company?: string;
+  customer?: string;
+  dateRange?: string[];
+  riskFilter?: string;
+  searchKey?: string;
+  sortBy?: string;
+  statusFilter?: string;
+};
+
+const STATUS_FILTER_LABELS: Record<string, string> = {
+  all: '有效订单',
+  cancelled: '已作废',
+  completed: '已完成',
+  delivering: '待发货',
+  paying: '待收款',
+  unfinished: '未完成',
+};
+
+const DEFAULT_LIST_FILTERS: SalesOrderListFilters = {
+  riskFilter: 'all',
+  sortBy: 'latest',
+  statusFilter: 'all',
+};
+
+function normalizeListFilters(filtersSource: unknown): SalesOrderListFilters {
+  const filters = filtersSource as SalesOrderListFilters;
+  const dateRange = Array.isArray(filters.dateRange) ? filters.dateRange : [];
+  return {
+    company: toOptionalText(filters.company),
+    customer: toOptionalText(filters.customer),
+    dateRange: dateRange.map((item) => String(item)),
+    riskFilter: String(filters.riskFilter ?? DEFAULT_LIST_FILTERS.riskFilter),
+    searchKey: toOptionalText(filters.searchKey),
+    sortBy: String(filters.sortBy ?? DEFAULT_LIST_FILTERS.sortBy),
+    statusFilter: String(
+      filters.statusFilter ?? DEFAULT_LIST_FILTERS.statusFilter,
+    ),
+  };
+}
 
 function orderDetailPath(record: SalesOrderSummary, action?: OrderActionKey) {
   const basePath = `/sales/orders/${encodeURIComponent(record.name)}`;
@@ -73,9 +130,34 @@ function orderActionCandidates(record: SalesOrderSummary) {
     record.canCreateSalesInvoice
       ? { key: 'invoice' as const, label: '去开票' }
       : null,
-    record.canRecordPayment ? { key: 'payment' as const, label: '去收款' } : null,
-  ].filter(
-    (item): item is { key: OrderActionKey; label: string } => Boolean(item),
+    record.canRecordPayment
+      ? { key: 'payment' as const, label: '去收款' }
+      : null,
+  ].filter((item): item is { key: OrderActionKey; label: string } =>
+    Boolean(item),
+  );
+}
+
+function resolveViewTitle(filters: SalesOrderListFilters) {
+  if (filters.riskFilter === 'delivery_overdue') {
+    return '逾期待发货';
+  }
+  return STATUS_FILTER_LABELS[filters.statusFilter ?? 'all'] ?? '有效订单';
+}
+
+function statusTabLabel(
+  status: React.ComponentProps<typeof Badge>['status'],
+  label: string,
+  count?: number,
+) {
+  return (
+    <Space size={6}>
+      <Badge status={status} />
+      <span>{label}</span>
+      {typeof count === 'number' ? (
+        <Typography.Text type="secondary">{count}</Typography.Text>
+      ) : null}
+    </Space>
   );
 }
 
@@ -169,20 +251,19 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       dataIndex: 'riskStatus',
       search: false,
       width: 110,
-      render: (_, record) => (
+      render: (_, record) =>
         record.isDeliveryOverdue ? (
           <Tag color="error">逾期 {record.deliveryOverdueDays} 天</Tag>
         ) : (
           '-'
-        )
-      ),
+        ),
     },
     {
       title: '状态',
       dataIndex: 'statusFilter',
       valueType: 'select',
       hideInTable: true,
-      initialValue: 'unfinished',
+      initialValue: 'all',
       valueEnum: {
         all: { text: '有效订单' },
         unfinished: { text: '未完成' },
@@ -255,7 +336,7 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       dataIndex: 'sortBy',
       valueType: 'select',
       hideInTable: true,
-      initialValue: 'unfinished_first',
+      initialValue: 'latest',
       valueEnum: {
         unfinished_first: { text: '未完成优先' },
         order_date_desc: { text: '最新订单' },
@@ -283,7 +364,10 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
         const actionItems = orderActionCandidates(record);
         const primaryAction = actionItems[0];
         const secondaryItems = [
-          { key: 'view', label: <Link to={orderDetailPath(record)}>查看</Link> },
+          {
+            key: 'view',
+            label: <Link to={orderDetailPath(record)}>查看</Link>,
+          },
           ...actionItems.slice(1).map((item) => ({
             key: item.key,
             label: (
@@ -318,22 +402,43 @@ const SalesOrdersPage: React.FC = () => {
   const formRef = useRef<ProFormInstance | undefined>(undefined);
   const [summary, setSummary] = useState<SalesOrderSearchSummary>();
   const { defaultCompany } = useWorkspacePreferences();
+  const [activeFilters, setActiveFilters] = useState<SalesOrderListFilters>({
+    company: defaultCompany,
+    ...DEFAULT_LIST_FILTERS,
+  });
   const columns = buildColumns(defaultCompany);
   const pendingCount =
     (summary?.deliveryCount ?? 0) + (summary?.paymentCount ?? 0);
+  const activeViewTitle = resolveViewTitle(activeFilters);
+  const applyTableFilters = (updates: SalesOrderListFilters) => {
+    const nextValues = {
+      ...(formRef.current?.getFieldsValue?.() ?? {}),
+      ...updates,
+    };
+    formRef.current?.setFieldsValue(nextValues);
+    setActiveFilters(normalizeListFilters(nextValues));
+    void Promise.resolve().then(() => formRef.current?.submit?.());
+  };
   const applyStatusFilter = (
-    statusFilter: 'all' | 'unfinished' | 'delivering' | 'paying',
+    statusFilter: StatusViewKey,
     riskFilter = 'all',
   ) => {
-    formRef.current?.setFieldsValue({
+    applyTableFilters({
       riskFilter,
-      sortBy: statusFilter === 'all' ? 'latest' : 'unfinished_first',
+      sortBy:
+        statusFilter === 'all' ||
+        statusFilter === 'completed' ||
+        statusFilter === 'cancelled'
+          ? 'latest'
+          : 'unfinished_first',
       statusFilter,
     });
-    void actionRef.current?.reload(true);
+  };
+  const showDeliveryOverdueOrders = () => {
+    applyStatusFilter('delivering', 'delivery_overdue');
   };
   const showAllOrders = () => {
-    formRef.current?.setFieldsValue({
+    applyTableFilters({
       company: undefined,
       customer: undefined,
       dateRange: undefined,
@@ -342,8 +447,39 @@ const SalesOrdersPage: React.FC = () => {
       sortBy: 'latest',
       statusFilter: 'all',
     });
-    void actionRef.current?.reload(true);
   };
+  const statusViewValue = (activeFilters.statusFilter ??
+    'all') as StatusViewKey;
+  const statusTabItems = [
+    {
+      key: 'all',
+      label: statusTabLabel('default', '全部有效订单'),
+    },
+    {
+      key: 'unfinished',
+      label: statusTabLabel('warning', '未完成', summary?.unfinishedCount ?? 0),
+    },
+    {
+      key: 'delivering',
+      label: statusTabLabel(
+        'processing',
+        '待发货',
+        summary?.deliveryCount ?? 0,
+      ),
+    },
+    {
+      key: 'paying',
+      label: statusTabLabel('warning', '待收款', summary?.paymentCount ?? 0),
+    },
+    {
+      key: 'completed',
+      label: statusTabLabel('success', '已完成', summary?.completedCount ?? 0),
+    },
+    {
+      key: 'cancelled',
+      label: statusTabLabel('default', '已作废', summary?.cancelledCount ?? 0),
+    },
+  ];
 
   return (
     <PageContainer
@@ -358,42 +494,65 @@ const SalesOrdersPage: React.FC = () => {
       ]}
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Card
+          extra={
+            <Button
+              danger={activeFilters.riskFilter === 'delivery_overdue'}
+              onClick={showDeliveryOverdueOrders}
+              type={
+                activeFilters.riskFilter === 'delivery_overdue'
+                  ? 'primary'
+                  : 'default'
+              }
+            >
+              逾期待发货 {summary?.deliveryOverdueCount ?? 0}
+            </Button>
+          }
+          size="small"
+          title="状态视图"
+          variant="borderless"
+        >
+          <Tabs
+            activeKey={statusViewValue}
+            items={statusTabItems}
+            onChange={(value) => applyStatusFilter(value as StatusViewKey)}
+            size="large"
+            tabBarStyle={{ marginBottom: 0 }}
+          />
+        </Card>
+
         <StatisticCard.Group direction="row">
           <StatisticCard
-            onClick={() => applyStatusFilter('unfinished')}
             statistic={{
               description: '发货、收款等仍需处理的订单',
-              title: '待处理订单',
+              status: 'warning',
+              title: '未完成',
               value: summary?.unfinishedCount ?? 0,
             }}
-            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
-            onClick={() => applyStatusFilter('delivering')}
             statistic={{
               description: '需要继续推进出库履约',
+              status: 'processing',
               title: '待发货',
               value: summary?.deliveryCount ?? 0,
             }}
-            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
-            onClick={() => applyStatusFilter('paying')}
             statistic={{
               description: '已履约或开票后仍待回款',
+              status: 'warning',
               title: '待收款',
               value: summary?.paymentCount ?? 0,
             }}
-            style={{ cursor: 'pointer' }}
           />
           <StatisticCard
-            onClick={() => applyStatusFilter('delivering', 'delivery_overdue')}
             statistic={{
-              description: `当前筛选中 ${summary?.visibleCount ?? 0}`,
+              description: '未完全发货且已超过交货日期',
+              status: 'error',
               title: '逾期待发货',
               value: summary?.deliveryOverdueCount ?? 0,
             }}
-            style={{ cursor: 'pointer' }}
           />
         </StatisticCard.Group>
 
@@ -428,21 +587,22 @@ const SalesOrdersPage: React.FC = () => {
             const dateRange = Array.isArray(params.dateRange)
               ? params.dateRange
               : [];
-            const statusFilter = params.statusFilter as any;
+            const nextFilters = normalizeListFilters(params);
             const result = await searchSalesOrders({
-              company: toOptionalText(params.company),
-              customer: toOptionalText(params.customer),
+              company: nextFilters.company,
+              customer: nextFilters.customer,
               dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
-              excludeCancelled: statusFilter !== 'cancelled',
+              excludeCancelled: nextFilters.statusFilter !== 'cancelled',
               limit: pageSize,
-              riskFilter: params.riskFilter as any,
-              searchKey: String(params.searchKey ?? ''),
-              sortBy: params.sortBy as any,
+              riskFilter: nextFilters.riskFilter as any,
+              searchKey: nextFilters.searchKey ?? '',
+              sortBy: nextFilters.sortBy as any,
               start: (current - 1) * pageSize,
-              statusFilter,
+              statusFilter: nextFilters.statusFilter as any,
             });
 
+            setActiveFilters(nextFilters);
             setSummary(result.summary);
 
             return {
@@ -465,16 +625,18 @@ const SalesOrdersPage: React.FC = () => {
               xxl: 3,
             },
           }}
-          toolbar={{
-            title: (
-              <Space size={8}>
-                <span>订单明细</span>
-                <Typography.Text type="secondary">
-                  待推进 {pendingCount}
-                </Typography.Text>
-              </Space>
-            ),
-          }}
+          headerTitle={
+            <Space size={8} wrap>
+              <span>订单明细</span>
+              <Tag color="blue">{activeViewTitle}</Tag>
+              <Typography.Text type="secondary">
+                共 {summary?.visibleCount ?? 0} 条
+              </Typography.Text>
+              <Typography.Text type="secondary">
+                待推进 {pendingCount}
+              </Typography.Text>
+            </Space>
+          }
         />
       </Space>
     </PageContainer>
