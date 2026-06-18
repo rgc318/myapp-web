@@ -16,7 +16,6 @@ import {
   Empty,
   Progress,
   Row,
-  Segmented,
   Space,
   Table,
   Tabs,
@@ -26,6 +25,7 @@ import {
 } from 'antd';
 import type { RangePickerProps } from 'antd/es/date-picker';
 import type { ColumnsType } from 'antd/es/table';
+import { createStyles } from 'antd-style';
 import dayjs, { type Dayjs } from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import {
@@ -49,11 +49,58 @@ import { formatCurrencyValue } from '@/utils/myapp-display';
 const { RangePicker } = DatePicker;
 const DEFAULT_LIMIT = 8;
 
+const useStyles = createStyles(({ token }) => ({
+  salesCard: {
+    '.ant-tabs-nav': {
+      marginBottom: 24,
+      paddingLeft: 16,
+      paddingRight: 24,
+    },
+    '.ant-tabs-nav-wrap .ant-tabs-tab': {
+      lineHeight: '24px',
+      paddingBottom: 14,
+      paddingTop: 16,
+    },
+    '.ant-tabs-extra-content': {
+      lineHeight: '55px',
+    },
+    [`@media screen and (max-width: ${token.screenMD}px)`]: {
+      '.ant-tabs-nav': {
+        paddingLeft: 16,
+        paddingRight: 16,
+      },
+    },
+  },
+  salesExtraWrap: {
+    alignItems: 'center',
+    display: 'flex',
+    gap: 24,
+    justifyContent: 'flex-end',
+    [`@media screen and (max-width: ${token.screenLG}px)`]: {
+      gap: 12,
+    },
+    [`@media screen and (max-width: ${token.screenMD}px)`]: {
+      alignItems: 'flex-start',
+      flexDirection: 'column',
+      lineHeight: 'normal',
+      paddingBottom: 12,
+    },
+  },
+  salesQuickRanges: {
+    display: 'flex',
+    gap: 8,
+    whiteSpace: 'nowrap',
+    [`@media screen and (max-width: ${token.screenLG}px)`]: {
+      display: 'none',
+    },
+  },
+}));
+
 type TimeType = 'today' | 'week' | 'month' | 'year';
-type SalesType = 'all' | 'online' | 'stores';
 type RangePickerValue = RangePickerProps['value'];
 
 type ChartDatum = {
+  fullName?: string;
   x: string;
   y: number;
 };
@@ -93,6 +140,25 @@ function formatNumber(value: number | null | undefined) {
   }).format(value ?? 0);
 }
 
+function formatCompactNumber(value: number | null | undefined) {
+  const amount = Number(value ?? 0);
+  const absAmount = Math.abs(amount);
+
+  if (absAmount >= 100000000) {
+    return `${formatNumber(amount / 100000000)}亿`;
+  }
+
+  if (absAmount >= 10000) {
+    return `${formatNumber(amount / 10000)}万`;
+  }
+
+  return formatNumber(amount);
+}
+
+function formatCompactCurrency(value: number | null | undefined) {
+  return `${formatCompactNumber(value)}元`;
+}
+
 function percent(value: number, total: number) {
   if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) {
     return 0;
@@ -101,20 +167,59 @@ function percent(value: number, total: number) {
   return Math.max(0, Math.min(100, Math.round((value / total) * 100)));
 }
 
-function toChartData(rows: TrendRow[]): ChartDatum[] {
-  return rows.map((row) => ({
-    x: dayjs(row.trendDate).format('MM-DD'),
-    y: row.amount,
-  }));
+function getRangeUnit(dateFrom?: string, dateTo?: string): 'day' | 'month' {
+  const start = dateFrom ? dayjs(dateFrom) : dayjs().startOf('year');
+  const end = dateTo ? dayjs(dateTo) : dayjs().endOf('year');
+  return end.diff(start, 'day') > 62 ? 'month' : 'day';
+}
+
+function toDashboardTrendData(
+  rows: TrendRow[],
+  dateFrom?: string,
+  dateTo?: string,
+): ChartDatum[] {
+  const unit = getRangeUnit(dateFrom, dateTo);
+  const start = (dateFrom ? dayjs(dateFrom) : dayjs().startOf('year')).startOf(
+    unit,
+  );
+  const end = (dateTo ? dayjs(dateTo) : dayjs().endOf('year')).startOf(unit);
+  const format = unit === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+  const labelFormat = unit === 'month' ? 'M月' : 'MM-DD';
+  const amountMap = new Map<string, number>();
+
+  rows.forEach((row) => {
+    const key = dayjs(row.trendDate).startOf(unit).format(format);
+    amountMap.set(key, (amountMap.get(key) ?? 0) + row.amount);
+  });
+
+  const chartRows: ChartDatum[] = [];
+  let cursor = start;
+  while (cursor.isBefore(end) || cursor.isSame(end)) {
+    const key = cursor.format(format);
+    chartRows.push({
+      fullName: key,
+      x: cursor.format(labelFormat),
+      y: amountMap.get(key) ?? 0,
+    });
+    cursor = cursor.add(1, unit);
+  }
+
+  return chartRows;
+}
+
+function toMiniTrendData(rows: ChartDatum[]) {
+  return rows.filter((row) => row.y > 0).length ? rows : rows.slice(-6);
 }
 
 function toRankingRows(rows: PartySummaryRow[]): RankingRow[] {
-  return rows.map((row) => ({
-    amount: row.totalAmount ?? row.amount ?? row.outstandingAmount ?? 0,
-    count: row.count,
-    key: row.name,
-    name: row.name,
-  }));
+  return rows
+    .map((row) => ({
+      amount: row.totalAmount ?? row.amount ?? row.outstandingAmount ?? 0,
+      count: row.count,
+      key: row.name,
+      name: row.name,
+    }))
+    .sort((a, b) => b.amount - a.amount);
 }
 
 function buildFocusRows(
@@ -143,10 +248,21 @@ function buildFocusRows(
 }
 
 function buildProductPieData(rows: ProductSummaryRow[]) {
-  return rows.slice(0, 8).map((row) => ({
+  const sortedRows = [...rows]
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  const topRows = sortedRows.slice(0, 5).map((row) => ({
+    fullName: row.itemName,
     x: row.itemName,
     y: row.amount,
   }));
+  const otherTotal = sortedRows
+    .slice(5)
+    .reduce((sum, row) => sum + row.amount, 0);
+
+  return otherTotal > 0
+    ? [...topRows, { fullName: '其他商品', x: '其他', y: otherTotal }]
+    : topRows;
 }
 
 function TrendText({
@@ -209,7 +325,7 @@ function RankingList({ rows, title }: { rows: RankingRow[]; title: string }) {
             <Typography.Text ellipsis style={{ flex: 1, marginRight: 8 }}>
               {item.name}
             </Typography.Text>
-            <span>{formatCurrencyValue(item.amount)}</span>
+            <span>{formatCompactCurrency(item.amount)}</span>
           </li>
         ))}
       </ul>
@@ -246,9 +362,9 @@ const focusColumns: ColumnsType<FocusRow> = [
 ];
 
 const Dashboard: React.FC = () => {
+  const { styles } = useStyles();
   const { defaultCompany } = useWorkspacePreferences();
   const [activeTab, setActiveTab] = useState('sales');
-  const [salesType, setSalesType] = useState<SalesType>('all');
   const [rangePickerValue, setRangePickerValue] = useState<RangePickerValue>(
     getTimeDistance('year'),
   );
@@ -330,8 +446,16 @@ const Dashboard: React.FC = () => {
   const overview = report?.overview;
   const tables = report?.tables;
   const stockSummary = inventoryData?.summary;
-  const salesChartData = toChartData(tables?.salesTrend ?? []);
-  const purchaseChartData = toChartData(tables?.purchaseTrend ?? []);
+  const salesChartData = toDashboardTrendData(
+    tables?.salesTrend ?? [],
+    dateFrom,
+    dateTo,
+  );
+  const purchaseChartData = toDashboardTrendData(
+    tables?.purchaseTrend ?? [],
+    dateFrom,
+    dateTo,
+  );
   const mainChartData =
     activeTab === 'sales' ? salesChartData : purchaseChartData;
   const mainRankingRows = useMemo(
@@ -358,11 +482,15 @@ const Dashboard: React.FC = () => {
     (sum, row) => sum + row.count,
     0,
   );
-  const cashflowData =
+  const cashflowData = toDashboardTrendData(
     tables?.cashflowTrend.map((row) => ({
-      x: dayjs(row.trendDate).format('MM-DD'),
-      y: Math.abs(row.inAmount - row.outAmount),
-    })) ?? [];
+      amount: Math.abs(row.inAmount - row.outAmount),
+      count: row.count,
+      trendDate: row.trendDate,
+    })) ?? [],
+    dateFrom,
+    dateTo,
+  );
   const collectionRate = percent(
     overview?.receivedAmountTotal ?? 0,
     (overview?.receivedAmountTotal ?? 0) +
@@ -400,7 +528,7 @@ const Dashboard: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={24} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={24} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
@@ -430,7 +558,7 @@ const Dashboard: React.FC = () => {
               chart={
                 <Area
                   axis={false}
-                  data={salesChartData}
+                  data={toMiniTrendData(salesChartData)}
                   height={46}
                   padding={-20}
                   shapeField="smooth"
@@ -480,7 +608,7 @@ const Dashboard: React.FC = () => {
               chart={
                 <Area
                   axis={false}
-                  data={purchaseChartData}
+                  data={toMiniTrendData(purchaseChartData)}
                   height={46}
                   padding={-20}
                   shapeField="smooth"
@@ -507,7 +635,7 @@ const Dashboard: React.FC = () => {
                     </Tooltip>
                   </Space>
                 ),
-                value: formatCurrencyValue(overview?.purchaseAmountTotal),
+                value: formatCompactCurrency(overview?.purchaseAmountTotal),
               }}
               variant="borderless"
             />
@@ -524,7 +652,7 @@ const Dashboard: React.FC = () => {
               chart={
                 <Column
                   axis={false}
-                  data={cashflowData}
+                  data={toMiniTrendData(cashflowData)}
                   height={46}
                   padding={-20}
                   scale={{ x: { paddingInner: 0.4 } }}
@@ -551,12 +679,14 @@ const Dashboard: React.FC = () => {
                     <ArrowDownOutlined />
                   ),
                 title: '净现金流',
-                value: formatCurrencyValue(overview?.netCashflowTotal),
-                valueStyle: {
-                  color:
-                    (overview?.netCashflowTotal ?? 0) >= 0
-                      ? '#1677ff'
-                      : '#cf1322',
+                value: formatCompactCurrency(overview?.netCashflowTotal),
+                styles: {
+                  content: {
+                    color:
+                      (overview?.netCashflowTotal ?? 0) >= 0
+                        ? '#1677ff'
+                        : '#cf1322',
+                  },
                 },
               }}
               variant="borderless"
@@ -602,6 +732,7 @@ const Dashboard: React.FC = () => {
         >
           <Tabs
             activeKey={activeTab}
+            className={styles.salesCard}
             items={[
               {
                 key: 'sales',
@@ -616,6 +747,8 @@ const Dashboard: React.FC = () => {
                             y: {
                               gridLineDash: null,
                               gridStroke: '#ccc',
+                              labelFormatter: (value: number) =>
+                                formatCompactNumber(value),
                               title: false,
                             },
                           }}
@@ -623,7 +756,12 @@ const Dashboard: React.FC = () => {
                           height={300}
                           paddingBottom={12}
                           scale={{ x: { paddingInner: 0.4 } }}
-                          tooltip={{ channel: 'y', name: '销售额' }}
+                          tooltip={{
+                            channel: 'y',
+                            name: '销售额',
+                            valueFormatter: (value: number) =>
+                              formatCurrencyValue(value),
+                          }}
                           xField="x"
                           yField="y"
                         />
@@ -648,13 +786,22 @@ const Dashboard: React.FC = () => {
                         <Column
                           axis={{
                             x: { title: false },
-                            y: { title: false },
+                            y: {
+                              labelFormatter: (value: number) =>
+                                formatCompactNumber(value),
+                              title: false,
+                            },
                           }}
                           data={mainChartData}
                           height={300}
                           paddingBottom={12}
                           scale={{ x: { paddingInner: 0.4 } }}
-                          tooltip={{ channel: 'y', name: '采购额' }}
+                          tooltip={{
+                            channel: 'y',
+                            name: '采购额',
+                            valueFormatter: (value: number) =>
+                              formatCurrencyValue(value),
+                          }}
                           xField="x"
                           yField="y"
                         />
@@ -673,34 +820,35 @@ const Dashboard: React.FC = () => {
             onChange={setActiveTab}
             size="large"
             tabBarExtraContent={
-              <Space wrap>
-                {(['today', 'week', 'month', 'year'] as TimeType[]).map(
-                  (type) => (
-                    <Button
-                      key={type}
-                      onClick={() => selectDate(type)}
-                      type={isActive(type) ? 'link' : 'text'}
-                    >
-                      {
+              <div className={styles.salesExtraWrap}>
+                <div className={styles.salesQuickRanges}>
+                  {(['today', 'week', 'month', 'year'] as TimeType[]).map(
+                    (type) => (
+                      <Button
+                        key={type}
+                        onClick={() => selectDate(type)}
+                        type={isActive(type) ? 'link' : 'text'}
+                      >
                         {
-                          today: '今日',
-                          week: '本周',
-                          month: '本月',
-                          year: '本年',
-                        }[type]
-                      }
-                    </Button>
-                  ),
-                )}
+                          {
+                            today: '今日',
+                            week: '本周',
+                            month: '本月',
+                            year: '本年',
+                          }[type]
+                        }
+                      </Button>
+                    ),
+                  )}
+                </div>
                 <RangePicker
                   onChange={setRangePickerValue}
                   style={{ width: 256 }}
                   value={rangePickerValue}
                   variant="filled"
                 />
-              </Space>
+              </div>
             }
-            tabBarStyle={{ marginBottom: 24 }}
           />
         </Card>
 
@@ -728,7 +876,7 @@ const Dashboard: React.FC = () => {
                   </Typography.Title>
                   <Area
                     axis={false}
-                    data={salesChartData}
+                    data={toMiniTrendData(salesChartData)}
                     height={45}
                     padding={-12}
                     shapeField="smooth"
@@ -748,7 +896,7 @@ const Dashboard: React.FC = () => {
                   </Typography.Title>
                   <Area
                     axis={false}
-                    data={purchaseChartData}
+                    data={toMiniTrendData(purchaseChartData)}
                     height={45}
                     padding={-12}
                     shapeField="smooth"
@@ -780,17 +928,6 @@ const Dashboard: React.FC = () => {
             xs={24}
           >
             <Card
-              extra={
-                <Segmented
-                  onChange={(value) => setSalesType(value as SalesType)}
-                  options={[
-                    { label: '全部渠道', value: 'all' },
-                    { label: '线上', value: 'online' },
-                    { label: '门店', value: 'stores' },
-                  ]}
-                  value={salesType}
-                />
-              }
               loading={loading && !report}
               style={{ height: '100%' }}
               title="销售额类别占比"
@@ -800,18 +937,22 @@ const Dashboard: React.FC = () => {
                 <>
                   <Typography.Text>销售额</Typography.Text>
                   <Pie
+                    height={340}
+                    radius={0.8}
+                    innerRadius={0.5}
                     angleField="y"
                     colorField="x"
                     data={pieData}
-                    height={340}
-                    innerRadius={0.5}
+                    legend={false}
                     label={{
                       position: 'spider',
-                      text: (item: { x: string; y: number }) =>
-                        `${item.x}: ${formatNumber(item.y)}`,
+                      text: (item: ChartDatum) =>
+                        `${item.x}: ${formatCompactNumber(item.y)}`,
                     }}
-                    legend={false}
-                    radius={0.8}
+                    tooltip={{
+                      valueFormatter: (value: number) =>
+                        formatCurrencyValue(value),
+                    }}
                   />
                 </>
               ) : (

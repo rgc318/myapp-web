@@ -52,6 +52,32 @@
 
 当前首页 `/dashboard` 已按官方 `dashboard/analysis` 的结构改造：顶部 KPI 卡片、中部趋势图与排行、底部关注事项与占比图，并使用 `@ant-design/plots` 接真实报表和库存接口数据。
 
+### 1.2 控制台告警与本地资源排障规范
+
+前端联调时应区分“会影响功能的资源错误”和“短期兼容告警”。
+
+必须处理：
+
+- `Unexpected token '<'` 出现在 `.js` chunk：说明浏览器把 HTML 当 JavaScript 执行。通常是 dev server 重启、重新编译或浏览器缓存导致旧 chunk 文件名已失效，服务端 fallback 返回了 `index.html`。处理方式是强刷页面，必要时清理 `src/.umi`、`src/.umi-production`、`node_modules/.cache`、`dist` 后只启动一个 dev server。
+- `Refused to apply style ... MIME type ('text/html')`：说明 CSS 请求返回了 HTML。当前 Umi dev HTML 会引用 `/umi.css`，项目已在 `public/umi.css` 提供空 CSS 兜底；不要删除该文件，除非确认 Umi dev HTML 不再引用它。
+- 图表运行时报 `ownerDocument`、`destroyed` 等 G2/G2Plot 内部错误：优先检查是否引入了非官方或不兼容的图表配置。Dashboard 饼图应保持官方 `Pie` + `label.position = 'spider'` 的配置方式，不要加入会破坏 legend/label 渲染生命周期的自定义 legend 配置。
+
+建议处理：
+
+- `[React Intl] Missing message: "menu.xxx"`：不会阻止渲染，但应补齐 `src/locales/zh-CN/menu.ts` 和 `src/locales/en-US/menu.ts`，避免菜单和页面标题 fallback。
+- Ant Design / ProComponents `deprecated` 告警：短期不影响功能，但新开发代码应使用新版 API。例如 `Dropdown` 使用 `classNames.root`，`Space` 使用 `orientation`，`Statistic` 样式使用 `styles.content`，不要继续新增旧属性。
+
+开发环境建议：
+
+- 固定端口优先使用 `npm run start:dev -- --port 8001`。
+- 不要同时启动多个 Umi dev server 指向同一个工作区；并发 dev/build 容易造成 `.umi`、chunk manifest 和浏览器缓存不一致。
+- 如果出现旧 chunk 或 `.umi/exports` 解析问题，先停止多余 dev server，再执行：
+
+```bash
+rm -rf src/.umi src/.umi-production node_modules/.cache dist
+npm run start:dev -- --port 8001
+```
+
 ## 2. 后端文档来源
 
 后端文档是接口事实来源：

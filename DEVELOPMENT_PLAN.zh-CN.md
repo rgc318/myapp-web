@@ -109,6 +109,11 @@ UI 规范：
 - 已按官方 `dashboard/analysis` 结构改造为顶部 KPI 卡片、中部趋势图与排行、底部关注事项和占比图。
 - 已新增 `@ant-design/plots`，图表使用官方图表组件。
 - 已具备 loading、error、empty、刷新和日期范围筛选。
+- 已将趋势数据按日期范围聚合为日 / 月粒度，并填充空周期，避免年度图表只显示零散日期。
+- 销售额类别占比使用官方风格 `Pie` 外部 `spider` 标签和连接线，饼图数据按 Top 5 + 其他聚合。
+- 已修正本地 `rgc (Demo)` 演示库中 16 条 Camera 异常高价销售订单，并通过后端服务补充多商品演示销售订单；相关数据库备份表为 `myapp_dashboard_demo_so_backup_20260617` 和 `myapp_dashboard_demo_soi_backup_20260617`。
+- 首页控制台告警已纳入收尾项：补齐菜单国际化 key、替换 Ant Design / ProComponents deprecated API、提供 `public/umi.css` 处理 Umi dev HTML 的样式资源引用。
+- 后续优化首页时仍应优先对齐官方 `dashboard/analysis` 结构，视觉问题先判断是数据分布、官方组件配置还是局部间距问题，再决定是否新增后端演示数据或前端样式。
 
 ## 阶段 2：销售查询模块
 

@@ -49,6 +49,34 @@ Rules:
 - Avoid hand-written SVG charts, arbitrary page-level styling, and custom visual systems when an official Ant Design Pro pattern already covers the use case.
 - Backend integration, field mapping, permissions, and error handling must still use this project's `src/services/myapp/*` domain layer.
 
+## Console And Dev Resource Rule
+
+Treat console output by severity.
+
+Must fix:
+
+- `Unexpected token '<'` for a `.js` chunk means the browser requested a stale JavaScript chunk and received HTML, usually `index.html`, from the dev server fallback. Stop duplicate dev servers, hard refresh, and if needed clean `src/.umi`, `src/.umi-production`, `node_modules/.cache`, and `dist`.
+- CSS MIME errors such as `/umi.css` returning `text/html` mean the stylesheet request received HTML. The project keeps `public/umi.css` as a dev-server compatibility stub because the Umi dev HTML can reference `/umi.css`.
+- G2/G2Plot runtime errors such as `ownerDocument` or `destroyed` should be treated as chart configuration issues first. For the dashboard pie chart, keep the official-style `Pie` with `label.position = 'spider'` and avoid custom legend configuration that conflicts with the renderer lifecycle.
+
+Should fix:
+
+- `[React Intl] Missing message: "menu.xxx"` does not block rendering, but menu keys should be added to both `src/locales/zh-CN/menu.ts` and `src/locales/en-US/menu.ts`.
+- Ant Design / ProComponents deprecation warnings should be cleaned when touching the file. Use current APIs such as `Dropdown.classNames.root`, `Space.orientation`, and `Statistic.styles.content`.
+
+Local dev command when using the agreed fixed port:
+
+```bash
+npm run start:dev -- --port 8001
+```
+
+If chunk or `.umi/exports` issues persist:
+
+```bash
+rm -rf src/.umi src/.umi-production node_modules/.cache dist
+npm run start:dev -- --port 8001
+```
+
 ## Related Backend Docs
 
 Backend docs remain the source of truth.
