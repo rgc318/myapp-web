@@ -171,7 +171,8 @@ Sales order status and sorting conventions:
 - The sales order list uses `RemoteLinkSelect` for both company and customer filters.
 - Sales order summary cards are interactive status shortcuts. Keep their target filters aligned with backend `status_filter` values.
 - Sales order row actions must be driven by backend `actions` flags from `search_sales_orders_v2`; do not duplicate action eligibility rules in the list page. Action links may pass `?action=delivery|invoice|payment` so the detail page can focus the matching action area.
-- Sales order delivery risk indicators must use backend `risk` fields such as `is_delivery_overdue` and `delivery_overdue_days`.
+- Sales order delivery risk indicators and filters must use backend `risk_filter` / `risk` fields. `risk_filter=delivery_overdue` means undelivered orders whose delivery date is before today.
+- Keep sales order date fields and risk indicators visually separate in tables. For example, show `deliveryDate` in the delivery date column and overdue tags in a dedicated exception/risk column.
 
 Purchase order status and sorting conventions:
 

@@ -181,7 +181,12 @@ describe('myapp domain services', () => {
           },
         ],
         pagination: { has_more: true, total_count: 30 },
-        summary: { total_count: 31, visible_count: 1, unfinished_count: 1 },
+        summary: {
+          delivery_overdue_count: 1,
+          total_count: 31,
+          visible_count: 1,
+          unfinished_count: 1,
+        },
       },
       meta: {},
       raw: {},
@@ -204,6 +209,7 @@ describe('myapp domain services', () => {
     });
     expect(result.summary.totalCount).toBe(31);
     expect(result.summary.visibleCount).toBe(30);
+    expect(result.summary.deliveryOverdueCount).toBe(1);
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ search_key: 'SO-0001' }),
@@ -226,6 +232,25 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ customer: 'ACME' }),
+    );
+  });
+
+  it('passes risk filter to sales order search', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchSalesOrders({ riskFilter: 'delivery_overdue' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_sales_orders_v2',
+      expect.objectContaining({ risk_filter: 'delivery_overdue' }),
     );
   });
 

@@ -19,6 +19,8 @@ export type SalesOrderSort =
   | 'amount_desc'
   | 'amount_asc';
 
+export type SalesOrderRiskFilter = 'all' | 'delivery_overdue';
+
 export type SalesOrderSummary = {
   canCancelOrder: boolean;
   canCreateSalesInvoice: boolean;
@@ -48,6 +50,7 @@ export type SalesOrderSearchSummary = {
   paymentCount: number;
   completedCount: number;
   cancelledCount: number;
+  deliveryOverdueCount: number;
 };
 
 export type SearchSalesOrdersParams = {
@@ -58,6 +61,7 @@ export type SearchSalesOrdersParams = {
   excludeCancelled?: boolean;
   limit?: number;
   searchKey?: string;
+  riskFilter?: SalesOrderRiskFilter;
   sortBy?: SalesOrderSort;
   start?: number;
   statusFilter?: SalesOrderStatusFilter;
@@ -479,6 +483,7 @@ export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
             ? 1
             : 0,
       sort_by: params.sortBy ?? 'unfinished_first',
+      risk_filter: params.riskFilter ?? 'all',
       limit: params.limit,
       start: params.start,
     },
@@ -501,6 +506,7 @@ export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
       paymentCount: Number(summary.payment_count ?? 0),
       completedCount: Number(summary.completed_count ?? 0),
       cancelledCount: Number(summary.cancelled_count ?? 0),
+      deliveryOverdueCount: Number(summary.delivery_overdue_count ?? 0),
     } satisfies SalesOrderSearchSummary,
   };
 }

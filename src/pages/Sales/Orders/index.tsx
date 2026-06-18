@@ -147,6 +147,7 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
     {
       title: '订单日期',
       dataIndex: 'dateRange',
+      colSize: 2,
       valueType: 'dateRange',
       hideInTable: true,
     },
@@ -160,14 +161,20 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       title: '交货日期',
       dataIndex: 'deliveryDate',
       search: false,
-      width: 150,
+      width: 120,
+      render: (_, record) => record.deliveryDate || '-',
+    },
+    {
+      title: '异常',
+      dataIndex: 'riskStatus',
+      search: false,
+      width: 110,
       render: (_, record) => (
-        <Space size={6}>
-          <span>{record.deliveryDate || '-'}</span>
-          {record.isDeliveryOverdue ? (
-            <Tag color="error">逾期 {record.deliveryOverdueDays} 天</Tag>
-          ) : null}
-        </Space>
+        record.isDeliveryOverdue ? (
+          <Tag color="error">逾期 {record.deliveryOverdueDays} 天</Tag>
+        ) : (
+          '-'
+        )
       ),
     },
     {
@@ -183,6 +190,17 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
         paying: { text: '待收款' },
         completed: { text: '已完成' },
         cancelled: { text: '已作废' },
+      },
+    },
+    {
+      title: '异常',
+      dataIndex: 'riskFilter',
+      valueType: 'select',
+      hideInTable: true,
+      initialValue: 'all',
+      valueEnum: {
+        all: { text: '不限' },
+        delivery_overdue: { text: '逾期待发货' },
       },
     },
     {
@@ -305,8 +323,10 @@ const SalesOrdersPage: React.FC = () => {
     (summary?.deliveryCount ?? 0) + (summary?.paymentCount ?? 0);
   const applyStatusFilter = (
     statusFilter: 'all' | 'unfinished' | 'delivering' | 'paying',
+    riskFilter = 'all',
   ) => {
     formRef.current?.setFieldsValue({
+      riskFilter,
       sortBy: statusFilter === 'all' ? 'latest' : 'unfinished_first',
       statusFilter,
     });
@@ -318,6 +338,7 @@ const SalesOrdersPage: React.FC = () => {
       customer: undefined,
       dateRange: undefined,
       searchKey: undefined,
+      riskFilter: 'all',
       sortBy: 'latest',
       statusFilter: 'all',
     });
@@ -366,13 +387,11 @@ const SalesOrdersPage: React.FC = () => {
             style={{ cursor: 'pointer' }}
           />
           <StatisticCard
-            onClick={() => applyStatusFilter('all')}
+            onClick={() => applyStatusFilter('delivering', 'delivery_overdue')}
             statistic={{
-              description: `已完成 ${summary?.completedCount ?? 0}，已作废 ${
-                summary?.cancelledCount ?? 0
-              }`,
-              title: '当前结果',
-              value: summary?.visibleCount ?? 0,
+              description: `当前筛选中 ${summary?.visibleCount ?? 0}`,
+              title: '逾期待发货',
+              value: summary?.deliveryOverdueCount ?? 0,
             }}
             style={{ cursor: 'pointer' }}
           />
@@ -417,6 +436,7 @@ const SalesOrdersPage: React.FC = () => {
               dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
               excludeCancelled: statusFilter !== 'cancelled',
               limit: pageSize,
+              riskFilter: params.riskFilter as any,
               searchKey: String(params.searchKey ?? ''),
               sortBy: params.sortBy as any,
               start: (current - 1) * pageSize,
@@ -442,7 +462,7 @@ const SalesOrdersPage: React.FC = () => {
               sm: 12,
               xl: 6,
               xs: 24,
-              xxl: 4,
+              xxl: 3,
             },
           }}
           toolbar={{
