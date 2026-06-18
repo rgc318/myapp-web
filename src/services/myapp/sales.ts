@@ -14,6 +14,7 @@ export type SalesOrderStatusFilter =
 export type SalesOrderSort =
   | 'unfinished_first'
   | 'latest'
+  | 'order_date_desc'
   | 'oldest'
   | 'amount_desc'
   | 'amount_asc';

@@ -582,7 +582,10 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 当前页面：
 
-- `/sales/orders` 已接入列表查询、筛选、分页和汇总。
+- `/sales/orders` 已接入列表查询、筛选、分页和汇总；排序支持“未完成优先”“最新订单”“最近更新”“最早订单”“金额从高到低”“金额从低到高”。
+- `/sales/orders` 的“最新订单”对应后端 `order_date_desc`，按订单日期排序；“最近更新”对应 `latest`，按最后修改时间排序，两者不能混用。
+- `/sales/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 只表示已全部发货且已全部开票收款结清，不以未收金额为 0 单独判定。
+- `/sales/orders` 列表展示状态时不要直接把后端技术值 `fulfillment.status = pending` 展示成泛化“待处理”，销售语义应显示为“待发货”。
 - `/sales/orders/new` 已接入销售订单新建，支持客户、公司、默认仓库、日期、批发 / 零售模式、联系人、电话、收货地址、备注、商品搜索选择、单位换算、默认价格、库存参考、保存订单和快捷下单。
 - `/sales/orders/:name/edit` 已接入销售订单编辑，支持加载现有订单、补全商品单位和价格上下文、编辑收货信息和商品明细，并调用 `update_order_v2` / `update_order_items_v2` 保存。
 - `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细，并支持按明细行填写本次数量创建发货单 / 销售发票、选择具体销售发票并按金额和付款方式登记收款、快捷回退下游单据、取消销售订单。

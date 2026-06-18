@@ -194,6 +194,50 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('passes cancelled visibility when searching cancelled sales orders', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchSalesOrders({
+      excludeCancelled: false,
+      statusFilter: 'cancelled',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_sales_orders_v2',
+      expect.objectContaining({
+        exclude_cancelled: 0,
+        status_filter: 'cancelled',
+      }),
+    );
+  });
+
+  it('passes newest order sorting to sales order search', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchSalesOrders({ sortBy: 'order_date_desc' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_sales_orders_v2',
+      expect.objectContaining({ sort_by: 'order_date_desc' }),
+    );
+  });
+
   it('maps sales order detail rows and references', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {

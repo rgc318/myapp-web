@@ -169,6 +169,7 @@ UI 规范：
 当前状态：
 
 - 已新增 `/sales/orders` 销售订单列表。
+- `/sales/orders` 已对齐 mobile 的销售订单工作台口径：已完成按“已全部发货 + 已全部开票收款结清”判断，已作废查询传 `excludeCancelled=false`，排序区分“最新订单(order_date_desc)”和“最近更新(latest)”。
 - 已新增 `/sales/orders/new` 销售订单新建页，接入客户销售上下文、商品选择、批发 / 零售默认单位和价格、单位换算、金额合计、保存订单和快捷下单。
 - 已新增 `/sales/orders/:name/edit` 销售订单编辑页，复用商品选择、Link 选择和销售订单行编辑组件，接入 `update_order_v2` 和 `update_order_items_v2`。
 - 已新增 `/sales/returns/new` 销售退货页，支持基于销售发货单或销售发票读取可退明细并提交独立退货单。

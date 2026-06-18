@@ -114,13 +114,20 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
       dataIndex: 'company',
       hideInTable: true,
       initialValue: defaultCompany,
-      formItemRender: (_, { onChange, value }) => (
+      formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
-          onChange={onChange}
+          onChange={(nextValue) => {
+            const company = toOptionalText(nextValue);
+            form.setFieldValue?.('company', company);
+            onChange?.(company);
+          }}
           placeholder="搜索公司"
           style={{ width: '100%' }}
-          value={value}
+          value={
+            toOptionalText(value) ??
+            toOptionalText(form.getFieldValue?.('company'))
+          }
         />
       ),
     },

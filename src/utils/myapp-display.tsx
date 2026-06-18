@@ -104,13 +104,19 @@ export function formatStatusLabel(value: string | null | undefined) {
   return statusLabelMap[normalized.toLowerCase()] ?? normalized;
 }
 
-export function StatusTag({ value }: { value: string | null | undefined }) {
+export function StatusTag({
+  label,
+  value,
+}: {
+  label?: string;
+  value: string | null | undefined;
+}) {
   const normalized =
     typeof value === 'string' ? value.trim().toLowerCase() : '';
 
   return (
     <Tag color={statusColorMap[normalized] ?? 'default'}>
-      {formatStatusLabel(value)}
+      {label ?? formatStatusLabel(value)}
     </Tag>
   );
 }

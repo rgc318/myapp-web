@@ -158,8 +158,16 @@ Detailed request/response contracts should be read from the backend API document
   - posting date
 - Key actions:
   - filter by company, customer, date range, and status
+  - sort by unfinished-first, newest order date, latest update time, oldest order date, and amount
   - open detail page
   - create a sales order with customer context, product selection, sales mode, UOM conversion, default pricing, and quick create
+
+Sales order status and sorting conventions:
+
+- `completed` means fully delivered and fully invoiced/paid. Do not treat zero outstanding amount without invoices as completed.
+- `cancelled` searches must pass `excludeCancelled: false`; the normal effective-order view excludes cancelled rows.
+- `order_date_desc` means newest order by `transaction_date`; `latest` means latest update by `modified`.
+- Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
 
 ### Shared Components
 
