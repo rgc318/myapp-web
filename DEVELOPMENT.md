@@ -168,6 +168,9 @@ Sales order status and sorting conventions:
 - `cancelled` searches must pass `excludeCancelled: false`; the normal effective-order view excludes cancelled rows.
 - `order_date_desc` means newest order by `transaction_date`; `latest` means latest update by `modified`.
 - Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
+- The sales order list uses `RemoteLinkSelect` for both company and customer filters.
+- Sales order summary cards are interactive status shortcuts. Keep their target filters aligned with backend `status_filter` values.
+- Sales order row actions must be driven by backend `actions` flags from `search_sales_orders_v2`; do not duplicate action eligibility rules in the list page.
 
 Purchase order status and sorting conventions:
 
