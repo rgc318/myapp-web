@@ -73,6 +73,15 @@ export type SearchSalesOrdersParams = {
   statusFilter?: SalesOrderStatusFilter;
 };
 
+export type ExportSalesOrdersResult = {
+  content: string;
+  exportedCount: number;
+  filename: string;
+  limit: number;
+  mimeType: string;
+  truncated: boolean;
+};
+
 export type SalesOrderDetail = SalesOrderSummary & {
   canCancelOrder: boolean;
   currency: string;
@@ -518,6 +527,41 @@ export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
       paymentOverdueCount: Number(summary.payment_overdue_count ?? 0),
     } satisfies SalesOrderSearchSummary,
   };
+}
+
+export async function exportSalesOrders(
+  params: Omit<SearchSalesOrdersParams, 'start'> = {},
+) {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'export_sales_orders_v2',
+    {
+      search_key: normalizeOptionalText(params.searchKey),
+      customer: normalizeOptionalText(params.customer),
+      company: normalizeOptionalText(params.company),
+      date_from: normalizeOptionalText(params.dateFrom),
+      date_to: normalizeOptionalText(params.dateTo),
+      status_filter: params.statusFilter ?? 'all',
+      exclude_cancelled:
+        params.excludeCancelled === undefined
+          ? 1
+          : params.excludeCancelled
+            ? 1
+            : 0,
+      sort_by: params.sortBy ?? 'latest',
+      risk_filter: params.riskFilter ?? 'all',
+      limit: params.limit,
+    },
+  );
+  const data = result.data ?? {};
+
+  return {
+    content: String(data.content ?? ''),
+    exportedCount: Number(data.exported_count ?? 0),
+    filename: String(data.filename ?? 'sales-orders.csv'),
+    limit: Number(data.limit ?? 0),
+    mimeType: String(data.mime_type ?? 'text/csv;charset=utf-8'),
+    truncated: Boolean(data.truncated),
+  } satisfies ExportSalesOrdersResult;
 }
 
 export async function getSalesOrderDetail(

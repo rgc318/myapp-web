@@ -58,6 +58,7 @@ import {
   cancelSalesInvoice,
   createSalesOrderV2,
   createSalesOrderInvoice,
+  exportSalesOrders,
   getSalesReturnSourceContext,
   getCustomerSalesContext,
   getSalesOrderDetail,
@@ -276,6 +277,45 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ risk_filter: 'payment_overdue' }),
+    );
+  });
+
+  it('exports sales orders with current filters', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        content: '订单号\nSO-0001',
+        exported_count: 1,
+        filename: 'sales-orders.csv',
+        limit: 1000,
+        mime_type: 'text/csv;charset=utf-8',
+        truncated: false,
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await exportSalesOrders({
+      company: 'rgc (Demo)',
+      limit: 1000,
+      riskFilter: 'payment_overdue',
+      sortBy: 'latest',
+      statusFilter: 'paying',
+    });
+
+    expect(result).toMatchObject({
+      exportedCount: 1,
+      filename: 'sales-orders.csv',
+      truncated: false,
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'export_sales_orders_v2',
+      expect.objectContaining({
+        company: 'rgc (Demo)',
+        limit: 1000,
+        risk_filter: 'payment_overdue',
+        sort_by: 'latest',
+        status_filter: 'paying',
+      }),
     );
   });
 

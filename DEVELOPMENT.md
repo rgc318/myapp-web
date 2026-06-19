@@ -170,10 +170,11 @@ Sales order status and sorting conventions:
 - Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
 - The sales order list uses `RemoteLinkSelect` for both company and customer filters.
 - Sales order status switching should live in the status view toolbar. Summary cards are overview metrics by default; do not make them implicit filters unless the page explicitly uses a selectable-card pattern.
-- Sales order status views should expose "all active orders" as the first-class default view, preferably as a card-contained `Tabs` toolbar with the risk action kept beside the tabs. Summary cards should be treated as overview metrics unless a page explicitly needs a selectable card pattern.
+- Sales order status views should expose "all active orders" as the first-class default view, preferably as a card-contained `Tabs` toolbar with the risk action kept beside the tabs.
 - Sales order row actions must be driven by backend `actions` flags from `search_sales_orders_v2`; do not duplicate action eligibility rules in the list page. Action links may pass `?action=delivery|invoice|payment` so the detail page can focus the matching action area.
 - Sales order risk indicators and filters must use backend `risk_filter` / `risk` fields. `delivery_overdue` means undelivered orders whose delivery date is before today; `payment_overdue` means orders with outstanding receivables whose delivery date is before today.
 - Keep sales order date fields and risk indicators visually separate in tables. For example, show `deliveryDate` in the delivery date column and overdue tags in a dedicated exception/risk column.
+- Sales order batch actions should use the official ProTable `rowSelection` plus `FooterToolbar` pattern. Client-side CSV export is acceptable for selected rows; full-result export should use `export_sales_orders_v2`.
 
 Purchase order status and sorting conventions:
 

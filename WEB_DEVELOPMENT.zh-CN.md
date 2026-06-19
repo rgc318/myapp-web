@@ -591,6 +591,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/orders` 行内操作入口必须消费 `search_sales_orders_v2` 摘要中的 `actions`，不要在列表页重复推导能否发货、开票、收款或作废；可通过 `?action=delivery|invoice|payment` 让详情页定位到对应动作区。
 - `/sales/orders` 交货逾期、收款逾期等风险提示和筛选必须消费后端 `risk_filter` / `risk` 字段；`delivery_overdue` 表示未完全发货且交货日期早于今天的订单，`payment_overdue` 表示仍有未收款且交货日期早于今天的订单。
 - `/sales/orders` 表格中日期字段和风险提示应分列展示，例如交货日期列只显示 `deliveryDate`，逾期标签放在独立“异常”列。
+- `/sales/orders` 批量操作应使用 ProTable 官方 `rowSelection` + `FooterToolbar` 模式；选中行的前端 CSV 导出可以在客户端完成，导出完整筛选结果应走 `export_sales_orders_v2`。
 - `/purchase/orders` 排序与销售订单保持同一语义：`order_date_desc` 是“最新订单”，按采购订单日期倒序；`latest` 是“最近更新”，按最后修改时间倒序。
 - `/purchase/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 表示已全部收货且已开票付款结清。
 - 报表、财务和各业务列表的公司筛选统一使用 `RemoteLinkSelect`；默认公司只作为初始筛选值，用户清空公司后必须查询全部公司，不能再回退默认公司。

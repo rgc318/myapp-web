@@ -4,6 +4,7 @@ import type {
   ProFormInstance,
 } from '@ant-design/pro-components';
 import {
+  FooterToolbar,
   PageContainer,
   ProTable,
   StatisticCard,
@@ -15,6 +16,7 @@ import {
   Card,
   Dropdown,
   Empty,
+  message,
   Space,
   Tabs,
   Tag,
@@ -26,6 +28,7 @@ import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
+  exportSalesOrders,
   type SalesOrderRiskFilter,
   type SalesOrderSearchSummary,
   type SalesOrderSummary,
@@ -169,6 +172,72 @@ function statusTabLabel(
       ) : null}
     </Space>
   );
+}
+
+function escapeCsvValue(value: unknown) {
+  const text = String(value ?? '');
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function downloadCsv(filename: string, rows: Array<Array<unknown>>) {
+  const csvText = rows
+    .map((row) => row.map((value) => escapeCsvValue(value)).join(','))
+    .join('\n');
+  const blob = new Blob([`\uFEFF${csvText}`], {
+    type: 'text/csv;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadTextFile(filename: string, content: string, mimeType: string) {
+  const blob = new Blob([`\uFEFF${content}`], {
+    type: mimeType || 'text/plain;charset=utf-8;',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildSalesOrdersCsvRows(rows: SalesOrderSummary[]) {
+  return [
+    [
+      '订单号',
+      '客户',
+      '公司',
+      '订单日期',
+      '交货日期',
+      '订单金额',
+      '未收金额',
+      '单据状态',
+      '履约状态',
+      '收款状态',
+      '最近更新',
+    ],
+    ...rows.map((row) => [
+      row.name,
+      row.customer,
+      row.company,
+      row.transactionDate,
+      row.deliveryDate,
+      row.amount ?? '',
+      row.outstandingAmount ?? '',
+      row.documentStatus,
+      row.fulfillmentStatus,
+      row.paymentStatus,
+      row.modified,
+    ]),
+  ];
 }
 
 function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
@@ -426,6 +495,9 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
 const SalesOrdersPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const formRef = useRef<ProFormInstance | undefined>(undefined);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [selectedRows, setSelectedRows] = useState<SalesOrderSummary[]>([]);
+  const [exporting, setExporting] = useState(false);
   const [summary, setSummary] = useState<SalesOrderSearchSummary>();
   const { defaultCompany } = useWorkspacePreferences();
   const [activeFilters, setActiveFilters] = useState<SalesOrderListFilters>({
@@ -436,6 +508,66 @@ const SalesOrdersPage: React.FC = () => {
   const pendingCount =
     (summary?.deliveryCount ?? 0) + (summary?.paymentCount ?? 0);
   const activeViewTitle = resolveViewTitle(activeFilters);
+  const selectedAmount = selectedRows.reduce(
+    (total, row) => total + Number(row.amount ?? 0),
+    0,
+  );
+  const selectedOutstandingAmount = selectedRows.reduce(
+    (total, row) => total + Number(row.outstandingAmount ?? 0),
+    0,
+  );
+  const copySelectedOrderNames = async () => {
+    if (!selectedRows.length) {
+      return;
+    }
+    const text = selectedRows.map((row) => row.name).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      messageApi.success(`已复制 ${selectedRows.length} 个订单号`);
+    } catch {
+      messageApi.error('复制失败，请检查浏览器剪贴板权限');
+    }
+  };
+  const exportSelectedOrders = () => {
+    if (!selectedRows.length) {
+      return;
+    }
+    downloadCsv(
+      `sales-orders-selected-${dayjs().format('YYYYMMDD-HHmmss')}.csv`,
+      buildSalesOrdersCsvRows(selectedRows),
+    );
+    messageApi.success(`已导出 ${selectedRows.length} 条订单`);
+  };
+  const buildCurrentSearchParams = () => ({
+    company: activeFilters.company,
+    customer: activeFilters.customer,
+    dateFrom: activeFilters.dateRange?.[0],
+    dateTo: activeFilters.dateRange?.[1],
+    excludeCancelled: activeFilters.statusFilter !== 'cancelled',
+    riskFilter: activeFilters.riskFilter as any,
+    searchKey: activeFilters.searchKey ?? '',
+    sortBy: activeFilters.sortBy as any,
+    statusFilter: activeFilters.statusFilter as any,
+  });
+  const exportCurrentFilterOrders = async () => {
+    setExporting(true);
+    try {
+      const result = await exportSalesOrders({
+        ...buildCurrentSearchParams(),
+        limit: 1000,
+      });
+      downloadTextFile(result.filename, result.content, result.mimeType);
+      messageApi.success(
+        result.truncated
+          ? `已导出前 ${result.exportedCount} 条订单，结果已达到导出上限`
+          : `已导出 ${result.exportedCount} 条订单`,
+      );
+    } catch (caught) {
+      messageApi.error(caught instanceof Error ? caught.message : '导出失败');
+    } finally {
+      setExporting(false);
+    }
+  };
   const applyTableFilters = (updates: SalesOrderListFilters) => {
     const nextValues = {
       ...(formRef.current?.getFieldsValue?.() ?? {}),
@@ -543,6 +675,7 @@ const SalesOrdersPage: React.FC = () => {
         </Button>,
       ]}
     >
+      {contextHolder}
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Card
           styles={{
@@ -681,6 +814,7 @@ const SalesOrdersPage: React.FC = () => {
 
             setActiveFilters(nextFilters);
             setSummary(result.summary);
+            setSelectedRows([]);
 
             return {
               data: result.items,
@@ -689,6 +823,12 @@ const SalesOrdersPage: React.FC = () => {
             };
           }}
           rowKey="name"
+          rowSelection={{
+            onChange: (_, rows) => {
+              setSelectedRows(rows);
+            },
+            selectedRowKeys: selectedRows.map((row) => row.name),
+          }}
           search={{
             collapseRender: false,
             defaultCollapsed: false,
@@ -714,7 +854,38 @@ const SalesOrdersPage: React.FC = () => {
               </Typography.Text>
             </Space>
           }
+          toolBarRender={() => [
+            <Button
+              key="export-current"
+              loading={exporting}
+              onClick={() => {
+                void exportCurrentFilterOrders();
+              }}
+            >
+              导出当前筛选
+            </Button>,
+          ]}
         />
+        {selectedRows.length > 0 ? (
+          <FooterToolbar
+            extra={
+              <Space size={16} wrap>
+                <span>
+                  已选 <strong>{selectedRows.length}</strong> 项
+                </span>
+                <span>订单金额 {formatCurrencyValue(selectedAmount)}</span>
+                <span>
+                  未收金额 {formatCurrencyValue(selectedOutstandingAmount)}
+                </span>
+              </Space>
+            }
+          >
+            <Button onClick={copySelectedOrderNames}>复制订单号</Button>
+            <Button onClick={exportSelectedOrders} type="primary">
+              导出选中 CSV
+            </Button>
+          </FooterToolbar>
+        ) : null}
       </Space>
     </PageContainer>
   );
