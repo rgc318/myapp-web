@@ -176,6 +176,8 @@ describe('myapp domain services', () => {
             risk: {
               delivery_overdue_days: 2,
               is_delivery_overdue: true,
+              is_payment_overdue: true,
+              payment_overdue_days: 5,
             },
             transaction_date: '2026-06-04',
           },
@@ -183,6 +185,7 @@ describe('myapp domain services', () => {
         pagination: { has_more: true, total_count: 30 },
         summary: {
           delivery_overdue_count: 1,
+          payment_overdue_count: 2,
           total_count: 31,
           visible_count: 1,
           unfinished_count: 1,
@@ -203,13 +206,16 @@ describe('myapp domain services', () => {
       deliveryDate: '2026-06-08',
       deliveryOverdueDays: 2,
       isDeliveryOverdue: true,
+      isPaymentOverdue: true,
       name: 'SO-0001',
       outstandingAmount: 20.5,
+      paymentOverdueDays: 5,
       paymentStatus: 'unpaid',
     });
     expect(result.summary.totalCount).toBe(31);
     expect(result.summary.visibleCount).toBe(30);
     expect(result.summary.deliveryOverdueCount).toBe(1);
+    expect(result.summary.paymentOverdueCount).toBe(2);
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ search_key: 'SO-0001' }),
@@ -251,6 +257,25 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_sales_orders_v2',
       expect.objectContaining({ risk_filter: 'delivery_overdue' }),
+    );
+  });
+
+  it('passes payment overdue risk filter to sales order search', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        pagination: { total_count: 0 },
+        summary: {},
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchSalesOrders({ riskFilter: 'payment_overdue' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_sales_orders_v2',
+      expect.objectContaining({ risk_filter: 'payment_overdue' }),
     );
   });
 

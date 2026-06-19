@@ -586,10 +586,10 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/orders` 的“最新订单”对应后端 `order_date_desc`，按订单日期排序；“最近更新”对应 `latest`，按最后修改时间排序，两者不能混用。
 - `/sales/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 只表示已全部发货且已全部开票收款结清，不以未收金额为 0 单独判定。
 - `/sales/orders` 列表展示状态时不要直接把后端技术值 `fulfillment.status = pending` 展示成泛化“待处理”，销售语义应显示为“待发货”。
-- `/sales/orders` 公司和客户筛选均应使用 `RemoteLinkSelect`；统计卡可作为状态筛选快捷入口，目标筛选值必须和后端 `status_filter` 保持一致。
+- `/sales/orders` 公司和客户筛选均应使用 `RemoteLinkSelect`；状态切换应放在状态视图工具条中，统计卡默认只作为概览指标，不再作为隐式筛选入口。
 - `/sales/orders` 状态视图应把“全部有效订单”作为第一层级默认入口，优先使用卡片内的 `Tabs` 工具条，并把风险动作放在页签旁侧；统计卡默认只作为概览指标，不应承担隐式筛选入口，除非页面明确采用选择卡模式。
 - `/sales/orders` 行内操作入口必须消费 `search_sales_orders_v2` 摘要中的 `actions`，不要在列表页重复推导能否发货、开票、收款或作废；可通过 `?action=delivery|invoice|payment` 让详情页定位到对应动作区。
-- `/sales/orders` 交货逾期等风险提示和筛选必须消费后端 `risk_filter` / `risk` 字段；`risk_filter=delivery_overdue` 表示未完全发货且交货日期早于今天的订单。
+- `/sales/orders` 交货逾期、收款逾期等风险提示和筛选必须消费后端 `risk_filter` / `risk` 字段；`delivery_overdue` 表示未完全发货且交货日期早于今天的订单，`payment_overdue` 表示仍有未收款且交货日期早于今天的订单。
 - `/sales/orders` 表格中日期字段和风险提示应分列展示，例如交货日期列只显示 `deliveryDate`，逾期标签放在独立“异常”列。
 - `/purchase/orders` 排序与销售订单保持同一语义：`order_date_desc` 是“最新订单”，按采购订单日期倒序；`latest` 是“最近更新”，按最后修改时间倒序。
 - `/purchase/orders` 状态筛选应沿用 mobile 口径：`cancelled` 查询必须传 `excludeCancelled: false`；`completed` 表示已全部收货且已开票付款结清。

@@ -26,6 +26,7 @@ import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
+  type SalesOrderRiskFilter,
   type SalesOrderSearchSummary,
   type SalesOrderSummary,
   searchSalesOrders,
@@ -58,6 +59,12 @@ const STATUS_FILTER_LABELS: Record<string, string> = {
   delivering: '待发货',
   paying: '待收款',
   unfinished: '未完成',
+};
+
+const RISK_FILTER_LABELS: Record<string, string> = {
+  all: '异常不限',
+  delivery_overdue: '逾期待发货',
+  payment_overdue: '逾期未收款',
 };
 
 const DEFAULT_LIST_FILTERS: SalesOrderListFilters = {
@@ -141,6 +148,9 @@ function orderActionCandidates(record: SalesOrderSummary) {
 function resolveViewTitle(filters: SalesOrderListFilters) {
   if (filters.riskFilter === 'delivery_overdue') {
     return '逾期待发货';
+  }
+  if (filters.riskFilter === 'payment_overdue') {
+    return '逾期未收款';
   }
   return STATUS_FILTER_LABELS[filters.statusFilter ?? 'all'] ?? '有效订单';
 }
@@ -250,13 +260,28 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       title: '异常',
       dataIndex: 'riskStatus',
       search: false,
-      width: 110,
-      render: (_, record) =>
-        record.isDeliveryOverdue ? (
-          <Tag color="error">逾期 {record.deliveryOverdueDays} 天</Tag>
+      width: 160,
+      render: (_, record) => {
+        const riskTags = [
+          record.isDeliveryOverdue ? (
+            <Tag color="error" key="delivery">
+              发货逾期 {record.deliveryOverdueDays} 天
+            </Tag>
+          ) : null,
+          record.isPaymentOverdue ? (
+            <Tag color="warning" key="payment">
+              收款逾期 {record.paymentOverdueDays} 天
+            </Tag>
+          ) : null,
+        ].filter(Boolean);
+        return riskTags.length ? (
+          <Space direction="vertical" size={2}>
+            {riskTags}
+          </Space>
         ) : (
           '-'
-        ),
+        );
+      },
     },
     {
       title: '状态',
@@ -282,6 +307,7 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       valueEnum: {
         all: { text: '不限' },
         delivery_overdue: { text: '逾期待发货' },
+        payment_overdue: { text: '逾期未收款' },
       },
     },
     {
@@ -434,8 +460,16 @@ const SalesOrdersPage: React.FC = () => {
       statusFilter,
     });
   };
-  const showDeliveryOverdueOrders = () => {
-    applyStatusFilter('delivering', 'delivery_overdue');
+  const applyRiskFilter = (riskFilter: SalesOrderRiskFilter) => {
+    if (riskFilter === 'delivery_overdue') {
+      applyStatusFilter('delivering', riskFilter);
+      return;
+    }
+    if (riskFilter === 'payment_overdue') {
+      applyStatusFilter('paying', riskFilter);
+      return;
+    }
+    applyStatusFilter(statusViewValue, 'all');
   };
   const showAllOrders = () => {
     applyTableFilters({
@@ -480,6 +514,22 @@ const SalesOrdersPage: React.FC = () => {
       label: statusTabLabel('default', '已作废', summary?.cancelledCount ?? 0),
     },
   ];
+  const activeRiskFilter = (activeFilters.riskFilter ??
+    'all') as SalesOrderRiskFilter;
+  const riskMenuItems = [
+    {
+      key: 'all',
+      label: '异常不限',
+    },
+    {
+      key: 'delivery_overdue',
+      label: `逾期待发货 ${summary?.deliveryOverdueCount ?? 0}`,
+    },
+    {
+      key: 'payment_overdue',
+      label: `逾期未收款 ${summary?.paymentOverdueCount ?? 0}`,
+    },
+  ];
 
   return (
     <PageContainer
@@ -521,18 +571,22 @@ const SalesOrdersPage: React.FC = () => {
               style={{ flex: '1 1 auto', minWidth: 0 }}
               tabBarStyle={{ margin: 0 }}
             />
-            <Button
-              danger={activeFilters.riskFilter === 'delivery_overdue'}
-              onClick={showDeliveryOverdueOrders}
-              style={{ flex: '0 0 auto' }}
-              type={
-                activeFilters.riskFilter === 'delivery_overdue'
-                  ? 'primary'
-                  : 'default'
-              }
+            <Dropdown
+              menu={{
+                items: riskMenuItems,
+                onClick: ({ key }) =>
+                  applyRiskFilter(key as SalesOrderRiskFilter),
+                selectedKeys: [activeRiskFilter],
+              }}
             >
-              逾期待发货 {summary?.deliveryOverdueCount ?? 0}
-            </Button>
+              <Button
+                danger={activeRiskFilter !== 'all'}
+                style={{ flex: '0 0 auto' }}
+                type={activeRiskFilter !== 'all' ? 'primary' : 'default'}
+              >
+                {RISK_FILTER_LABELS[activeRiskFilter] ?? '异常不限'}
+              </Button>
+            </Dropdown>
           </Space>
         </Card>
 
@@ -567,6 +621,14 @@ const SalesOrdersPage: React.FC = () => {
               status: 'error',
               title: '逾期待发货',
               value: summary?.deliveryOverdueCount ?? 0,
+            }}
+          />
+          <StatisticCard
+            statistic={{
+              description: '仍有未收款且已超过交货日期',
+              status: 'error',
+              title: '逾期未收款',
+              value: summary?.paymentOverdueCount ?? 0,
             }}
           />
         </StatisticCard.Group>

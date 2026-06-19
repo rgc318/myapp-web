@@ -19,7 +19,10 @@ export type SalesOrderSort =
   | 'amount_desc'
   | 'amount_asc';
 
-export type SalesOrderRiskFilter = 'all' | 'delivery_overdue';
+export type SalesOrderRiskFilter =
+  | 'all'
+  | 'delivery_overdue'
+  | 'payment_overdue';
 
 export type SalesOrderSummary = {
   canCancelOrder: boolean;
@@ -39,6 +42,8 @@ export type SalesOrderSummary = {
   completionStatus: string;
   isDeliveryOverdue: boolean;
   deliveryOverdueDays: number;
+  isPaymentOverdue: boolean;
+  paymentOverdueDays: number;
   modified: string;
 };
 
@@ -51,6 +56,7 @@ export type SalesOrderSearchSummary = {
   completedCount: number;
   cancelledCount: number;
   deliveryOverdueCount: number;
+  paymentOverdueCount: number;
 };
 
 export type SearchSalesOrdersParams = {
@@ -317,6 +323,8 @@ function normalizeSummaryRow(row: Record<string, any>): SalesOrderSummary {
     completionStatus: String(completion.status ?? ''),
     isDeliveryOverdue: Boolean(risk.is_delivery_overdue),
     deliveryOverdueDays: Number(risk.delivery_overdue_days ?? 0),
+    isPaymentOverdue: Boolean(risk.is_payment_overdue),
+    paymentOverdueDays: Number(risk.payment_overdue_days ?? 0),
     modified: String(row.modified ?? ''),
   };
 }
@@ -507,6 +515,7 @@ export async function searchSalesOrders(params: SearchSalesOrdersParams = {}) {
       completedCount: Number(summary.completed_count ?? 0),
       cancelledCount: Number(summary.cancelled_count ?? 0),
       deliveryOverdueCount: Number(summary.delivery_overdue_count ?? 0),
+      paymentOverdueCount: Number(summary.payment_overdue_count ?? 0),
     } satisfies SalesOrderSearchSummary,
   };
 }
