@@ -495,10 +495,36 @@ const SalesOrdersPage: React.FC = () => {
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Card
-          extra={
+          styles={{
+            body: {
+              paddingBlock: 12,
+              paddingInline: 16,
+            },
+          }}
+          size="small"
+          variant="borderless"
+        >
+          <Space
+            align="center"
+            size={16}
+            style={{ display: 'flex', width: '100%' }}
+            wrap
+          >
+            <Typography.Text strong style={{ flex: '0 0 auto' }}>
+              状态视图
+            </Typography.Text>
+            <Tabs
+              activeKey={statusViewValue}
+              items={statusTabItems}
+              onChange={(value) => applyStatusFilter(value as StatusViewKey)}
+              size="large"
+              style={{ flex: '1 1 auto', minWidth: 0 }}
+              tabBarStyle={{ margin: 0 }}
+            />
             <Button
               danger={activeFilters.riskFilter === 'delivery_overdue'}
               onClick={showDeliveryOverdueOrders}
+              style={{ flex: '0 0 auto' }}
               type={
                 activeFilters.riskFilter === 'delivery_overdue'
                   ? 'primary'
@@ -507,18 +533,7 @@ const SalesOrdersPage: React.FC = () => {
             >
               逾期待发货 {summary?.deliveryOverdueCount ?? 0}
             </Button>
-          }
-          size="small"
-          title="状态视图"
-          variant="borderless"
-        >
-          <Tabs
-            activeKey={statusViewValue}
-            items={statusTabItems}
-            onChange={(value) => applyStatusFilter(value as StatusViewKey)}
-            size="large"
-            tabBarStyle={{ marginBottom: 0 }}
-          />
+          </Space>
         </Card>
 
         <StatisticCard.Group direction="row">
