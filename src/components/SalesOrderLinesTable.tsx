@@ -88,7 +88,7 @@ export function SalesOrderLinesTable({
           onChange={(nextValue) => {
             updateLine(record.key, { qty: Number(nextValue ?? 0) });
           }}
-          precision={3}
+          step={1}
           style={{ width: '100%' }}
           value={record.qty}
         />
@@ -176,7 +176,11 @@ export function SalesOrderLinesTable({
       dataIndex: 'amount',
       title: '金额',
       width: 140,
-      render: (_, record) => formatCurrencyValue(record.amount),
+      render: (_, record) => (
+        <Typography.Text strong style={{ color: '#cf1322' }}>
+          {formatCurrencyValue(record.amount)}
+        </Typography.Text>
+      ),
     },
     {
       title: '操作',
@@ -209,7 +213,7 @@ export function SalesOrderLinesTable({
             <Typography.Text strong>合计</Typography.Text>
           </Table.Summary.Cell>
           <Table.Summary.Cell align="right" index={1}>
-            <Typography.Text strong>
+            <Typography.Text strong style={{ color: '#cf1322', fontSize: 16 }}>
               {formatCurrencyValue(getOrderLinesTotal(lines))}
             </Typography.Text>
           </Table.Summary.Cell>

@@ -1,21 +1,28 @@
 import { SaveOutlined } from '@ant-design/icons';
-import { PageContainer, ProCard } from '@ant-design/pro-components';
+import {
+  FooterToolbar,
+  PageContainer,
+  ProCard,
+} from '@ant-design/pro-components';
 import { history, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
+  Col,
   DatePicker,
   Form,
   Input,
   message,
   Result,
+  Row,
   Select,
   Skeleton,
   Space,
+  Statistic,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ProductSelect,
   RemoteLinkSelect,
@@ -58,6 +65,17 @@ type FormValues = {
 
 function dateValue(value: string) {
   return value ? dayjs(value) : dayjs();
+}
+
+function normalizeTextareaValue(value: string) {
+  return value
+    ? value
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p\s*>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    : '';
 }
 
 function fallbackLineFromItem(
@@ -131,12 +149,34 @@ const SalesOrderEditPage: React.FC = () => {
   const orderName = decodeURIComponent(String(params.name ?? ''));
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<SalesOrderEditorLine[]>([]);
+  const [dirty, setDirty] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const defaultSalesMode =
     Form.useWatch('defaultSalesMode', form) ?? 'wholesale';
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getOrderLinesTotal(lines), [lines]);
+  const totalQty = useMemo(
+    () =>
+      lines.reduce(
+        (sum, line) => sum + (Number.isFinite(line.qty) ? line.qty : 0),
+        0,
+      ),
+    [lines],
+  );
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty || submitting) {
+        return;
+      }
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [dirty, submitting]);
 
   const { data, error, loading } = useRequest(
     async () => {
@@ -152,12 +192,13 @@ const SalesOrderEditPage: React.FC = () => {
         customer: detail.customer,
         defaultSalesMode: detail.defaultSalesMode,
         deliveryDate: dateValue(detail.deliveryDate),
-        remarks: detail.remarks,
-        shippingAddressText: detail.addressDisplay,
+        remarks: normalizeTextareaValue(detail.remarks),
+        shippingAddressText: normalizeTextareaValue(detail.addressDisplay),
         transactionDate: dateValue(detail.transactionDate),
         warehouse: editableLines.find((line) => line.warehouse)?.warehouse,
       });
       setLines(editableLines);
+      setDirty(false);
       return detail;
     },
     {
@@ -172,6 +213,7 @@ const SalesOrderEditPage: React.FC = () => {
       defaultWarehouse: warehouse,
       product,
     });
+    setDirty(true);
     setLines((current) => {
       const existing = current.find((line) => line.key === nextLine.key);
       if (existing) {
@@ -186,6 +228,7 @@ const SalesOrderEditPage: React.FC = () => {
   };
 
   const applyDefaultModeToLines = (nextMode: SalesMode) => {
+    setDirty(true);
     setLines((current) =>
       current.map((line) =>
         recalculateSalesOrderLine({
@@ -287,8 +330,54 @@ const SalesOrderEditPage: React.FC = () => {
           showIcon
           type="info"
         />
-        <ProCard>
-          <Form<FormValues> form={form} layout="vertical">
+
+        <ProCard title="金额摘要">
+          <Row gutter={[24, 16]}>
+            <Col lg={6} sm={12} xs={24}>
+              <Statistic title="商品种类" value={lines.length} suffix="种" />
+              <Typography.Text type="secondary">
+                当前编辑明细行数
+              </Typography.Text>
+            </Col>
+            <Col lg={6} sm={12} xs={24}>
+              <Statistic
+                title="商品数量"
+                value={totalQty}
+                precision={Number.isInteger(totalQty) ? 0 : 2}
+              />
+              <Typography.Text type="secondary">按订单单位汇总</Typography.Text>
+            </Col>
+            <Col lg={6} sm={12} xs={24}>
+              <Statistic
+                styles={{
+                  content: {
+                    color: '#cf1322',
+                    fontSize: 24,
+                    fontWeight: 700,
+                  },
+                }}
+                title="订单金额"
+                value={formatCurrencyValue(totalAmount)}
+              />
+              <Typography.Text type="secondary">
+                随商品数量和单价实时更新
+              </Typography.Text>
+            </Col>
+            <Col lg={6} sm={12} xs={24}>
+              <Statistic title="编辑状态" value={dirty ? '未保存' : '已同步'} />
+              <Typography.Text type={dirty ? 'danger' : 'secondary'}>
+                {dirty ? '请保存后再离开页面' : '当前无待保存修改'}
+              </Typography.Text>
+            </Col>
+          </Row>
+        </ProCard>
+
+        <ProCard title="订单基础信息">
+          <Form<FormValues>
+            form={form}
+            layout="vertical"
+            onValuesChange={() => setDirty(true)}
+          >
             <div
               style={{
                 display: 'grid',
@@ -377,16 +466,27 @@ const SalesOrderEditPage: React.FC = () => {
           <SalesOrderLinesTable
             company={company}
             lines={lines}
-            onChange={setLines}
+            onChange={(nextLines) => {
+              setDirty(true);
+              setLines(nextLines);
+            }}
           />
         </ProCard>
-
-        <ProCard>
-          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-            <Typography.Text type="secondary">
-              共 {lines.length} 个商品，总金额{' '}
-              {formatCurrencyValue(totalAmount)}
-            </Typography.Text>
+      </Space>
+      <FooterToolbar>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <Typography.Text type={dirty ? 'danger' : 'secondary'}>
+            {dirty ? '有未保存修改' : '当前无待保存修改'}，共 {lines.length}{' '}
+            个商品，总金额 {formatCurrencyValue(totalAmount)}
+          </Typography.Text>
+          <Space>
+            <Button
+              onClick={() =>
+                history.push(`/sales/orders/${encodeURIComponent(orderName)}`)
+              }
+            >
+              取消
+            </Button>
             <Button
               icon={<SaveOutlined />}
               loading={submitting}
@@ -396,8 +496,8 @@ const SalesOrderEditPage: React.FC = () => {
               保存修改
             </Button>
           </Space>
-        </ProCard>
-      </Space>
+        </Space>
+      </FooterToolbar>
     </PageContainer>
   );
 };
