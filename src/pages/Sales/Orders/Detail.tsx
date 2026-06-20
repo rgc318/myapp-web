@@ -79,6 +79,17 @@ function toPercent(
   return Math.min(Math.round((toQty(value) / totalValue) * 100), 100);
 }
 
+function getErrorMessage(error: unknown, fallback = '操作失败') {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function isStockShortageError(error: unknown) {
+  const errorMessage = getErrorMessage(error, '');
+  return (
+    errorMessage.includes('库存不足') || errorMessage.includes('可用库存不足')
+  );
+}
+
 function buildSalesActionRows(
   items: SalesOrderDetailItem[],
   getMaxQty: (item: SalesOrderDetailItem) => number,
@@ -534,10 +545,10 @@ const SalesOrderDetailPage: React.FC = () => {
           throw new Error('No delivery items selected');
         }
 
-        setActionLoading('delivery');
-        try {
+        const submitDelivery = async (forceDelivery = false) => {
           const result = await submitSalesOrderDelivery(detail.name, {
             deliveryItems,
+            forceDelivery,
             postingDate,
             remarks,
           });
@@ -547,14 +558,51 @@ const SalesOrderDetailPage: React.FC = () => {
             'delivery_note',
           );
           showActionResult({
-            actionText: '创建发货单',
+            actionText: forceDelivery ? '强制创建发货单' : '创建发货单',
             detailPath: '/sales/delivery-notes',
             documentName: deliveryNoteName,
             documentText: '销售发货单',
-            nextAction: '如需继续开票，可在订单详情刷新后创建销售发票。',
+            nextAction: forceDelivery
+              ? '本次为强制发货，请后续核对库存和出入库记录。'
+              : '如需继续开票，可在订单详情刷新后创建销售发票。',
           });
+        };
+
+        setActionLoading('delivery');
+        try {
+          await submitDelivery();
         } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
+          if (isStockShortageError(caught)) {
+            Modal.confirm({
+              cancelText: '取消',
+              content: (
+                <Alert
+                  description="强制创建发货单会跳过库存预检，可能造成负库存或库存账实不一致。仅在仓库实物已确认出货、后续会补录库存或业务明确允许时使用。"
+                  message={getErrorMessage(caught, '当前可用库存不足')}
+                  showIcon
+                  type="warning"
+                />
+              ),
+              okText: '强制创建发货单',
+              okType: 'danger',
+              onOk: async () => {
+                setActionLoading('delivery');
+                try {
+                  await submitDelivery(true);
+                } catch (forceCaught) {
+                  message.error(getErrorMessage(forceCaught));
+                  throw forceCaught;
+                } finally {
+                  setActionLoading(undefined);
+                }
+              },
+              title: '库存不足，是否强制创建发货单？',
+              width: 560,
+            });
+            return;
+          }
+
+          message.error(getErrorMessage(caught));
           throw caught;
         } finally {
           setActionLoading(undefined);
@@ -669,6 +717,8 @@ const SalesOrderDetailPage: React.FC = () => {
           onChange={(nextDraft) => {
             draft = nextDraft;
           }}
+          showReferenceFields
+          showSettlementMode
         />
       ),
       okText: '确认收款',
@@ -690,7 +740,15 @@ const SalesOrderDetailPage: React.FC = () => {
             paymentAmount,
             {
               modeOfPayment: draft.modeOfPayment,
+              referenceDate: draft.referenceDate,
               referenceDoctype: 'Sales Invoice',
+              referenceNo: draft.referenceNo,
+              settlementMode:
+                draft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
+              writeoffReason:
+                draft.settlementMode === 'writeoff'
+                  ? 'Web 端差额核销结清'
+                  : undefined,
             },
           );
           refresh();

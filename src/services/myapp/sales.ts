@@ -791,25 +791,25 @@ export async function submitSalesOrderDelivery(
   orderName: string,
   options: {
     deliveryItems?: SalesOrderActionItem[];
+    forceDelivery?: boolean;
     postingDate?: string;
     remarks?: string;
   } = {},
 ) {
   const deliveryItems = normalizeSalesActionItems(options.deliveryItems);
+  const forceDelivery = Boolean(options.forceDelivery);
   const postingDate = options.postingDate?.trim();
   const remarks = options.remarks?.trim();
+  const kwargs = {
+    ...(forceDelivery ? { force_delivery: 1 } : {}),
+    ...(postingDate ? { posting_date: postingDate } : {}),
+    ...(remarks ? { remarks } : {}),
+  };
 
   return runGatewayMutation('submit_delivery', {
     payload: {
       ...(deliveryItems?.length ? { delivery_items: deliveryItems } : {}),
-      ...(postingDate || remarks
-        ? {
-            kwargs: {
-              ...(postingDate ? { posting_date: postingDate } : {}),
-              ...(remarks ? { remarks } : {}),
-            },
-          }
-        : {}),
+      ...(Object.keys(kwargs).length ? { kwargs } : {}),
       order_name: orderName,
     },
     successMessage: '销售发货单已创建',
@@ -836,16 +836,32 @@ export async function createSalesOrderInvoice(
 export async function recordSalesOrderPayment(
   referenceName: string,
   paidAmount: number,
-  options: { modeOfPayment?: string; referenceDoctype?: string } = {},
+  options: {
+    modeOfPayment?: string;
+    referenceDate?: string;
+    referenceDoctype?: string;
+    referenceNo?: string;
+    settlementMode?: 'partial' | 'writeoff';
+    writeoffReason?: string;
+  } = {},
 ) {
   const modeOfPayment = options.modeOfPayment?.trim();
+  const referenceDate = options.referenceDate?.trim();
+  const referenceNo = options.referenceNo?.trim();
+  const writeoffReason = options.writeoffReason?.trim();
 
   return runGatewayMutation('update_payment_status', {
     payload: {
       ...(modeOfPayment ? { mode_of_payment: modeOfPayment } : {}),
       paid_amount: paidAmount,
+      ...(referenceDate ? { reference_date: referenceDate } : {}),
       reference_doctype: options.referenceDoctype ?? 'Sales Order',
       reference_name: referenceName,
+      ...(referenceNo ? { reference_no: referenceNo } : {}),
+      ...(options.settlementMode
+        ? { settlement_mode: options.settlementMode }
+        : {}),
+      ...(writeoffReason ? { writeoff_reason: writeoffReason } : {}),
     },
     successMessage: '销售收款已记录',
   });

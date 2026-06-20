@@ -1706,6 +1706,21 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('passes force delivery flag when submitting a sales order delivery', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
+
+    await submitSalesOrderDelivery('SO-0001', { forceDelivery: true });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'submit_delivery',
+      {
+        kwargs: { force_delivery: 1 },
+        order_name: 'SO-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
   it('runs purchase order mutations through gateway', async () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'OK' } });
 
@@ -1942,7 +1957,11 @@ describe('myapp domain services', () => {
 
     await recordSalesOrderPayment('SI-0001', 88, {
       modeOfPayment: 'Bank',
+      referenceDate: '2026-06-20',
       referenceDoctype: 'Sales Invoice',
+      referenceNo: 'BANK-001',
+      settlementMode: 'writeoff',
+      writeoffReason: 'Web 端差额核销结清',
     });
 
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
@@ -1950,8 +1969,12 @@ describe('myapp domain services', () => {
       {
         mode_of_payment: 'Bank',
         paid_amount: 88,
+        reference_date: '2026-06-20',
         reference_doctype: 'Sales Invoice',
         reference_name: 'SI-0001',
+        reference_no: 'BANK-001',
+        settlement_mode: 'writeoff',
+        writeoff_reason: 'Web 端差额核销结清',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

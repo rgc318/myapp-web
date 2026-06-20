@@ -1,5 +1,6 @@
 import {
   Button,
+  Image,
   InputNumber,
   Popconfirm,
   Select,
@@ -44,16 +45,45 @@ export function SalesOrderLinesTable({
     {
       dataIndex: 'itemName',
       title: '商品',
-      width: 240,
+      width: 320,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
-          <Typography.Text strong>{record.itemName}</Typography.Text>
-          <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
-          {record.specification ? (
+        <Space align="start" size={12}>
+          {record.imageUrl ? (
+            <Image
+              alt={record.itemName || record.itemCode}
+              height={48}
+              preview={false}
+              src={record.imageUrl}
+              style={{ objectFit: 'cover' }}
+              width={48}
+            />
+          ) : (
+            <div
+              style={{
+                alignItems: 'center',
+                background: '#f5f5f5',
+                border: '1px solid #f0f0f0',
+                color: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                height: 48,
+                justifyContent: 'center',
+                width: 48,
+              }}
+            >
+              无图
+            </div>
+          )}
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">
-              {record.specification}
+              {record.itemCode}
             </Typography.Text>
-          ) : null}
+            {record.specification ? (
+              <Typography.Text type="secondary">
+                {record.specification}
+              </Typography.Text>
+            ) : null}
+          </Space>
         </Space>
       ),
     },

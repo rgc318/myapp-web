@@ -88,6 +88,7 @@ function fallbackLineFromItem(
     allUomDisplays: {},
     allUoms: uom ? [uom] : [],
     amount: item.amount ?? 0,
+    imageUrl: item.imageUrl,
     itemCode: item.itemCode,
     itemName: item.itemName || item.itemCode,
     key:
@@ -140,6 +141,7 @@ async function buildEditableLines(detail: SalesOrderDetail) {
       salesMode: mode,
       uom: item.uom || product.uom || product.stockUom,
       warehouse: item.warehouse || product.warehouse,
+      imageUrl: item.imageUrl || product.imageUrl,
     });
   });
 }

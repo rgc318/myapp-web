@@ -14,6 +14,7 @@ export type SalesOrderEditorLine = {
   allUomDisplays: Record<string, string>;
   allUoms: string[];
   amount: number;
+  imageUrl?: string;
   itemCode: string;
   itemName: string;
   key: string;
@@ -130,6 +131,7 @@ export function buildSalesOrderLineFromProduct(options: {
     allUomDisplays: product.allUomDisplays,
     allUoms,
     amount: price ?? 0,
+    imageUrl: product.imageUrl,
     itemCode: product.itemCode,
     itemName: product.itemName || product.itemCode,
     key: `${product.itemCode}:${warehouse || 'default'}`,
