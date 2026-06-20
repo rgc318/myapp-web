@@ -3,12 +3,14 @@ import { App } from 'antd';
 import React from 'react';
 import SalesOrderDetailPage from './Detail';
 
+let mockLocationSearch = '';
+
 jest.mock('@umijs/max', () => ({
   Link: ({ children }: any) => {
     const React = jest.requireActual('react');
     return React.createElement('a', null, children);
   },
-  useLocation: () => ({ search: '' }),
+  useLocation: () => ({ search: mockLocationSearch }),
   useParams: () => ({ name: 'SAL-ORD-2026-01204' }),
   useRequest: (service: any) => {
     const React = jest.requireActual('react');
@@ -66,10 +68,12 @@ const { getSalesOrderDetail } = jest.requireMock('@/services/myapp/sales');
 describe('SalesOrderDetailPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLocationSearch = '';
     getSalesOrderDetail.mockResolvedValue({
       addressDisplay: '上海市浦东新区测试路 88 号 5 楼',
       amount: 9999999,
       canCancelOrder: true,
+      cancelSalesOrderHint: '',
       canCreateSalesInvoice: true,
       canRecordPayment: false,
       canSubmitDelivery: true,
@@ -123,5 +127,16 @@ describe('SalesOrderDetailPage', () => {
     expect(screen.getByText('Camera')).toBeTruthy();
     expect(screen.getByText('SKU010')).toBeTruthy();
     expect(screen.getByText('Stores - RD')).toBeTruthy();
+  });
+
+  it('explains unavailable action targets from list entry links', async () => {
+    mockLocationSearch = '?action=payment';
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    expect(await screen.findByText('记录收款暂不可用')).toBeTruthy();
+    expect(screen.getByText('请先创建销售发票后再记录收款')).toBeTruthy();
   });
 });

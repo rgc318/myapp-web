@@ -84,6 +84,7 @@ export type ExportSalesOrdersResult = {
 
 export type SalesOrderDetail = SalesOrderSummary & {
   canCancelOrder: boolean;
+  cancelSalesOrderHint: string;
   currency: string;
   defaultSalesMode: SalesMode;
   deliveryDate: string;
@@ -607,6 +608,7 @@ export async function getSalesOrderDetail(
     paidAmount: toNumber(amounts.paid_amount),
     receivableAmount: toNumber(amounts.receivable_amount),
     canCancelOrder: Boolean(actions.can_cancel_sales_order),
+    cancelSalesOrderHint: String(actions.cancel_sales_order_hint ?? ''),
     canCreateSalesInvoice: Boolean(actions.can_create_sales_invoice),
     canRecordPayment: Boolean(actions.can_record_payment),
     canSubmitDelivery: Boolean(actions.can_submit_delivery),

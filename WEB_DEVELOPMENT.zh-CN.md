@@ -589,6 +589,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/orders` 公司和客户筛选均应使用 `RemoteLinkSelect`；状态切换应放在状态视图工具条中，统计卡默认只作为概览指标，不再作为隐式筛选入口。
 - `/sales/orders` 状态视图应把“全部有效订单”作为第一层级默认入口，优先使用卡片内的 `Tabs` 工具条，并把风险动作放在页签旁侧；统计卡默认只作为概览指标，不应承担隐式筛选入口，除非页面明确采用选择卡模式。
 - `/sales/orders` 行内操作入口必须消费 `search_sales_orders_v2` 摘要中的 `actions`，不要在列表页重复推导能否发货、开票、收款或作废；可通过 `?action=delivery|invoice|payment` 让详情页定位到对应动作区。
+- `/sales/orders/:name` 负责解释下游动作不可用原因；从列表携带 `?action=delivery|invoice|payment` 进入详情页时，如果目标动作当前不可执行，应在详情页显示明确提示。发货、开票、收款和取消订单按钮禁用时都应在动作区暴露原因，取消订单原因优先使用 `get_sales_order_detail` 中的 `actions.cancel_sales_order_hint`。
 - `/sales/orders` 交货逾期、收款逾期等风险提示和筛选必须消费后端 `risk_filter` / `risk` 字段；`delivery_overdue` 表示未完全发货且交货日期早于今天的订单，`payment_overdue` 表示仍有未收款且交货日期早于今天的订单。
 - `/sales/orders` 表格中日期字段和风险提示应分列展示，例如交货日期列只显示 `deliveryDate`，逾期标签放在独立“异常”列。
 - `/sales/orders` 批量操作应使用 ProTable 官方 `rowSelection` + `FooterToolbar` 模式；选中行的前端 CSV 导出可以在客户端完成，导出完整筛选结果应走 `export_sales_orders_v2`。
@@ -597,7 +598,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 报表、财务和各业务列表的公司筛选统一使用 `RemoteLinkSelect`；默认公司只作为初始筛选值，用户清空公司后必须查询全部公司，不能再回退默认公司。
 - `/sales/orders/new` 已接入销售订单新建，支持客户、公司、默认仓库、日期、批发 / 零售模式、联系人、电话、收货地址、备注、商品搜索选择、单位换算、默认价格、库存参考、保存订单和快捷下单。
 - `/sales/orders/:name/edit` 已接入销售订单编辑，支持加载现有订单、补全商品单位和价格上下文、编辑收货信息和商品明细，并调用 `update_order_v2` / `update_order_items_v2` 保存。
-- `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细，并支持按明细行填写本次数量创建发货单 / 销售发票、选择具体销售发票并按金额和付款方式登记收款、快捷回退下游单据、取消销售订单。
+- `/sales/orders/:name` 已接入订单详情、金额汇总、履约信息、关联发货单 / 发票和商品明细，并支持按明细行填写本次数量创建发货单 / 销售发票、选择具体销售发票并按金额和付款方式登记收款、快捷回退下游单据、取消销售订单，以及动作入口不可用时的原因提示。
 - `/sales/delivery-notes` 已接入销售发货单列表，支持关键词、公司、日期、单据状态、排序和分页。
 - `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细，并支持取消发货单。
 - `/sales/invoices` 已接入销售发票列表，支持关键词、公司、日期、单据状态、排序和分页。
@@ -1265,7 +1266,7 @@ c4258c4 feat: localize app chrome
 - 新增 `/purchase/orders` 和 `/purchase/orders/:name`，接入采购订单查询和详情。
 - 新增 `/sales/delivery-notes`、`/sales/invoices`、`/purchase/receipts`、`/purchase/invoices`，接入下游单据列表。
 - 新增 `/sales/delivery-notes/:name`、`/sales/invoices/:name`、`/purchase/receipts/:name`、`/purchase/invoices/:name`，接入下游单据详情和关联跳转。
-- 销售 / 采购订单详情已接入按明细行填写本次数量创建发货 / 收货单、创建发票、选择具体发票后按金额和付款方式登记收付款、取消订单动作。
+- 销售 / 采购订单详情已接入按明细行填写本次数量创建发货 / 收货单、创建发票、选择具体发票后按金额和付款方式登记收付款、取消订单动作；销售订单详情已支持列表动作入口不可用时的原因提示。
 - 销售 / 采购订单详情登记收付款时已使用付款方式选择器，并优先默认常用支付方式。
 - 销售 / 采购下游单据详情已接入取消动作，发票详情额外支持取消最近收款 / 付款。
 - 销售订单、销售发货单、销售发票、采购订单、采购收货单和采购发票详情页已接入打印预览和 PDF 下载。

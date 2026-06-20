@@ -16,6 +16,7 @@ import {
   message,
   Skeleton,
   Space,
+  Tooltip,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -118,6 +119,73 @@ function actionTargetLabel(actionTarget: string | null) {
     return '记录收款';
   }
   return null;
+}
+
+function deliveryDisabledReason(detail: SalesOrderDetail) {
+  if (detail.canSubmitDelivery) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能创建发货单';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的销售订单才能创建发货单';
+  }
+  if (detail.fulfillmentStatus === 'shipped') {
+    return '订单已全部发货';
+  }
+  return '当前订单暂不满足发货条件';
+}
+
+function invoiceDisabledReason(detail: SalesOrderDetail) {
+  if (detail.canCreateSalesInvoice) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能创建销售发票';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的销售订单才能创建销售发票';
+  }
+  if (detail.salesInvoices.length) {
+    return '当前订单已存在销售发票';
+  }
+  if ((detail.outstandingAmount ?? 0) <= 0) {
+    return '当前订单没有待开票/待收款金额';
+  }
+  return '当前订单暂不满足开票条件';
+}
+
+function paymentDisabledReason(detail: SalesOrderDetail) {
+  if (detail.canRecordPayment && (detail.outstandingAmount ?? 0) > 0) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能记录收款';
+  }
+  if (!detail.salesInvoices.length) {
+    return '请先创建销售发票后再记录收款';
+  }
+  if ((detail.outstandingAmount ?? 0) <= 0) {
+    return '当前订单没有未收金额';
+  }
+  return '当前订单暂不满足收款条件';
+}
+
+function actionUnavailableReason(
+  detail: SalesOrderDetail,
+  actionTarget: string | null,
+) {
+  if (actionTarget === 'delivery') {
+    return deliveryDisabledReason(detail);
+  }
+  if (actionTarget === 'invoice') {
+    return invoiceDisabledReason(detail);
+  }
+  if (actionTarget === 'payment') {
+    return paymentDisabledReason(detail);
+  }
+  return '';
 }
 
 const itemColumns = [
@@ -254,7 +322,7 @@ const SalesOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <DatePicker
             defaultValue={dayjs(postingDate)}
             onChange={(value) => {
@@ -325,7 +393,7 @@ const SalesOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Input.TextArea
             autoSize={{ minRows: 2, maxRows: 4 }}
             onChange={(event) => {
@@ -443,7 +511,7 @@ const SalesOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <span>
             系统会按顺序回退收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔收款，后端会拒绝快捷回退。
           </span>
@@ -467,7 +535,7 @@ const SalesOrderDetailPage: React.FC = () => {
             .join('、');
           Modal.success({
             content: (
-              <Space direction="vertical" size={4}>
+              <Space orientation="vertical" size={4}>
                 <span>
                   {completedSteps
                     ? `已回退：${completedSteps}`
@@ -494,7 +562,7 @@ const SalesOrderDetailPage: React.FC = () => {
           message.error(errorMessage);
           Modal.warning({
             content: (
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={12} style={{ width: '100%' }}>
                 <span>{errorMessage}</span>
                 <SalesRollbackGuide
                   deliveryNotes={detail.deliveryNotes}
@@ -533,7 +601,7 @@ const SalesOrderDetailPage: React.FC = () => {
         />,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
@@ -544,8 +612,8 @@ const SalesOrderDetailPage: React.FC = () => {
             description={
               error instanceof Error ? error.message : '请稍后重试。'
             }
-            message="销售订单详情加载失败"
             showIcon
+            title="销售订单详情加载失败"
             type="error"
           />
         )}
@@ -564,6 +632,14 @@ const SalesOrderDetailPage: React.FC = () => {
 
         {detail ? (
           <>
+            {actionTarget && actionUnavailableReason(detail, actionTarget) ? (
+              <Alert
+                showIcon
+                description={actionUnavailableReason(detail, actionTarget)}
+                title={`${actionTargetText}暂不可用`}
+                type="warning"
+              />
+            ) : null}
             <StatisticCard.Group direction="row">
               <StatisticCard
                 statistic={{
@@ -641,33 +717,51 @@ const SalesOrderDetailPage: React.FC = () => {
                     >
                       <Button>编辑订单</Button>
                     </Link>
-                    <Button
-                      disabled={!detail.canSubmitDelivery}
-                      loading={actionLoading === 'delivery'}
-                      onClick={confirmSubmitDelivery}
-                      type={actionTarget === 'delivery' ? 'primary' : 'default'}
-                    >
-                      创建发货单
-                    </Button>
-                    <Button
-                      disabled={!detail.canCreateSalesInvoice}
-                      loading={actionLoading === 'invoice'}
-                      onClick={confirmCreateInvoice}
-                      type={actionTarget === 'invoice' ? 'primary' : 'default'}
-                    >
-                      创建销售发票
-                    </Button>
-                    <Button
-                      disabled={
-                        !detail.canRecordPayment ||
-                        (detail.outstandingAmount ?? 0) <= 0
-                      }
-                      loading={actionLoading === 'payment'}
-                      onClick={confirmRecordPayment}
-                      type={actionTarget === 'payment' ? 'primary' : 'default'}
-                    >
-                      记录收款
-                    </Button>
+                    <Tooltip title={deliveryDisabledReason(detail)}>
+                      <span>
+                        <Button
+                          disabled={!detail.canSubmitDelivery}
+                          loading={actionLoading === 'delivery'}
+                          onClick={confirmSubmitDelivery}
+                          type={
+                            actionTarget === 'delivery' ? 'primary' : 'default'
+                          }
+                        >
+                          创建发货单
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title={invoiceDisabledReason(detail)}>
+                      <span>
+                        <Button
+                          disabled={!detail.canCreateSalesInvoice}
+                          loading={actionLoading === 'invoice'}
+                          onClick={confirmCreateInvoice}
+                          type={
+                            actionTarget === 'invoice' ? 'primary' : 'default'
+                          }
+                        >
+                          创建销售发票
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title={paymentDisabledReason(detail)}>
+                      <span>
+                        <Button
+                          disabled={
+                            !detail.canRecordPayment ||
+                            (detail.outstandingAmount ?? 0) <= 0
+                          }
+                          loading={actionLoading === 'payment'}
+                          onClick={confirmRecordPayment}
+                          type={
+                            actionTarget === 'payment' ? 'primary' : 'default'
+                          }
+                        >
+                          记录收款
+                        </Button>
+                      </span>
+                    </Tooltip>
                     <Button
                       danger
                       disabled={
@@ -679,21 +773,25 @@ const SalesOrderDetailPage: React.FC = () => {
                     >
                       快捷回退下游
                     </Button>
-                    <Button
-                      danger
-                      disabled={!detail.canCancelOrder}
-                      loading={actionLoading === 'cancel'}
-                      onClick={() =>
-                        runOrderAction(
-                          'cancel',
-                          `取消销售订单 ${detail.name}？`,
-                          () => cancelSalesOrder(detail.name),
-                          true,
-                        )
-                      }
-                    >
-                      取消销售订单
-                    </Button>
+                    <Tooltip title={detail.cancelSalesOrderHint}>
+                      <span>
+                        <Button
+                          danger
+                          disabled={!detail.canCancelOrder}
+                          loading={actionLoading === 'cancel'}
+                          onClick={() =>
+                            runOrderAction(
+                              'cancel',
+                              `取消销售订单 ${detail.name}？`,
+                              () => cancelSalesOrder(detail.name),
+                              true,
+                            )
+                          }
+                        >
+                          取消销售订单
+                        </Button>
+                      </span>
+                    </Tooltip>
                   </Space>
                 </ProCard>
               </div>
