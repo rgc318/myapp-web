@@ -20,7 +20,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import {
   getSalesReturnSourceContext,
@@ -75,6 +75,16 @@ function estimateLineAmount(line: ReturnLine) {
     return 0;
   }
   return (line.amount / maxQty) * line.returnQty;
+}
+
+function formatQty(value: number | null | undefined) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return '-';
+  }
+  return Number.isInteger(numericValue)
+    ? String(numericValue)
+    : numericValue.toFixed(2);
 }
 
 const SalesReturnNewPage: React.FC = () => {
@@ -145,6 +155,13 @@ const SalesReturnNewPage: React.FC = () => {
       setLoadingContext(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialSourceName) {
+      return;
+    }
+    void loadContext();
+  }, []);
 
   const updateLineQty = (detailId: string, returnQty: number) => {
     setLines((current) =>
@@ -388,21 +405,45 @@ const SalesReturnNewPage: React.FC = () => {
             </StatisticCard.Group>
 
             <ProCard title="来源信息">
-              <Space wrap size={24}>
-                <Typography.Text>
-                  来源：{context.sourceLabel} {context.sourceName}
-                </Typography.Text>
-                <Typography.Text>
-                  客户：{context.partyDisplayName}
-                </Typography.Text>
-                <Typography.Text>公司：{context.company}</Typography.Text>
-                <Typography.Text>
-                  状态：
-                  <StatusTag value={context.documentStatus} />
-                </Typography.Text>
-                <Typography.Text>
-                  可退货：{context.canProcessReturn ? '是' : '否'}
-                </Typography.Text>
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Space wrap size={24}>
+                  <Typography.Text>
+                    来源：{context.sourceLabel} {context.sourceName}
+                  </Typography.Text>
+                  <Typography.Text>
+                    客户：{context.partyDisplayName}
+                  </Typography.Text>
+                  <Typography.Text>公司：{context.company}</Typography.Text>
+                  <Typography.Text>
+                    状态：
+                    <StatusTag value={context.documentStatus} />
+                  </Typography.Text>
+                  <Typography.Text>
+                    可退货：{context.canProcessReturn ? '是' : '否'}
+                  </Typography.Text>
+                </Space>
+                {!context.canProcessReturn ? (
+                  <Alert
+                    message="当前来源单据暂不允许继续退货，请先回到来源单据确认状态。"
+                    showIcon
+                    type="warning"
+                  />
+                ) : context.sourceDoctype === 'Sales Invoice' &&
+                  (context.outstandingAmount ?? 0) <= 0 ? (
+                  <Alert
+                    description="来源销售发票看起来已经结清。退货单创建后，需要继续核对客户退款或回退原收款。"
+                    message="退货后需要关注退款核对"
+                    showIcon
+                    type="warning"
+                  />
+                ) : (
+                  <Alert
+                    description="退货会创建独立退货单，原来源单据保留业务事实；退款、收款回退等财务动作在退货后单独核对。"
+                    message="退货不会直接改写原销售订单"
+                    showIcon
+                    type="info"
+                  />
+                )}
               </Space>
             </ProCard>
 
@@ -436,50 +477,83 @@ const SalesReturnNewPage: React.FC = () => {
         ) : null}
 
         {result ? (
-          <Result
-            status="success"
-            title="销售退货单已创建"
-            subTitle={`${result.returnDoctype} ${result.returnDocument}，${getSuggestedActionHint(result)}`}
-            extra={[
-              result.nextActions.suggestedNextAction === 'review_refund' ? (
+          <ProCard>
+            <Result
+              status="success"
+              title="销售退货单已创建"
+              subTitle={`${result.returnDoctype} ${result.returnDocument}，${getSuggestedActionHint(result)}`}
+              extra={[
+                result.nextActions.suggestedNextAction === 'review_refund' ? (
+                  <Button
+                    key="refund"
+                    onClick={() => history.push(getRefundReviewPath(result))}
+                    type="primary"
+                  >
+                    核对退款
+                  </Button>
+                ) : null,
                 <Button
-                  key="refund"
-                  onClick={() => history.push(getRefundReviewPath(result))}
-                  type="primary"
+                  key="return"
+                  onClick={() =>
+                    history.push(
+                      getDocumentPath(
+                        result.returnDoctype,
+                        result.returnDocument,
+                      ),
+                    )
+                  }
+                  type={
+                    result.nextActions.suggestedNextAction === 'review_refund'
+                      ? 'default'
+                      : 'primary'
+                  }
                 >
-                  核对退款
-                </Button>
-              ) : null,
-              <Button
-                key="return"
-                onClick={() =>
-                  history.push(
-                    getDocumentPath(
-                      result.returnDoctype,
-                      result.returnDocument,
-                    ),
-                  )
-                }
-                type={
-                  result.nextActions.suggestedNextAction === 'review_refund'
-                    ? 'default'
-                    : 'primary'
-                }
-              >
-                查看退货单
-              </Button>,
-              <Button
-                key="source"
-                onClick={() =>
-                  history.push(
-                    getDocumentPath(result.sourceDoctype, result.sourceName),
-                  )
-                }
-              >
-                返回来源单据
-              </Button>,
-            ]}
-          />
+                  查看退货单
+                </Button>,
+                <Button
+                  key="source"
+                  onClick={() =>
+                    history.push(
+                      getDocumentPath(result.sourceDoctype, result.sourceName),
+                    )
+                  }
+                >
+                  返回来源单据
+                </Button>,
+              ]}
+            />
+            <StatisticCard.Group direction="row">
+              <StatisticCard
+                statistic={{
+                  title: '退货明细',
+                  value: `${result.summary.itemCount} 条`,
+                }}
+              />
+              <StatisticCard
+                statistic={{
+                  title: '退货数量',
+                  value: formatQty(result.summary.totalQty),
+                }}
+              />
+              <StatisticCard
+                statistic={{
+                  title: '预计退货金额',
+                  value: formatCurrencyValue(
+                    result.summary.returnAmountEstimate,
+                    context?.currency,
+                  ),
+                }}
+              />
+              <StatisticCard
+                statistic={{
+                  title: '退货方式',
+                  value: result.summary.isPartialReturn
+                    ? '部分退货'
+                    : '整单退货',
+                }}
+              />
+            </StatisticCard.Group>
+          </ProCard>
         ) : null}
       </Space>
     </PageContainer>

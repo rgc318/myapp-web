@@ -265,6 +265,7 @@ export type DeliveryNoteDetail = {
 
 export type SalesInvoiceDetail = {
   addressDisplay: string;
+  actualPaidAmount: number | null;
   canCancelSalesInvoice: boolean;
   cancelSalesInvoiceHint: string;
   company: string;
@@ -277,14 +278,29 @@ export type SalesInvoiceDetail = {
   grandTotal: number | null;
   items: SalesOrderDetailItem[];
   latestPaymentEntry: string;
+  latestUnallocatedAmount: number | null;
   name: string;
   outstandingAmount: number | null;
   paidAmount: number | null;
+  paymentEntries: SalesInvoicePaymentEntry[];
   paymentStatus: string;
   postingDate: string;
   receivableAmount: number | null;
   remarks: string;
   salesOrders: string[];
+  totalWriteoffAmount: number | null;
+};
+
+export type SalesInvoicePaymentEntry = {
+  actualPaidAmount: number | null;
+  allocatedAmount: number | null;
+  latestUnallocatedAmount: number | null;
+  modeOfPayment: string;
+  paymentEntry: string;
+  postingDate: string;
+  referenceDate: string;
+  referenceNo: string;
+  writeoffAmount: number | null;
 };
 
 function toNumber(value: unknown) {
@@ -383,6 +399,35 @@ function normalizeReferences(value: unknown) {
     },
     {},
   );
+}
+
+function normalizeSalesInvoicePaymentEntries(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => {
+          const row = readObject(entry);
+          const paymentEntry = String(row.payment_entry ?? '');
+          if (!paymentEntry) {
+            return null;
+          }
+          return {
+            actualPaidAmount: toNumber(row.actual_paid_amount),
+            allocatedAmount: toNumber(row.allocated_amount),
+            latestUnallocatedAmount: toNumber(row.unallocated_amount),
+            modeOfPayment: String(row.mode_of_payment ?? ''),
+            paymentEntry,
+            postingDate: String(row.posting_date ?? ''),
+            referenceDate: String(row.reference_date ?? ''),
+            referenceNo: String(row.reference_no ?? ''),
+            writeoffAmount: toNumber(row.writeoff_amount),
+          } satisfies SalesInvoicePaymentEntry;
+        })
+        .filter(
+          (
+            entry: SalesInvoicePaymentEntry | null,
+          ): entry is SalesInvoicePaymentEntry => Boolean(entry),
+        )
+    : [];
 }
 
 function normalizeSalesOrderItems(items: SalesOrderItemInput[]) {
@@ -777,17 +822,21 @@ export async function getSalesInvoiceDetail(
     dueDate: String(meta.due_date ?? ''),
     grandTotal: toNumber(amounts.invoice_amount_estimate),
     items: normalizeItems(data.items),
+    actualPaidAmount: toNumber(payment.actual_paid_amount),
     latestPaymentEntry: String(
       payment.latest_payment_entry ?? references.latest_payment_entry ?? '',
     ),
+    latestUnallocatedAmount: toNumber(payment.latest_unallocated_amount),
     name: String(data.sales_invoice_name ?? salesInvoiceName),
     outstandingAmount: toNumber(amounts.outstanding_amount),
     paidAmount: toNumber(amounts.paid_amount),
+    paymentEntries: normalizeSalesInvoicePaymentEntries(payment.entries),
     paymentStatus: String(payment.status ?? ''),
     postingDate: String(meta.posting_date ?? ''),
     receivableAmount: toNumber(amounts.receivable_amount),
     remarks: String(meta.remarks ?? ''),
     salesOrders: toStringList(references.sales_orders),
+    totalWriteoffAmount: toNumber(payment.total_writeoff_amount),
   };
 }
 

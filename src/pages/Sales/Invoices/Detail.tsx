@@ -13,6 +13,7 @@ import {
   cancelSalesInvoice,
   cancelSalesPaymentEntry,
   getSalesInvoiceDetail,
+  type SalesInvoicePaymentEntry,
   type SalesOrderDetailItem,
 } from '@/services/myapp/sales';
 import {
@@ -40,13 +41,21 @@ function isCancelled(status: string) {
 function paymentStatusHint(data: {
   documentStatus: string;
   latestPaymentEntry: string;
+  latestUnallocatedAmount: number | null;
   outstandingAmount: number | null;
+  totalWriteoffAmount: number | null;
 }) {
   if (isCancelled(data.documentStatus)) {
     return '当前发票已经作废，仅作为历史单据查看。后续业务处理应返回仍然有效的订单或发货单。';
   }
   if ((data.outstandingAmount ?? 0) > 0) {
     return '当前发票仍有未收金额，可继续登记收款；如果需要回改单据，请先确认是否要同步回退收款登记。';
+  }
+  if ((data.totalWriteoffAmount ?? 0) > 0) {
+    return '当前发票已通过差额核销结清。若需要回退开票结果，应先核对核销原因和关联收款，再处理发票作废。';
+  }
+  if ((data.latestUnallocatedAmount ?? 0) > 0) {
+    return '当前发票已结清，最近一次收款存在多收保留金额。后续退款或转抵其他应收需要按财务流程单独核对。';
   }
   if (data.latestPaymentEntry) {
     return '当前发票已经结清。若需要回退开票结果，应先确认是否要回退关联收款，再作废发票。';
@@ -99,6 +108,66 @@ const itemColumns = [
     dataIndex: 'warehouse',
     ellipsis: true,
     width: 180,
+  },
+];
+
+const paymentEntryColumns = [
+  {
+    title: '收款单',
+    dataIndex: 'paymentEntry',
+    width: 180,
+  },
+  {
+    title: '收款日期',
+    dataIndex: 'postingDate',
+    width: 110,
+  },
+  {
+    title: '付款方式',
+    dataIndex: 'modeOfPayment',
+    width: 120,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      record.modeOfPayment || '-',
+  },
+  {
+    title: '核销金额',
+    dataIndex: 'allocatedAmount',
+    align: 'right' as const,
+    width: 120,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      formatCurrencyValue(record.allocatedAmount),
+  },
+  {
+    title: '实收金额',
+    dataIndex: 'actualPaidAmount',
+    align: 'right' as const,
+    width: 120,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      formatCurrencyValue(record.actualPaidAmount),
+  },
+  {
+    title: '差额核销',
+    dataIndex: 'writeoffAmount',
+    align: 'right' as const,
+    width: 120,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      formatCurrencyValue(record.writeoffAmount),
+  },
+  {
+    title: '多收保留',
+    dataIndex: 'latestUnallocatedAmount',
+    align: 'right' as const,
+    width: 120,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      formatCurrencyValue(record.latestUnallocatedAmount),
+  },
+  {
+    title: '参考号',
+    dataIndex: 'referenceNo',
+    ellipsis: true,
+    width: 160,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      record.referenceNo || '-',
   },
 ];
 
@@ -278,10 +347,24 @@ const SalesInvoiceDetailPage: React.FC = () => {
               />
               <StatisticCard
                 statistic={{
-                  title: '已收金额',
-                  value: formatCurrencyValue(data.paidAmount, data.currency),
+                  title: '实收金额',
+                  value: formatCurrencyValue(
+                    data.actualPaidAmount ?? data.paidAmount,
+                    data.currency,
+                  ),
                 }}
               />
+              {(data.totalWriteoffAmount ?? 0) > 0 ? (
+                <StatisticCard
+                  statistic={{
+                    title: '核销金额',
+                    value: formatCurrencyValue(
+                      data.totalWriteoffAmount,
+                      data.currency,
+                    ),
+                  }}
+                />
+              ) : null}
               <StatisticCard
                 statistic={{
                   title: '未收金额',
@@ -330,6 +413,36 @@ const SalesInvoiceDetailPage: React.FC = () => {
                     }
                   />
                   <ProDescriptions.Item
+                    label="实收金额"
+                    dataIndex="actualPaidAmount"
+                    render={(_, record) =>
+                      formatCurrencyValue(
+                        record.actualPaidAmount ?? record.paidAmount,
+                        record.currency,
+                      )
+                    }
+                  />
+                  <ProDescriptions.Item
+                    label="核销金额"
+                    dataIndex="totalWriteoffAmount"
+                    render={(_, record) =>
+                      formatCurrencyValue(
+                        record.totalWriteoffAmount,
+                        record.currency,
+                      )
+                    }
+                  />
+                  <ProDescriptions.Item
+                    label="最近多收保留"
+                    dataIndex="latestUnallocatedAmount"
+                    render={(_, record) =>
+                      formatCurrencyValue(
+                        record.latestUnallocatedAmount,
+                        record.currency,
+                      )
+                    }
+                  />
+                  <ProDescriptions.Item
                     label="最近收款"
                     dataIndex="latestPaymentEntry"
                   />
@@ -348,6 +461,17 @@ const SalesInvoiceDetailPage: React.FC = () => {
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>
+
+            <ProTable<SalesInvoicePaymentEntry>
+              columns={paymentEntryColumns}
+              dataSource={data.paymentEntries}
+              headerTitle="收款历史"
+              pagination={false}
+              rowKey="paymentEntry"
+              scroll={{ x: 1050 }}
+              search={false}
+              toolBarRender={false}
+            />
 
             <ProCard title={cancelled ? '历史单据说明' : '流程承接'}>
               <Alert

@@ -171,6 +171,7 @@ Sales order status and sorting conventions:
 - Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
 - Sales delivery note details should guide users to the linked invoice when invoiced, to the source order with `?action=invoice` when not yet invoiced, and to historical-document guidance when cancelled.
 - Sales invoice details should guide users to the source order with `?action=payment` when outstanding amount remains, to the linked delivery note when settled, and to historical-document guidance when cancelled.
+- Sales invoice details and refund review should render `get_sales_invoice_detail_v2.payment.entries[]` as payment history so users can inspect split payments, write-off amounts, overpayment/unallocated amounts, and reference numbers before rolling back payment.
 - Cancelling a sales invoice that has a latest payment entry should guide users through rolling back that payment before cancelling the invoice, matching the mobile workflow intent and avoiding stale settlement links.
 - The sales order list uses `RemoteLinkSelect` for both company and customer filters.
 - Sales order status switching should live in the status view toolbar. Summary cards are overview metrics by default; do not make them implicit filters unless the page explicitly uses a selectable-card pattern.
