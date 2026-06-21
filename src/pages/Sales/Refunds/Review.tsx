@@ -11,6 +11,8 @@ import {
   Button,
   Empty,
   Form,
+  Input,
+  InputNumber,
   Modal,
   message,
   Skeleton,
@@ -19,8 +21,10 @@ import {
 } from 'antd';
 import React, { useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
   cancelSalesPaymentEntry,
+  createCustomerRefund,
   getSalesInvoiceDetail,
   type SalesInvoicePaymentEntry,
 } from '@/services/myapp/sales';
@@ -29,6 +33,14 @@ import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 type FormValues = {
   invoiceName: string;
   returnInvoiceName?: string;
+};
+
+type RefundFormValues = {
+  modeOfPayment?: string;
+  referenceDate?: string;
+  referenceNo?: string;
+  refundAmount?: number;
+  remarks?: string;
 };
 
 function invoicePath(name: string) {
@@ -167,11 +179,15 @@ const SalesRefundReviewPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const [form] = Form.useForm<FormValues>();
+  const [refundForm] = Form.useForm<RefundFormValues>();
   const [invoiceName, setInvoiceName] = useState(
     query.get('sourceInvoice') ?? '',
   );
-  const returnInvoiceName = query.get('returnInvoice') ?? '';
+  const [returnInvoiceName, setReturnInvoiceName] = useState(
+    query.get('returnInvoice') ?? '',
+  );
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [refundLoading, setRefundLoading] = useState(false);
 
   const { data, error, loading, refresh } = useRequest(
     () =>
@@ -182,9 +198,88 @@ const SalesRefundReviewPage: React.FC = () => {
     },
   );
 
+  const {
+    data: returnInvoiceData,
+    error: returnInvoiceError,
+    loading: returnInvoiceLoading,
+    refresh: refreshReturnInvoice,
+  } = useRequest(
+    () =>
+      returnInvoiceName
+        ? getSalesInvoiceDetail(returnInvoiceName)
+        : Promise.resolve(null),
+    {
+      formatResult: (result) => result,
+      onSuccess: (nextData) => {
+        const refundableAmount = Math.abs(nextData?.outstandingAmount ?? 0);
+        if (refundableAmount > 0 && !refundForm.getFieldValue('refundAmount')) {
+          refundForm.setFieldValue('refundAmount', refundableAmount);
+        }
+      },
+      refreshDeps: [returnInvoiceName],
+    },
+  );
+
   const loadInvoice = async () => {
-    const values = await form.validateFields(['invoiceName']);
+    const values = await form.validateFields([
+      'invoiceName',
+      'returnInvoiceName',
+    ]);
     setInvoiceName(values.invoiceName);
+    setReturnInvoiceName(values.returnInvoiceName ?? '');
+    refundForm.resetFields(['refundAmount']);
+  };
+
+  const confirmCreateRefund = async () => {
+    const values = await refundForm.validateFields([
+      'refundAmount',
+      'modeOfPayment',
+      'referenceNo',
+      'referenceDate',
+      'remarks',
+    ]);
+    const refundAmount = Number(values.refundAmount ?? 0);
+    const refundableAmount = Math.abs(
+      returnInvoiceData?.outstandingAmount ?? 0,
+    );
+
+    if (!returnInvoiceName) {
+      message.warning('请选择退货发票');
+      return;
+    }
+    if (refundAmount <= 0) {
+      message.warning('退款金额必须大于 0');
+      return;
+    }
+    if (refundableAmount > 0 && refundAmount > refundableAmount) {
+      message.warning('退款金额不能大于当前可退金额');
+      return;
+    }
+
+    setRefundLoading(true);
+    try {
+      const result = await createCustomerRefund(
+        returnInvoiceName,
+        refundAmount,
+        {
+          modeOfPayment: values.modeOfPayment,
+          referenceDate: values.referenceDate,
+          referenceNo: values.referenceNo,
+          remarks: values.remarks,
+        },
+      );
+      message.success(
+        result.data.paymentEntry
+          ? `客户退款已登记：${result.data.paymentEntry}`
+          : '客户退款已登记',
+      );
+      refresh();
+      refreshReturnInvoice();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '退款登记失败');
+    } finally {
+      setRefundLoading(false);
+    }
   };
 
   const confirmCancelPayment = () => {
@@ -227,7 +322,7 @@ const SalesRefundReviewPage: React.FC = () => {
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="当前系统尚未提供独立客户退款打款接口。本页用于退货后核对来源发票收款状态，并在需要时回退最近收款。"
+          message="本页用于退货后核对来源发票收款状态，并基于已提交的退货发票登记正式客户退款。取消最近收款仅用于需要回退原收款凭证的场景。"
           showIcon
           type="info"
         />
@@ -302,6 +397,24 @@ const SalesRefundReviewPage: React.FC = () => {
               error instanceof Error ? error.message : '请稍后重试。'
             }
             message="销售发票加载失败"
+            showIcon
+            type="error"
+          />
+        ) : null}
+
+        {returnInvoiceError ? (
+          <Alert
+            action={
+              <Button size="small" onClick={refreshReturnInvoice}>
+                重试
+              </Button>
+            }
+            description={
+              returnInvoiceError instanceof Error
+                ? returnInvoiceError.message
+                : '请稍后重试。'
+            }
+            message="退货发票加载失败"
             showIcon
             type="error"
           />
@@ -382,6 +495,155 @@ const SalesRefundReviewPage: React.FC = () => {
               />
             </ProCard>
 
+            <ProCard
+              extra={
+                returnInvoiceName ? (
+                  <Button
+                    onClick={() => history.push(invoicePath(returnInvoiceName))}
+                  >
+                    查看退货发票
+                  </Button>
+                ) : null
+              }
+              title="登记客户退款"
+            >
+              {returnInvoiceName ? (
+                <Form<RefundFormValues>
+                  form={refundForm}
+                  initialValues={{
+                    referenceDate: new Date().toISOString().slice(0, 10),
+                  }}
+                  layout="vertical"
+                >
+                  <Space
+                    direction="vertical"
+                    size={16}
+                    style={{ width: '100%' }}
+                  >
+                    <StatisticCard.Group direction="row">
+                      <StatisticCard
+                        statistic={{
+                          title: '退货发票金额',
+                          value: formatCurrencyValue(
+                            returnInvoiceData?.grandTotal,
+                            returnInvoiceData?.currency ?? data.currency,
+                          ),
+                        }}
+                      />
+                      <StatisticCard
+                        statistic={{
+                          title: '当前可退金额',
+                          value: formatCurrencyValue(
+                            Math.abs(returnInvoiceData?.outstandingAmount ?? 0),
+                            returnInvoiceData?.currency ?? data.currency,
+                          ),
+                        }}
+                      />
+                      <StatisticCard
+                        statistic={{
+                          title: '退货发票状态',
+                          value: returnInvoiceData?.documentStatus || '-',
+                        }}
+                      />
+                    </StatisticCard.Group>
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 16,
+                        gridTemplateColumns:
+                          'repeat(auto-fit, minmax(220px, 1fr))',
+                      }}
+                    >
+                      <Form.Item
+                        label="退款金额"
+                        name="refundAmount"
+                        rules={[
+                          { required: true, message: '请输入退款金额' },
+                          {
+                            validator: (_, value) => {
+                              const nextValue = Number(value ?? 0);
+                              const refundableAmount = Math.abs(
+                                returnInvoiceData?.outstandingAmount ?? 0,
+                              );
+                              if (nextValue <= 0) {
+                                return Promise.reject(
+                                  new Error('退款金额必须大于 0'),
+                                );
+                              }
+                              if (
+                                refundableAmount > 0 &&
+                                nextValue > refundableAmount
+                              ) {
+                                return Promise.reject(
+                                  new Error('退款金额不能大于当前可退金额'),
+                                );
+                              }
+                              return Promise.resolve();
+                            },
+                          },
+                        ]}
+                      >
+                        <InputNumber
+                          min={0}
+                          precision={2}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item label="退款方式" name="modeOfPayment">
+                        <PaymentModeSelect
+                          onChange={(value) =>
+                            refundForm.setFieldValue('modeOfPayment', value)
+                          }
+                        />
+                      </Form.Item>
+                      <Form.Item label="参考号" name="referenceNo">
+                        <Input placeholder="银行流水号或退款凭证号" />
+                      </Form.Item>
+                      <Form.Item
+                        label="参考日期"
+                        name="referenceDate"
+                        rules={[
+                          {
+                            pattern: /^\d{4}-\d{2}-\d{2}$/,
+                            message: '日期格式应为 YYYY-MM-DD',
+                          },
+                        ]}
+                      >
+                        <Input placeholder="YYYY-MM-DD" />
+                      </Form.Item>
+                      <Form.Item label="备注" name="remarks">
+                        <Input.TextArea
+                          autoSize={{ minRows: 1, maxRows: 3 }}
+                          placeholder="填写退款原因或凭证说明"
+                        />
+                      </Form.Item>
+                    </div>
+                    <Alert
+                      message="退款登记会创建正式 Payment Entry，并核销当前退货发票的可退余额。"
+                      showIcon
+                      type="success"
+                    />
+                    <Button
+                      disabled={
+                        returnInvoiceLoading ||
+                        !returnInvoiceData ||
+                        Math.abs(returnInvoiceData.outstandingAmount ?? 0) <=
+                          0 ||
+                        isCancelled(returnInvoiceData.documentStatus)
+                      }
+                      loading={refundLoading}
+                      onClick={() => void confirmCreateRefund()}
+                      type="primary"
+                    >
+                      登记客户退款
+                    </Button>
+                  </Space>
+                </Form>
+              ) : (
+                <Empty description="请选择退货发票后登记客户退款" />
+              )}
+            </ProCard>
+
             <ProCard title="退款核对">
               <ProDescriptions column={2} dataSource={data}>
                 <ProDescriptions.Item label="销售发票" dataIndex="name" />
@@ -419,7 +681,7 @@ const SalesRefundReviewPage: React.FC = () => {
             <ProCard>
               <Space style={{ justifyContent: 'space-between', width: '100%' }}>
                 <Typography.Text type="secondary">
-                  本页不创建独立打款退款单；如退货后需要回退原收款，可取消最近收款；如已线下退款，请保留财务凭证并按实际流程登记。
+                  如退货后需要回退原收款凭证，可取消最近收款；正式客户退款请优先基于退货发票登记。
                 </Typography.Text>
                 <Button
                   danger

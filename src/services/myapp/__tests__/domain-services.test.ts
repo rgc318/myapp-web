@@ -56,6 +56,7 @@ import {
   cancelSalesOrder,
   cancelSalesPaymentEntry,
   cancelSalesInvoice,
+  createCustomerRefund,
   createSalesOrderV2,
   createSalesOrderInvoice,
   exportSalesOrders,
@@ -1978,6 +1979,43 @@ describe('myapp domain services', () => {
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
+  });
+
+  it('creates customer refund against a return sales invoice', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        mode_of_payment: 'Bank',
+        payment_entry: 'PE-REF-0001',
+        refundable_amount_before_refund: 100,
+        reference_date: '2026-06-21',
+        reference_no: 'REF-001',
+        refund_amount: 80,
+        return_invoice: 'SI-RET-0001',
+        source_invoice: 'SI-0001',
+      },
+    });
+
+    const result = await createCustomerRefund('SI-RET-0001', 80, {
+      modeOfPayment: 'Bank',
+      referenceDate: '2026-06-21',
+      referenceNo: 'REF-001',
+      remarks: '客户退货退款',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'create_customer_refund',
+      {
+        mode_of_payment: 'Bank',
+        reference_date: '2026-06-21',
+        reference_no: 'REF-001',
+        refund_amount: 80,
+        remarks: '客户退货退款',
+        return_invoice_name: 'SI-RET-0001',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(result.data.paymentEntry).toBe('PE-REF-0001');
+    expect(result.data.returnInvoice).toBe('SI-RET-0001');
   });
 
   it('runs purchase downstream cancel mutations through gateway', async () => {

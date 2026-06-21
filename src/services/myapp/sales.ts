@@ -303,6 +303,17 @@ export type SalesInvoicePaymentEntry = {
   writeoffAmount: number | null;
 };
 
+export type CustomerRefundResult = {
+  modeOfPayment: string;
+  paymentEntry: string;
+  refundableAmountBeforeRefund: number | null;
+  referenceDate: string;
+  referenceNo: string;
+  refundAmount: number | null;
+  returnInvoice: string;
+  sourceInvoice: string;
+};
+
 function toNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -1103,5 +1114,43 @@ export async function cancelSalesPaymentEntry(paymentEntryName: string) {
   return runGatewayMutation('cancel_payment_entry', {
     payload: { payment_entry_name: paymentEntryName },
     successMessage: '销售收款已取消',
+  });
+}
+
+export async function createCustomerRefund(
+  returnInvoiceName: string,
+  refundAmount: number,
+  options: {
+    modeOfPayment?: string;
+    referenceDate?: string;
+    referenceNo?: string;
+    remarks?: string;
+  } = {},
+) {
+  return runGatewayMutation<CustomerRefundResult>('create_customer_refund', {
+    payload: compactPayload({
+      mode_of_payment: options.modeOfPayment,
+      reference_date: options.referenceDate,
+      reference_no: options.referenceNo,
+      refund_amount: refundAmount,
+      remarks: options.remarks,
+      return_invoice_name: returnInvoiceName,
+    }),
+    successMessage: '客户退款已登记',
+    transform: (data) => {
+      const row = readObject(data);
+      return {
+        modeOfPayment: String(row.mode_of_payment ?? ''),
+        paymentEntry: String(row.payment_entry ?? ''),
+        refundableAmountBeforeRefund: toNumber(
+          row.refundable_amount_before_refund,
+        ),
+        referenceDate: String(row.reference_date ?? ''),
+        referenceNo: String(row.reference_no ?? ''),
+        refundAmount: toNumber(row.refund_amount),
+        returnInvoice: String(row.return_invoice ?? returnInvoiceName),
+        sourceInvoice: String(row.source_invoice ?? ''),
+      };
+    },
   });
 }
