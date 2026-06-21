@@ -246,6 +246,7 @@ export type CustomerSalesContext = {
 export type DeliveryNoteDetail = {
   addressDisplay: string;
   canCancelDeliveryNote: boolean;
+  cancelDeliveryNoteHint: string;
   company: string;
   contactDisplay: string;
   contactPhone: string;
@@ -265,6 +266,7 @@ export type DeliveryNoteDetail = {
 export type SalesInvoiceDetail = {
   addressDisplay: string;
   canCancelSalesInvoice: boolean;
+  cancelSalesInvoiceHint: string;
   company: string;
   contactDisplay: string;
   contactPhone: string;
@@ -720,6 +722,7 @@ export async function getDeliveryNoteDetail(
   return {
     addressDisplay: String(shipping.shipping_address_text ?? ''),
     canCancelDeliveryNote: Boolean(actions.can_cancel_delivery_note),
+    cancelDeliveryNoteHint: String(actions.cancel_delivery_note_hint ?? ''),
     company: String(meta.company ?? ''),
     contactDisplay: String(
       shipping.contact_display ?? shipping.contact_person ?? '',
@@ -762,6 +765,7 @@ export async function getSalesInvoiceDetail(
   return {
     addressDisplay: String(shipping.shipping_address_text ?? ''),
     canCancelSalesInvoice: Boolean(actions.can_cancel_sales_invoice),
+    cancelSalesInvoiceHint: String(actions.cancel_sales_invoice_hint ?? ''),
     company: String(meta.company ?? ''),
     contactDisplay: String(
       shipping.contact_display ?? shipping.contact_person ?? '',

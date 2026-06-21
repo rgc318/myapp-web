@@ -161,6 +161,7 @@ Detailed request/response contracts should be read from the backend API document
   - sort by unfinished-first, newest order date, latest update time, oldest order date, and amount
   - open detail page
   - create a sales order with customer context, product selection, sales mode, UOM conversion, default pricing, and quick create
+  - continue delivery and invoice detail workflows with explicit next-step guidance
 
 Sales order status and sorting conventions:
 
@@ -168,6 +169,9 @@ Sales order status and sorting conventions:
 - `cancelled` searches must pass `excludeCancelled: false`; the normal effective-order view excludes cancelled rows.
 - `order_date_desc` means newest order by `transaction_date`; `latest` means latest update by `modified`.
 - Translate sales fulfillment `pending` as a sales-specific label such as pending delivery, not a generic pending label.
+- Sales delivery note details should guide users to the linked invoice when invoiced, to the source order with `?action=invoice` when not yet invoiced, and to historical-document guidance when cancelled.
+- Sales invoice details should guide users to the source order with `?action=payment` when outstanding amount remains, to the linked delivery note when settled, and to historical-document guidance when cancelled.
+- Cancelling a sales invoice that has a latest payment entry should guide users through rolling back that payment before cancelling the invoice, matching the mobile workflow intent and avoiding stale settlement links.
 - The sales order list uses `RemoteLinkSelect` for both company and customer filters.
 - Sales order status switching should live in the status view toolbar. Summary cards are overview metrics by default; do not make them implicit filters unless the page explicitly uses a selectable-card pattern.
 - Sales order status views should expose "all active orders" as the first-class default view, preferably as a card-contained `Tabs` toolbar with the risk action kept beside the tabs.

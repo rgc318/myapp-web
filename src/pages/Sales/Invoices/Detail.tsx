@@ -33,6 +33,27 @@ function docLinks(values: string[], basePath: string) {
     : '无';
 }
 
+function isCancelled(status: string) {
+  return status === 'cancelled' || status === '已作废';
+}
+
+function paymentStatusHint(data: {
+  documentStatus: string;
+  latestPaymentEntry: string;
+  outstandingAmount: number | null;
+}) {
+  if (isCancelled(data.documentStatus)) {
+    return '当前发票已经作废，仅作为历史单据查看。后续业务处理应返回仍然有效的订单或发货单。';
+  }
+  if ((data.outstandingAmount ?? 0) > 0) {
+    return '当前发票仍有未收金额，可继续登记收款；如果需要回改单据，请先确认是否要同步回退收款登记。';
+  }
+  if (data.latestPaymentEntry) {
+    return '当前发票已经结清。若需要回退开票结果，应先确认是否要回退关联收款，再作废发票。';
+  }
+  return '当前发票没有未收金额，可继续打印留档或返回来源单据核对业务链路。';
+}
+
 const itemColumns = [
   {
     title: '商品编码',
@@ -93,15 +114,38 @@ const SalesInvoiceDetailPage: React.FC = () => {
       refreshDeps: [invoiceName],
     },
   );
+  const cancelled = data ? isCancelled(data.documentStatus) : false;
+  const sourceOrder = data?.salesOrders[0] ?? '';
+  const linkedDeliveryNote = data?.deliveryNotes[0] ?? '';
+  const hasOutstanding = (data?.outstandingAmount ?? 0) > 0;
 
   const confirmCancel = () => {
+    if (!data) {
+      return;
+    }
     Modal.confirm({
       cancelText: '取消',
-      okText: '确认取消',
+      content: (
+        <Alert
+          description={
+            data.latestPaymentEntry
+              ? `当前发票已关联收款单 ${data.latestPaymentEntry}。为避免出现发票已作废但收款仍挂在结算链路中的状态，本次会先回退最近收款，再作废销售发票。`
+              : data.cancelSalesInvoiceHint ||
+                '作废后，这张发票将从订单结算链路中移除。如需重新开票，请回到来源订单或发货链路继续处理。'
+          }
+          message="作废销售发票会影响结算链路"
+          showIcon
+          type="warning"
+        />
+      ),
+      okText: data.latestPaymentEntry ? '回退收款并作废发票' : '确认作废',
       okType: 'danger',
       onOk: async () => {
         setCancelLoading(true);
         try {
+          if (data.latestPaymentEntry) {
+            await cancelSalesPaymentEntry(data.latestPaymentEntry);
+          }
           await cancelSalesInvoice(invoiceName);
           refresh();
         } catch (caught) {
@@ -111,7 +155,10 @@ const SalesInvoiceDetailPage: React.FC = () => {
           setCancelLoading(false);
         }
       },
-      title: '取消销售发票？',
+      title: data.latestPaymentEntry
+        ? '先回退收款，再作废销售发票？'
+        : '作废销售发票？',
+      width: 560,
     });
   };
 
@@ -155,6 +202,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
           doctype="Sales Invoice"
           key="print"
         />,
+        sourceOrder && hasOutstanding && !cancelled ? (
+          <Button key="payment" type="primary">
+            <Link
+              to={`/sales/orders/${encodeURIComponent(sourceOrder)}?action=payment`}
+            >
+              前往收款
+            </Link>
+          </Button>
+        ) : null,
         <Button key="return">
           <Link
             to={`/sales/returns/new?sourceDoctype=${encodeURIComponent('Sales Invoice')}&sourceName=${encodeURIComponent(invoiceName)}`}
@@ -292,6 +348,95 @@ const SalesInvoiceDetailPage: React.FC = () => {
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>
+
+            <ProCard title={cancelled ? '历史单据说明' : '流程承接'}>
+              <Alert
+                action={
+                  cancelled ? (
+                    sourceOrder ? (
+                      <Button size="small">
+                        <Link
+                          to={`/sales/orders/${encodeURIComponent(sourceOrder)}`}
+                        >
+                          返回订单
+                        </Link>
+                      </Button>
+                    ) : null
+                  ) : hasOutstanding && sourceOrder ? (
+                    <Button size="small" type="primary">
+                      <Link
+                        to={`/sales/orders/${encodeURIComponent(
+                          sourceOrder,
+                        )}?action=payment`}
+                      >
+                        前往收款
+                      </Link>
+                    </Button>
+                  ) : linkedDeliveryNote ? (
+                    <Button size="small">
+                      <Link
+                        to={`/sales/delivery-notes/${encodeURIComponent(
+                          linkedDeliveryNote,
+                        )}`}
+                      >
+                        查看发货单
+                      </Link>
+                    </Button>
+                  ) : null
+                }
+                description={paymentStatusHint(data)}
+                message={cancelled ? '这是一张历史发票' : '当前结算状态'}
+                showIcon
+                type={
+                  cancelled ? 'warning' : hasOutstanding ? 'info' : 'success'
+                }
+              />
+            </ProCard>
+
+            {!cancelled &&
+            (data.canCancelSalesInvoice ||
+              data.cancelSalesInvoiceHint ||
+              data.latestPaymentEntry) ? (
+              <ProCard title="回退处理">
+                <Alert
+                  action={
+                    <Space>
+                      {data.latestPaymentEntry ? (
+                        <Button
+                          danger
+                          loading={paymentCancelLoading}
+                          onClick={confirmCancelPayment}
+                          size="small"
+                        >
+                          回退收款
+                        </Button>
+                      ) : null}
+                      {data.canCancelSalesInvoice ? (
+                        <Button
+                          danger
+                          loading={cancelLoading}
+                          onClick={confirmCancel}
+                          size="small"
+                        >
+                          {data.latestPaymentEntry
+                            ? '回退收款并作废发票'
+                            : '作废销售发票'}
+                        </Button>
+                      ) : null}
+                    </Space>
+                  }
+                  description={
+                    data.latestPaymentEntry
+                      ? '这张发票已经有关联收款。若只是收款登记有误，可单独回退收款；若订单金额或开票结果有问题，应先回退收款，再作废发票。'
+                      : data.cancelSalesInvoiceHint ||
+                        '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
+                  }
+                  message="发票回退前请确认收款状态"
+                  showIcon
+                  type="warning"
+                />
+              </ProCard>
+            ) : null}
 
             <ProTable<SalesOrderDetailItem>
               columns={itemColumns}

@@ -32,6 +32,10 @@ function docLinks(values: string[], basePath: string) {
     : '无';
 }
 
+function isCancelled(status: string) {
+  return status === 'cancelled' || status === '已作废';
+}
+
 const itemColumns = [
   {
     title: '商品编码',
@@ -91,6 +95,9 @@ const DeliveryNoteDetailPage: React.FC = () => {
       refreshDeps: [deliveryNoteName],
     },
   );
+  const cancelled = data ? isCancelled(data.documentStatus) : false;
+  const sourceOrder = data?.salesOrders[0] ?? '';
+  const linkedInvoice = data?.salesInvoices[0] ?? '';
 
   const confirmCancel = () => {
     Modal.confirm({
@@ -129,6 +136,21 @@ const DeliveryNoteDetailPage: React.FC = () => {
           doctype="Delivery Note"
           key="print"
         />,
+        linkedInvoice ? (
+          <Button key="invoice" type="primary">
+            <Link to={`/sales/invoices/${encodeURIComponent(linkedInvoice)}`}>
+              查看发票
+            </Link>
+          </Button>
+        ) : sourceOrder && !cancelled ? (
+          <Button key="invoice" type="primary">
+            <Link
+              to={`/sales/orders/${encodeURIComponent(sourceOrder)}?action=invoice`}
+            >
+              前往开票
+            </Link>
+          </Button>
+        ) : null,
         <Button key="return">
           <Link
             to={`/sales/returns/new?sourceDoctype=${encodeURIComponent('Delivery Note')}&sourceName=${encodeURIComponent(deliveryNoteName)}`}
@@ -246,6 +268,85 @@ const DeliveryNoteDetailPage: React.FC = () => {
                 </ProDescriptions.Item>
               </ProDescriptions>
             </ProCard>
+
+            <ProCard title={cancelled ? '历史单据说明' : '后续处理'}>
+              {cancelled ? (
+                <Alert
+                  description="当前发货单已经作废，库存和订单履约状态通常已经回退。建议返回来源订单查看最新状态；如需继续开票或发货，应基于仍然有效的订单链路重新处理。"
+                  message="这是一张历史发货单"
+                  showIcon
+                  type="warning"
+                />
+              ) : linkedInvoice ? (
+                <Alert
+                  action={
+                    <Button size="small">
+                      <Link
+                        to={`/sales/invoices/${encodeURIComponent(linkedInvoice)}`}
+                      >
+                        查看发票
+                      </Link>
+                    </Button>
+                  }
+                  description="这张发货单已经关联销售发票，后续收款、发票作废或退款核对建议从发票详情继续处理。"
+                  message="发货已进入开票链路"
+                  showIcon
+                  type="success"
+                />
+              ) : sourceOrder ? (
+                <Alert
+                  action={
+                    <Button size="small" type="primary">
+                      <Link
+                        to={`/sales/orders/${encodeURIComponent(
+                          sourceOrder,
+                        )}?action=invoice`}
+                      >
+                        前往开票
+                      </Link>
+                    </Button>
+                  }
+                  description="当前发货单还没有关联销售发票。Web 端仍以销售订单作为开票来源，可回到订单详情并直接打开创建销售发票流程。"
+                  message="下一步建议创建销售发票"
+                  showIcon
+                  type="info"
+                />
+              ) : (
+                <Alert
+                  description="当前发货单没有返回订单或发票的关联信息，请先核对单据来源。"
+                  message="缺少上游关联"
+                  showIcon
+                  type="warning"
+                />
+              )}
+            </ProCard>
+
+            {!cancelled &&
+            (data.canCancelDeliveryNote || data.cancelDeliveryNoteHint) ? (
+              <ProCard title="回退处理">
+                <Alert
+                  action={
+                    data.canCancelDeliveryNote ? (
+                      <Button
+                        danger
+                        loading={cancelLoading}
+                        onClick={confirmCancel}
+                        size="small"
+                      >
+                        作废发货单
+                      </Button>
+                    ) : null
+                  }
+                  description={
+                    data.cancelDeliveryNoteHint ||
+                    '如需回退这张发货单，系统会恢复库存并把订单履约状态退回到待发货。若已经开票，请先处理下游销售发票。'
+                  }
+                  message="发货单作废会影响库存和订单履约状态"
+                  showIcon
+                  type="warning"
+                />
+              </ProCard>
+            ) : null}
 
             <ProTable<SalesOrderDetailItem>
               columns={itemColumns}
