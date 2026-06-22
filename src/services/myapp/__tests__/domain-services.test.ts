@@ -60,6 +60,7 @@ import {
   createSalesOrderV2,
   createSalesOrderInvoice,
   exportSalesOrders,
+  getCustomerRefundContext,
   getSalesReturnSourceContext,
   getCustomerSalesContext,
   getSalesOrderDetail,
@@ -2016,6 +2017,62 @@ describe('myapp domain services', () => {
     );
     expect(result.data.paymentEntry).toBe('PE-REF-0001');
     expect(result.data.returnInvoice).toBe('SI-RET-0001');
+  });
+
+  it('loads customer refund context from gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        actions: {
+          can_create_refund: true,
+          create_refund_hint: '',
+        },
+        entries: [
+          {
+            allocated_amount: 60,
+            mode_of_payment: 'Bank',
+            payment_entry: 'PE-REF-0001',
+            posting_date: '2026-06-22',
+            reference_no: 'REF-001',
+          },
+        ],
+        refund: {
+          currency: 'CNY',
+          refundable_amount: 40,
+          refunded_amount: 60,
+          return_amount: 100,
+          status: 'partial_refunded',
+          suggested_refund_amount: 40,
+        },
+        return_invoice: {
+          company: 'Test Company',
+          currency: 'CNY',
+          customer: 'CUST-0001',
+          customer_name: 'Test Customer',
+          docstatus: 1,
+          document_status: 'submitted',
+          grand_total: -100,
+          is_return: true,
+          name: 'SI-RET-0001',
+          outstanding_amount: -40,
+          return_against: 'SI-0001',
+        },
+        source_invoice: {
+          name: 'SI-0001',
+          document_status: 'submitted',
+        },
+      },
+    });
+
+    const result = await getCustomerRefundContext('SI-RET-0001');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_customer_refund_context_v1',
+      { return_invoice_name: 'SI-RET-0001' },
+    );
+    expect(result?.refund.refundableAmount).toBe(40);
+    expect(result?.refund.refundedAmount).toBe(60);
+    expect(result?.entries[0].paymentEntry).toBe('PE-REF-0001');
+    expect(result?.returnInvoice?.name).toBe('SI-RET-0001');
   });
 
   it('runs purchase downstream cancel mutations through gateway', async () => {

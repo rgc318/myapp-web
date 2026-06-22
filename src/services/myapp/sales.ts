@@ -314,6 +314,39 @@ export type CustomerRefundResult = {
   sourceInvoice: string;
 };
 
+export type CustomerRefundInvoiceSnapshot = {
+  company: string;
+  currency: string;
+  customer: string;
+  customerName: string;
+  docstatus: number;
+  documentStatus: string;
+  grandTotal: number | null;
+  isReturn: boolean;
+  name: string;
+  outstandingAmount: number | null;
+  postingDate: string;
+  returnAgainst: string;
+};
+
+export type CustomerRefundContext = {
+  actions: {
+    canCreateRefund: boolean;
+    createRefundHint: string;
+  };
+  entries: SalesInvoicePaymentEntry[];
+  refund: {
+    currency: string;
+    refundableAmount: number | null;
+    refundedAmount: number | null;
+    returnAmount: number | null;
+    status: string;
+    suggestedRefundAmount: number | null;
+  };
+  returnInvoice: CustomerRefundInvoiceSnapshot | null;
+  sourceInvoice: CustomerRefundInvoiceSnapshot | null;
+};
+
 function toNumber(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
@@ -439,6 +472,31 @@ function normalizeSalesInvoicePaymentEntries(value: unknown) {
           ): entry is SalesInvoicePaymentEntry => Boolean(entry),
         )
     : [];
+}
+
+function normalizeRefundInvoiceSnapshot(
+  value: unknown,
+): CustomerRefundInvoiceSnapshot | null {
+  const row = readObject(value);
+  const name = String(row.name ?? '');
+  if (!name) {
+    return null;
+  }
+
+  return {
+    company: String(row.company ?? ''),
+    currency: String(row.currency ?? 'CNY'),
+    customer: String(row.customer ?? ''),
+    customerName: String(row.customer_name ?? row.customer ?? ''),
+    docstatus: Number(row.docstatus ?? 0),
+    documentStatus: String(row.document_status ?? ''),
+    grandTotal: toNumber(row.grand_total),
+    isReturn: Boolean(row.is_return),
+    name,
+    outstandingAmount: toNumber(row.outstanding_amount),
+    postingDate: String(row.posting_date ?? ''),
+    returnAgainst: String(row.return_against ?? ''),
+  };
 }
 
 function normalizeSalesOrderItems(items: SalesOrderItemInput[]) {
@@ -1115,6 +1173,41 @@ export async function cancelSalesPaymentEntry(paymentEntryName: string) {
     payload: { payment_entry_name: paymentEntryName },
     successMessage: '销售收款已取消',
   });
+}
+
+export async function getCustomerRefundContext(
+  returnInvoiceName: string,
+): Promise<CustomerRefundContext | null> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_customer_refund_context_v1',
+    { return_invoice_name: returnInvoiceName },
+  );
+  const data = result.data;
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const refund = readObject(data.refund);
+  const actions = readObject(data.actions);
+
+  return {
+    actions: {
+      canCreateRefund: Boolean(actions.can_create_refund),
+      createRefundHint: String(actions.create_refund_hint ?? ''),
+    },
+    entries: normalizeSalesInvoicePaymentEntries(data.entries),
+    refund: {
+      currency: String(refund.currency ?? 'CNY'),
+      refundableAmount: toNumber(refund.refundable_amount),
+      refundedAmount: toNumber(refund.refunded_amount),
+      returnAmount: toNumber(refund.return_amount),
+      status: String(refund.status ?? ''),
+      suggestedRefundAmount: toNumber(refund.suggested_refund_amount),
+    },
+    returnInvoice: normalizeRefundInvoiceSnapshot(data.return_invoice),
+    sourceInvoice: normalizeRefundInvoiceSnapshot(data.source_invoice),
+  };
 }
 
 export async function createCustomerRefund(

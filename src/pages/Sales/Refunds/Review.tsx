@@ -25,6 +25,7 @@ import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
   cancelSalesPaymentEntry,
   createCustomerRefund,
+  getCustomerRefundContext,
   getSalesInvoiceDetail,
   type SalesInvoicePaymentEntry,
 } from '@/services/myapp/sales';
@@ -199,21 +200,24 @@ const SalesRefundReviewPage: React.FC = () => {
   );
 
   const {
-    data: returnInvoiceData,
-    error: returnInvoiceError,
-    loading: returnInvoiceLoading,
-    refresh: refreshReturnInvoice,
+    data: refundContext,
+    error: refundContextError,
+    loading: refundContextLoading,
+    refresh: refreshRefundContext,
   } = useRequest(
     () =>
       returnInvoiceName
-        ? getSalesInvoiceDetail(returnInvoiceName)
+        ? getCustomerRefundContext(returnInvoiceName)
         : Promise.resolve(null),
     {
       formatResult: (result) => result,
-      onSuccess: (nextData) => {
-        const refundableAmount = Math.abs(nextData?.outstandingAmount ?? 0);
-        if (refundableAmount > 0 && !refundForm.getFieldValue('refundAmount')) {
-          refundForm.setFieldValue('refundAmount', refundableAmount);
+      onSuccess: (nextContext) => {
+        const suggestedAmount =
+          nextContext?.refund.suggestedRefundAmount ??
+          nextContext?.refund.refundableAmount ??
+          0;
+        if (suggestedAmount > 0 && !refundForm.getFieldValue('refundAmount')) {
+          refundForm.setFieldValue('refundAmount', suggestedAmount);
         }
       },
       refreshDeps: [returnInvoiceName],
@@ -239,9 +243,7 @@ const SalesRefundReviewPage: React.FC = () => {
       'remarks',
     ]);
     const refundAmount = Number(values.refundAmount ?? 0);
-    const refundableAmount = Math.abs(
-      returnInvoiceData?.outstandingAmount ?? 0,
-    );
+    const refundableAmount = refundContext?.refund.refundableAmount ?? 0;
 
     if (!returnInvoiceName) {
       message.warning('请选择退货发票');
@@ -274,7 +276,7 @@ const SalesRefundReviewPage: React.FC = () => {
           : '客户退款已登记',
       );
       refresh();
-      refreshReturnInvoice();
+      refreshRefundContext();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '退款登记失败');
     } finally {
@@ -402,19 +404,19 @@ const SalesRefundReviewPage: React.FC = () => {
           />
         ) : null}
 
-        {returnInvoiceError ? (
+        {refundContextError ? (
           <Alert
             action={
-              <Button size="small" onClick={refreshReturnInvoice}>
+              <Button size="small" onClick={refreshRefundContext}>
                 重试
               </Button>
             }
             description={
-              returnInvoiceError instanceof Error
-                ? returnInvoiceError.message
+              refundContextError instanceof Error
+                ? refundContextError.message
                 : '请稍后重试。'
             }
-            message="退货发票加载失败"
+            message="退款上下文加载失败"
             showIcon
             type="error"
           />
@@ -525,8 +527,17 @@ const SalesRefundReviewPage: React.FC = () => {
                         statistic={{
                           title: '退货发票金额',
                           value: formatCurrencyValue(
-                            returnInvoiceData?.grandTotal,
-                            returnInvoiceData?.currency ?? data.currency,
+                            refundContext?.refund.returnAmount,
+                            refundContext?.refund.currency ?? data.currency,
+                          ),
+                        }}
+                      />
+                      <StatisticCard
+                        statistic={{
+                          title: '已退金额',
+                          value: formatCurrencyValue(
+                            refundContext?.refund.refundedAmount,
+                            refundContext?.refund.currency ?? data.currency,
                           ),
                         }}
                       />
@@ -534,15 +545,16 @@ const SalesRefundReviewPage: React.FC = () => {
                         statistic={{
                           title: '当前可退金额',
                           value: formatCurrencyValue(
-                            Math.abs(returnInvoiceData?.outstandingAmount ?? 0),
-                            returnInvoiceData?.currency ?? data.currency,
+                            refundContext?.refund.refundableAmount,
+                            refundContext?.refund.currency ?? data.currency,
                           ),
                         }}
                       />
                       <StatisticCard
                         statistic={{
                           title: '退货发票状态',
-                          value: returnInvoiceData?.documentStatus || '-',
+                          value:
+                            refundContext?.returnInvoice?.documentStatus || '-',
                         }}
                       />
                     </StatisticCard.Group>
@@ -562,9 +574,8 @@ const SalesRefundReviewPage: React.FC = () => {
                           {
                             validator: (_, value) => {
                               const nextValue = Number(value ?? 0);
-                              const refundableAmount = Math.abs(
-                                returnInvoiceData?.outstandingAmount ?? 0,
-                              );
+                              const refundableAmount =
+                                refundContext?.refund.refundableAmount ?? 0;
                               if (nextValue <= 0) {
                                 return Promise.reject(
                                   new Error('退款金额必须大于 0'),
@@ -619,17 +630,21 @@ const SalesRefundReviewPage: React.FC = () => {
                       </Form.Item>
                     </div>
                     <Alert
-                      message="退款登记会创建正式 Payment Entry，并核销当前退货发票的可退余额。"
+                      message={
+                        refundContext?.actions.createRefundHint ||
+                        '退款登记会创建正式 Payment Entry，并核销当前退货发票的可退余额。'
+                      }
                       showIcon
-                      type="success"
+                      type={
+                        refundContext?.actions.canCreateRefund
+                          ? 'success'
+                          : 'warning'
+                      }
                     />
                     <Button
                       disabled={
-                        returnInvoiceLoading ||
-                        !returnInvoiceData ||
-                        Math.abs(returnInvoiceData.outstandingAmount ?? 0) <=
-                          0 ||
-                        isCancelled(returnInvoiceData.documentStatus)
+                        refundContextLoading ||
+                        !refundContext?.actions.canCreateRefund
                       }
                       loading={refundLoading}
                       onClick={() => void confirmCreateRefund()}
@@ -637,6 +652,16 @@ const SalesRefundReviewPage: React.FC = () => {
                     >
                       登记客户退款
                     </Button>
+                    <ProTable<SalesInvoicePaymentEntry>
+                      columns={paymentEntryColumns}
+                      dataSource={refundContext?.entries ?? []}
+                      headerTitle="客户退款历史"
+                      pagination={false}
+                      rowKey="paymentEntry"
+                      scroll={{ x: 1050 }}
+                      search={false}
+                      toolBarRender={false}
+                    />
                   </Space>
                 </Form>
               ) : (
