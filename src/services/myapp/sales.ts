@@ -99,7 +99,25 @@ export type SalesOrderDetail = SalesOrderSummary & {
   canSubmitDelivery: boolean;
   deliveryNotes: string[];
   salesInvoices: string[];
+  timeline: SalesOrderTimelineEvent[];
   items: SalesOrderDetailItem[];
+};
+
+export type SalesOrderTimelineEvent = {
+  amount: number | null;
+  date: string;
+  description: string;
+  docname: string;
+  doctype: string;
+  key: string;
+  modeOfPayment: string;
+  outstandingAmount: number | null;
+  referenceNo: string;
+  relatedDocname: string;
+  relatedDoctype: string;
+  status: string;
+  title: string;
+  type: string;
 };
 
 export type SalesOrderDetailItem = {
@@ -422,6 +440,42 @@ function normalizeItems(value: unknown): SalesOrderDetailItem[] {
     : [];
 }
 
+function normalizeSalesOrderTimeline(value: unknown): SalesOrderTimelineEvent[] {
+  return Array.isArray(value)
+    ? value
+        .map((event) => {
+          const row = readObject(event);
+          const key = String(
+            row.key ?? `${row.type ?? 'event'}:${row.docname ?? ''}`,
+          );
+          if (!key) {
+            return null;
+          }
+          return {
+            amount: toNumber(row.amount),
+            date: String(row.date ?? row.datetime ?? ''),
+            description: String(row.description ?? ''),
+            docname: String(row.docname ?? ''),
+            doctype: String(row.doctype ?? ''),
+            key,
+            modeOfPayment: String(row.mode_of_payment ?? ''),
+            outstandingAmount: toNumber(row.outstanding_amount),
+            referenceNo: String(row.reference_no ?? ''),
+            relatedDocname: String(row.related_docname ?? ''),
+            relatedDoctype: String(row.related_doctype ?? ''),
+            status: String(row.status ?? ''),
+            title: String(row.title ?? ''),
+            type: String(row.type ?? ''),
+          } satisfies SalesOrderTimelineEvent;
+        })
+        .filter(
+          (
+            event: SalesOrderTimelineEvent | null,
+          ): event is SalesOrderTimelineEvent => Boolean(event),
+        )
+    : [];
+}
+
 function normalizeSalesActionItems(items: SalesOrderActionItem[] | undefined) {
   return items
     ?.filter((item) => item.qty > 0)
@@ -730,6 +784,7 @@ export async function getSalesOrderDetail(
     canSubmitDelivery: Boolean(actions.can_submit_delivery),
     deliveryNotes: toStringList(references.delivery_notes),
     salesInvoices: toStringList(references.sales_invoices),
+    timeline: normalizeSalesOrderTimeline(data.timeline),
     items: normalizeItems(data.items),
   };
 }

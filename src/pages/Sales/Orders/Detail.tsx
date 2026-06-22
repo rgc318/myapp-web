@@ -19,6 +19,7 @@ import {
   Space,
   Statistic,
   Steps,
+  Timeline,
   Tooltip,
   Typography,
 } from 'antd';
@@ -44,6 +45,7 @@ import {
   recordSalesOrderPayment,
   type SalesOrderDetail,
   type SalesOrderDetailItem,
+  type SalesOrderTimelineEvent,
   submitSalesOrderDelivery,
 } from '@/services/myapp/sales';
 import {
@@ -62,6 +64,56 @@ function docLinks(values: string[], basePath: string) {
         </React.Fragment>
       ))
     : '无';
+}
+
+function documentPath(doctype: string, docname: string) {
+  if (!docname) {
+    return '';
+  }
+  if (doctype === 'Delivery Note') {
+    return `/sales/delivery-notes/${encodeURIComponent(docname)}`;
+  }
+  if (doctype === 'Sales Invoice') {
+    return `/sales/invoices/${encodeURIComponent(docname)}`;
+  }
+  if (doctype === 'Payment Entry') {
+    return '/payments';
+  }
+  if (doctype === 'Sales Order') {
+    return `/sales/orders/${encodeURIComponent(docname)}`;
+  }
+  return '';
+}
+
+function timelineColor(event: SalesOrderTimelineEvent) {
+  if (event.status === 'cancelled') {
+    return 'red';
+  }
+  if (event.type === 'customer_refund') {
+    return 'purple';
+  }
+  if (event.type === 'payment_entry') {
+    return 'green';
+  }
+  if (event.type === 'sales_return') {
+    return 'orange';
+  }
+  return 'blue';
+}
+
+function timelineEventDescription(
+  event: SalesOrderTimelineEvent,
+  currency: string,
+) {
+  const pieces = [
+    event.date,
+    event.description,
+    event.amount != null ? formatCurrencyValue(event.amount, currency) : '',
+    event.modeOfPayment,
+    event.referenceNo ? `参考号 ${event.referenceNo}` : '',
+  ].filter(Boolean);
+
+  return pieces.join(' · ');
 }
 
 function toQty(value: number | null | undefined) {
@@ -952,6 +1004,7 @@ const SalesOrderDetailPage: React.FC = () => {
       ]
     : [];
   const progress = detail ? salesOrderProgress(detail) : null;
+  const timelineEvents = detail?.timeline ?? [];
 
   return (
     <PageContainer
@@ -1136,6 +1189,65 @@ const SalesOrderDetailPage: React.FC = () => {
                       ]}
                       status={progress?.status}
                     />
+                  </Card>
+
+                  <Card title="业务时间线" variant="borderless">
+                    {timelineEvents.length ? (
+                      <Timeline
+                        items={timelineEvents.map((event) => {
+                          const path = documentPath(
+                            event.doctype,
+                            event.docname,
+                          );
+                          const relatedPath = documentPath(
+                            event.relatedDoctype,
+                            event.relatedDocname,
+                          );
+                          return {
+                            color: timelineColor(event),
+                            children: (
+                              <Space direction="vertical" size={4}>
+                                <Space wrap>
+                                  <Typography.Text strong>
+                                    {event.title || event.type}
+                                  </Typography.Text>
+                                  {path ? (
+                                    <Link to={path}>{event.docname}</Link>
+                                  ) : (
+                                    <Typography.Text>
+                                      {event.docname}
+                                    </Typography.Text>
+                                  )}
+                                  {event.status ? (
+                                    <StatusTag value={event.status} />
+                                  ) : null}
+                                </Space>
+                                <Typography.Text type="secondary">
+                                  {timelineEventDescription(
+                                    event,
+                                    detail.currency,
+                                  )}
+                                </Typography.Text>
+                                {event.relatedDocname ? (
+                                  <Typography.Text type="secondary">
+                                    关联：
+                                    {relatedPath ? (
+                                      <Link to={relatedPath}>
+                                        {event.relatedDocname}
+                                      </Link>
+                                    ) : (
+                                      event.relatedDocname
+                                    )}
+                                  </Typography.Text>
+                                ) : null}
+                              </Space>
+                            ),
+                          };
+                        })}
+                      />
+                    ) : (
+                      <Empty description="暂无业务时间线" />
+                    )}
                   </Card>
 
                   <ProTable<SalesOrderDetailItem>

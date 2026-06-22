@@ -405,6 +405,18 @@ describe('myapp domain services', () => {
           contact_phone: '13800000000',
           shipping_address_text: 'Shanghai',
         },
+        timeline: [
+          {
+            amount: 100,
+            date: '2026-06-04',
+            docname: 'SO-0001',
+            doctype: 'Sales Order',
+            key: 'sales_order:SO-0001',
+            status: 'submitted',
+            title: '销售订单',
+            type: 'sales_order',
+          },
+        ],
       },
       meta: {},
       raw: {},
@@ -428,6 +440,7 @@ describe('myapp domain services', () => {
       ],
       paidAmount: 70,
       salesInvoices: ['SI-0001'],
+      timeline: [{ docname: 'SO-0001', type: 'sales_order' }],
     });
   });
 
