@@ -15,6 +15,7 @@ import {
   InputNumber,
   Modal,
   message,
+  Progress,
   Skeleton,
   Space,
   Typography,
@@ -23,6 +24,7 @@ import React, { useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
+  type CustomerRefundResult,
   cancelSalesPaymentEntry,
   createCustomerRefund,
   getCustomerRefundContext,
@@ -176,6 +178,39 @@ const paymentEntryColumns = [
   },
 ];
 
+const refundEntryColumns = paymentEntryColumns.map((column) => {
+  if (column.dataIndex === 'paymentEntry') {
+    return { ...column, title: '退款单' };
+  }
+  if (column.dataIndex === 'postingDate') {
+    return { ...column, title: '退款日期' };
+  }
+  if (column.dataIndex === 'modeOfPayment') {
+    return { ...column, title: '退款方式' };
+  }
+  if (column.dataIndex === 'allocatedAmount') {
+    return { ...column, title: '退款金额' };
+  }
+  return column;
+});
+
+function refundStatusText(status?: string) {
+  if (status === 'refunded') {
+    return '退款已完成';
+  }
+  if (status === 'partial_refunded') {
+    return '部分退款';
+  }
+  if (status === 'not_refunded') {
+    return '待退款';
+  }
+  return '不可退款';
+}
+
+function toPositiveAmount(value?: number | null) {
+  return Math.max(Number(value ?? 0), 0);
+}
+
 const SalesRefundReviewPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
@@ -189,6 +224,8 @@ const SalesRefundReviewPage: React.FC = () => {
   );
   const [cancelLoading, setCancelLoading] = useState(false);
   const [refundLoading, setRefundLoading] = useState(false);
+  const [lastRefundResult, setLastRefundResult] =
+    useState<CustomerRefundResult | null>(null);
 
   const { data, error, loading, refresh } = useRequest(
     () =>
@@ -231,6 +268,7 @@ const SalesRefundReviewPage: React.FC = () => {
     ]);
     setInvoiceName(values.invoiceName);
     setReturnInvoiceName(values.returnInvoiceName ?? '');
+    setLastRefundResult(null);
     refundForm.resetFields(['refundAmount']);
   };
 
@@ -270,6 +308,7 @@ const SalesRefundReviewPage: React.FC = () => {
           remarks: values.remarks,
         },
       );
+      setLastRefundResult(result.data);
       message.success(
         result.data.paymentEntry
           ? `客户退款已登记：${result.data.paymentEntry}`
@@ -283,6 +322,18 @@ const SalesRefundReviewPage: React.FC = () => {
       setRefundLoading(false);
     }
   };
+
+  const refundableAmount = toPositiveAmount(
+    refundContext?.refund.refundableAmount,
+  );
+  const refundedAmount = toPositiveAmount(refundContext?.refund.refundedAmount);
+  const returnAmount = toPositiveAmount(refundContext?.refund.returnAmount);
+  const refundProgress =
+    returnAmount > 0
+      ? Math.min(Math.round((refundedAmount / returnAmount) * 100), 100)
+      : 0;
+  const isRefundCompleted =
+    refundContext?.refund.status === 'refunded' || refundableAmount <= 0;
 
   const confirmCancelPayment = () => {
     if (!data?.latestPaymentEntry) {
@@ -522,6 +573,31 @@ const SalesRefundReviewPage: React.FC = () => {
                     size={16}
                     style={{ width: '100%' }}
                   >
+                    {lastRefundResult ? (
+                      <Alert
+                        action={
+                          lastRefundResult.paymentEntry ? (
+                            <Button
+                              size="small"
+                              onClick={() => history.push('/payments')}
+                            >
+                              查看收付款流水
+                            </Button>
+                          ) : undefined
+                        }
+                        description={
+                          lastRefundResult.paymentEntry
+                            ? `本次退款单 ${lastRefundResult.paymentEntry} 已创建，退款金额 ${formatCurrencyValue(
+                                lastRefundResult.refundAmount,
+                                refundContext?.refund.currency ?? data.currency,
+                              )}。`
+                            : '本次客户退款已登记。'
+                        }
+                        message="本次退款登记成功"
+                        showIcon
+                        type="success"
+                      />
+                    ) : null}
                     <StatisticCard.Group direction="row">
                       <StatisticCard
                         statistic={{
@@ -553,11 +629,71 @@ const SalesRefundReviewPage: React.FC = () => {
                       <StatisticCard
                         statistic={{
                           title: '退货发票状态',
-                          value:
-                            refundContext?.returnInvoice?.documentStatus || '-',
+                          value: refundStatusText(refundContext?.refund.status),
                         }}
                       />
                     </StatisticCard.Group>
+                    <ProCard
+                      size="small"
+                      title="退款进度"
+                      bodyStyle={{ paddingBlock: 16 }}
+                    >
+                      <Progress
+                        percent={refundProgress}
+                        status={isRefundCompleted ? 'success' : 'active'}
+                      />
+                      <Typography.Text type="secondary">
+                        已退{' '}
+                        {formatCurrencyValue(
+                          refundedAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}
+                        ，剩余可退{' '}
+                        {formatCurrencyValue(
+                          refundableAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}
+                      </Typography.Text>
+                    </ProCard>
+                    <ProDescriptions
+                      bordered
+                      column={2}
+                      dataSource={{
+                        returnInvoice:
+                          refundContext?.returnInvoice?.name ??
+                          returnInvoiceName,
+                        sourceInvoice:
+                          refundContext?.sourceInvoice?.name ??
+                          refundContext?.returnInvoice?.returnAgainst ??
+                          invoiceName,
+                        customer:
+                          refundContext?.returnInvoice?.customerName ??
+                          data.contactDisplay,
+                        company:
+                          refundContext?.returnInvoice?.company ?? data.company,
+                      }}
+                      size="small"
+                      title="退款单据关系"
+                    >
+                      <ProDescriptions.Item
+                        label="退货发票"
+                        dataIndex="returnInvoice"
+                      />
+                      <ProDescriptions.Item
+                        label="来源发票"
+                        dataIndex="sourceInvoice"
+                      />
+                      <ProDescriptions.Item label="客户" dataIndex="customer" />
+                      <ProDescriptions.Item label="公司" dataIndex="company" />
+                    </ProDescriptions>
+                    {isRefundCompleted ? (
+                      <Alert
+                        message="退款已完成"
+                        description="当前退货发票没有剩余可退金额，不能继续登记客户退款。"
+                        showIcon
+                        type="success"
+                      />
+                    ) : null}
                     <div
                       style={{
                         display: 'grid',
@@ -574,8 +710,6 @@ const SalesRefundReviewPage: React.FC = () => {
                           {
                             validator: (_, value) => {
                               const nextValue = Number(value ?? 0);
-                              const refundableAmount =
-                                refundContext?.refund.refundableAmount ?? 0;
                               if (nextValue <= 0) {
                                 return Promise.reject(
                                   new Error('退款金额必须大于 0'),
@@ -644,6 +778,7 @@ const SalesRefundReviewPage: React.FC = () => {
                     <Button
                       disabled={
                         refundContextLoading ||
+                        isRefundCompleted ||
                         !refundContext?.actions.canCreateRefund
                       }
                       loading={refundLoading}
@@ -653,7 +788,7 @@ const SalesRefundReviewPage: React.FC = () => {
                       登记客户退款
                     </Button>
                     <ProTable<SalesInvoicePaymentEntry>
-                      columns={paymentEntryColumns}
+                      columns={refundEntryColumns}
                       dataSource={refundContext?.entries ?? []}
                       headerTitle="客户退款历史"
                       pagination={false}

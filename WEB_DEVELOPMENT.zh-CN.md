@@ -647,6 +647,9 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - `/sales/refunds/review` 读取来源销售发票详情，展示应收、实收、核销、多收保留、未收、最近收款和完整收款历史。
 - 当 URL 或表单提供退货发票时，页面调用 `get_customer_refund_context_v1`，展示退货金额、已退金额、当前可退金额、退款历史和不可退款原因，并按 `suggested_refund_amount` 默认填入退款金额。
+- 退款页应在登记成功后保留本次退款结果，展示退款单号，并继续刷新退款上下文；当可退金额为 0 时显示“退款已完成”并禁用登记按钮。
+- 退款页的客户退款历史应使用“退款单 / 退款日期 / 退款方式 / 退款金额”等退款语义列名，并配合退款进度条展示累计已退和剩余可退金额。
+- 退款页应展示退货发票与来源发票的关系，避免用户把“回退原收款”和“正式客户退款”混为同一操作。
 - 正式客户退款调用 `create_customer_refund`，提交 `return_invoice_name`、`refund_amount`、`mode_of_payment`、`reference_no`、`reference_date` 和 `remarks`，由后端创建并提交 `Payment Entry`。
 - “取消最近收款”只用于需要回退原收款凭证的场景，不等同于正式客户退款。
 - 如业务已经线下退款，应通过正式退款登记补齐财务凭证，不在 Web 中伪造退款完成状态。
