@@ -1,5 +1,5 @@
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link, useLocation, useParams, useRequest } from '@umijs/max';
+import { history, Link, useLocation, useParams, useRequest } from '@umijs/max';
 import type { DescriptionsProps } from 'antd';
 import {
   Alert,
@@ -66,6 +66,31 @@ function docLinks(values: string[], basePath: string) {
     : '无';
 }
 
+function timelineDocLinks(
+  events: SalesOrderTimelineEvent[],
+  type: SalesOrderTimelineEvent['type'],
+) {
+  const documents = events
+    .filter((event) => event.type === type && event.docname)
+    .map((event) => ({
+      docname: event.docname,
+      path: documentPath(event.doctype, event.docname),
+    }));
+
+  return documents.length
+    ? documents.map((document, index) => (
+        <React.Fragment key={`${type}-${document.docname}`}>
+          {index > 0 ? '、' : null}
+          {document.path ? (
+            <Link to={document.path}>{document.docname}</Link>
+          ) : (
+            document.docname
+          )}
+        </React.Fragment>
+      ))
+    : '无';
+}
+
 function documentPath(doctype: string, docname: string) {
   if (!docname) {
     return '';
@@ -83,6 +108,20 @@ function documentPath(doctype: string, docname: string) {
     return `/sales/orders/${encodeURIComponent(docname)}`;
   }
   return '';
+}
+
+type SalesReturnSourceOption = {
+  doctype: 'Sales Invoice' | 'Delivery Note';
+  label: string;
+  name: string;
+};
+
+function salesReturnSourcePath(source: SalesReturnSourceOption) {
+  return `/sales/returns/new?sourceDoctype=${encodeURIComponent(source.doctype)}&sourceName=${encodeURIComponent(source.name)}`;
+}
+
+function customerRefundReviewPath(returnInvoice: string) {
+  return `/sales/refunds/review?returnInvoice=${encodeURIComponent(returnInvoice)}`;
 }
 
 function timelineColor(event: SalesOrderTimelineEvent) {
@@ -989,6 +1028,82 @@ const SalesOrderDetailPage: React.FC = () => {
         },
       ]
     : [];
+  const timelineEvents = detail?.timeline ?? [];
+  const returnInvoiceNames = timelineEvents
+    .filter((event) => event.type === 'sales_return' && event.docname)
+    .map((event) => event.docname);
+  const returnSourceOptions: SalesReturnSourceOption[] = detail
+    ? [
+        ...detail.salesInvoices.map((name) => ({
+          doctype: 'Sales Invoice' as const,
+          label: '销售发票',
+          name,
+        })),
+        ...detail.deliveryNotes.map((name) => ({
+          doctype: 'Delivery Note' as const,
+          label: '发货单',
+          name,
+        })),
+      ]
+    : [];
+  const openReturnSource = () => {
+    if (!returnSourceOptions.length) {
+      return;
+    }
+    if (returnSourceOptions.length === 1) {
+      history.push(salesReturnSourcePath(returnSourceOptions[0]));
+      return;
+    }
+    Modal.info({
+      content: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {returnSourceOptions.map((source) => (
+            <Button
+              block
+              key={`${source.doctype}-${source.name}`}
+              onClick={() => {
+                Modal.destroyAll();
+                history.push(salesReturnSourcePath(source));
+              }}
+            >
+              {source.label} {source.name}
+            </Button>
+          ))}
+        </Space>
+      ),
+      title: '选择退货来源单据',
+      width: 520,
+    });
+  };
+  const openRefundReview = () => {
+    if (!returnInvoiceNames.length) {
+      return;
+    }
+    if (returnInvoiceNames.length === 1) {
+      history.push(customerRefundReviewPath(returnInvoiceNames[0]));
+      return;
+    }
+    Modal.info({
+      content: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {returnInvoiceNames.map((name) => (
+            <Button
+              block
+              key={name}
+              onClick={() => {
+                Modal.destroyAll();
+                history.push(customerRefundReviewPath(name));
+              }}
+            >
+              退货发票 {name}
+            </Button>
+          ))}
+        </Space>
+      ),
+      title: '选择需要核对退款的退货发票',
+      width: 520,
+    });
+  };
   const referenceItems: DescriptionsProps['items'] = detail
     ? [
         {
@@ -1001,10 +1116,24 @@ const SalesOrderDetailPage: React.FC = () => {
           label: '销售发票',
           children: docLinks(detail.salesInvoices, '/sales/invoices'),
         },
+        {
+          key: 'paymentEntries',
+          label: '收款单',
+          children: timelineDocLinks(timelineEvents, 'payment_entry'),
+        },
+        {
+          key: 'salesReturns',
+          label: '退货发票',
+          children: timelineDocLinks(timelineEvents, 'sales_return'),
+        },
+        {
+          key: 'customerRefunds',
+          label: '退款单',
+          children: timelineDocLinks(timelineEvents, 'customer_refund'),
+        },
       ]
     : [];
   const progress = detail ? salesOrderProgress(detail) : null;
-  const timelineEvents = detail?.timeline ?? [];
 
   return (
     <PageContainer
@@ -1329,6 +1458,39 @@ const SalesOrderDetailPage: React.FC = () => {
                             }
                           >
                             记录收款
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          detail.salesInvoices.length ||
+                          detail.deliveryNotes.length
+                            ? ''
+                            : '需要先完成发货或开票后再发起退货'
+                        }
+                      >
+                        <span>
+                          <Button
+                            disabled={!returnSourceOptions.length}
+                            onClick={openReturnSource}
+                          >
+                            发起退货
+                          </Button>
+                        </span>
+                      </Tooltip>
+                      <Tooltip
+                        title={
+                          returnInvoiceNames.length
+                            ? ''
+                            : '需要先创建退货发票后再核对退款'
+                        }
+                      >
+                        <span>
+                          <Button
+                            disabled={!returnInvoiceNames.length}
+                            onClick={openRefundReview}
+                          >
+                            退款核对
                           </Button>
                         </span>
                       </Tooltip>

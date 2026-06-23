@@ -642,6 +642,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/orders/:name` 应渲染 `get_sales_order_detail.timeline[]`，用于串联销售订单、发货单、销售发票、客户收款、销售退货和客户退款。
 - 时间线是后端聚合的展示型字段，前端不要再根据 `references.delivery_notes`、`references.sales_invoices` 和付款历史自行拼接流程。
 - 时间线事件应显示单据类型、单据号、状态、业务日期、金额和关联单据；能跳转的单据应提供链接。
+- 订单详情右侧关联单据和退货 / 退款入口应复用 `timeline[]` 中的收款单、退货发票和退款单信息；没有发货单 / 发票时禁用退货入口，没有退货发票时禁用退款核对入口；当存在多张可作为来源的发货单、销售发票或退货发票时，必须让用户选择具体单据，不能默认取第一张。
 
 销售退货页面规则：
 

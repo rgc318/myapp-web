@@ -6,6 +6,9 @@ import SalesOrderDetailPage from './Detail';
 let mockLocationSearch = '';
 
 jest.mock('@umijs/max', () => ({
+  history: {
+    push: jest.fn(),
+  },
   Link: ({ children }: any) => {
     const React = jest.requireActual('react');
     return React.createElement('a', null, children);
