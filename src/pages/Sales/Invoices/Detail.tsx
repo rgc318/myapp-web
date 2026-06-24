@@ -6,7 +6,16 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
+import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Progress,
+  Skeleton,
+  Space,
+} from 'antd';
 import React, { useState } from 'react';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
@@ -36,6 +45,21 @@ function docLinks(values: string[], basePath: string) {
 
 function isCancelled(status: string) {
   return status === 'cancelled' || status === '已作废';
+}
+
+function paymentEntryPath(paymentEntry: string) {
+  return `/payments?search=${encodeURIComponent(paymentEntry)}`;
+}
+
+function toPercent(
+  value: number | null | undefined,
+  total: number | null | undefined,
+) {
+  const totalValue = Number(total ?? 0);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    return 0;
+  }
+  return Math.min(Math.round((Number(value ?? 0) / totalValue) * 100), 100);
 }
 
 function paymentStatusHint(data: {
@@ -116,6 +140,14 @@ const paymentEntryColumns = [
     title: '收款单',
     dataIndex: 'paymentEntry',
     width: 180,
+    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
+      record.paymentEntry ? (
+        <Link to={paymentEntryPath(record.paymentEntry)}>
+          {record.paymentEntry}
+        </Link>
+      ) : (
+        '-'
+      ),
   },
   {
     title: '收款日期',
@@ -354,6 +386,25 @@ const SalesInvoiceDetailPage: React.FC = () => {
                   ),
                 }}
               />
+              <StatisticCard
+                chart={
+                  <Progress
+                    percent={toPercent(
+                      data.actualPaidAmount ?? data.paidAmount,
+                      data.receivableAmount || data.grandTotal,
+                    )}
+                    size="small"
+                    status={hasOutstanding ? 'active' : 'success'}
+                  />
+                }
+                statistic={{
+                  title: '收款进度',
+                  value: `${toPercent(
+                    data.actualPaidAmount ?? data.paidAmount,
+                    data.receivableAmount || data.grandTotal,
+                  )}%`,
+                }}
+              />
               {(data.totalWriteoffAmount ?? 0) > 0 ? (
                 <StatisticCard
                   statistic={{
@@ -377,199 +428,224 @@ const SalesInvoiceDetailPage: React.FC = () => {
             </StatisticCard.Group>
 
             <ProCard split="vertical">
-              <ProCard title="基本信息">
-                <ProDescriptions column={2} dataSource={data}>
-                  <ProDescriptions.Item label="公司" dataIndex="company" />
-                  <ProDescriptions.Item
-                    label="过账日期"
-                    dataIndex="postingDate"
+              <ProCard colSpan="65%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProTable<SalesInvoicePaymentEntry>
+                    columns={paymentEntryColumns}
+                    dataSource={data.paymentEntries}
+                    headerTitle="收款历史"
+                    pagination={false}
+                    rowKey="paymentEntry"
+                    scroll={{ x: 1050 }}
+                    search={false}
+                    toolBarRender={false}
                   />
-                  <ProDescriptions.Item label="到期日期" dataIndex="dueDate" />
-                  <ProDescriptions.Item label="币种">
-                    {formatCurrencyCode(data.currency)}
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="单据状态">
-                    <StatusTag value={data.documentStatus} />
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="收款状态">
-                    <StatusTag value={data.paymentStatus} />
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="可取消">
-                    {data.canCancelSalesInvoice ? '是' : '否'}
-                  </ProDescriptions.Item>
-                </ProDescriptions>
+
+                  <ProTable<SalesOrderDetailItem>
+                    columns={itemColumns}
+                    dataSource={data.items}
+                    headerTitle="商品明细"
+                    pagination={false}
+                    rowKey={(record) =>
+                      `${record.itemCode}-${record.warehouse}`
+                    }
+                    search={false}
+                    toolBarRender={false}
+                  />
+
+                  <ProCard title={cancelled ? '历史单据说明' : '流程承接'}>
+                    <Alert
+                      action={
+                        cancelled ? (
+                          sourceOrder ? (
+                            <Button size="small">
+                              <Link
+                                to={`/sales/orders/${encodeURIComponent(sourceOrder)}`}
+                              >
+                                返回订单
+                              </Link>
+                            </Button>
+                          ) : null
+                        ) : hasOutstanding && sourceOrder ? (
+                          <Button size="small" type="primary">
+                            <Link
+                              to={`/sales/orders/${encodeURIComponent(
+                                sourceOrder,
+                              )}?action=payment`}
+                            >
+                              前往收款
+                            </Link>
+                          </Button>
+                        ) : linkedDeliveryNote ? (
+                          <Button size="small">
+                            <Link
+                              to={`/sales/delivery-notes/${encodeURIComponent(
+                                linkedDeliveryNote,
+                              )}`}
+                            >
+                              查看发货单
+                            </Link>
+                          </Button>
+                        ) : null
+                      }
+                      description={paymentStatusHint(data)}
+                      message={cancelled ? '这是一张历史发票' : '当前结算状态'}
+                      showIcon
+                      type={
+                        cancelled
+                          ? 'warning'
+                          : hasOutstanding
+                            ? 'info'
+                            : 'success'
+                      }
+                    />
+                  </ProCard>
+                </Space>
               </ProCard>
 
-              <ProCard title="收款信息">
-                <ProDescriptions column={1} dataSource={data}>
-                  <ProDescriptions.Item
-                    label="应收金额"
-                    dataIndex="receivableAmount"
-                    render={(_, record) =>
-                      formatCurrencyValue(
-                        record.receivableAmount,
-                        record.currency,
-                      )
-                    }
-                  />
-                  <ProDescriptions.Item
-                    label="实收金额"
-                    dataIndex="actualPaidAmount"
-                    render={(_, record) =>
-                      formatCurrencyValue(
-                        record.actualPaidAmount ?? record.paidAmount,
-                        record.currency,
-                      )
-                    }
-                  />
-                  <ProDescriptions.Item
-                    label="核销金额"
-                    dataIndex="totalWriteoffAmount"
-                    render={(_, record) =>
-                      formatCurrencyValue(
-                        record.totalWriteoffAmount,
-                        record.currency,
-                      )
-                    }
-                  />
-                  <ProDescriptions.Item
-                    label="最近多收保留"
-                    dataIndex="latestUnallocatedAmount"
-                    render={(_, record) =>
-                      formatCurrencyValue(
-                        record.latestUnallocatedAmount,
-                        record.currency,
-                      )
-                    }
-                  />
-                  <ProDescriptions.Item
-                    label="最近收款"
-                    dataIndex="latestPaymentEntry"
-                  />
-                  <ProDescriptions.Item label="备注" dataIndex="remarks" />
-                </ProDescriptions>
+              <ProCard colSpan="35%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="基本信息">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item label="公司" dataIndex="company" />
+                      <ProDescriptions.Item
+                        label="过账日期"
+                        dataIndex="postingDate"
+                      />
+                      <ProDescriptions.Item
+                        label="到期日期"
+                        dataIndex="dueDate"
+                      />
+                      <ProDescriptions.Item label="币种">
+                        {formatCurrencyCode(data.currency)}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="单据状态">
+                        <StatusTag value={data.documentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="收款状态">
+                        <StatusTag value={data.paymentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="可取消">
+                        {data.canCancelSalesInvoice ? '是' : '否'}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="关联单据">
+                    <ProDescriptions column={1}>
+                      <ProDescriptions.Item label="销售订单">
+                        {docLinks(data.salesOrders, '/sales/orders')}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="发货单">
+                        {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="收款信息">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item
+                        label="应收金额"
+                        dataIndex="receivableAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.receivableAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item
+                        label="实收金额"
+                        dataIndex="actualPaidAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.actualPaidAmount ?? record.paidAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item
+                        label="核销金额"
+                        dataIndex="totalWriteoffAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.totalWriteoffAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item
+                        label="最近多收保留"
+                        dataIndex="latestUnallocatedAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.latestUnallocatedAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item label="最近收款">
+                        {data.latestPaymentEntry ? (
+                          <Link to={paymentEntryPath(data.latestPaymentEntry)}>
+                            {data.latestPaymentEntry}
+                          </Link>
+                        ) : (
+                          '无'
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="备注">
+                        {data.remarks || '无'}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  {!cancelled &&
+                  (data.canCancelSalesInvoice ||
+                    data.cancelSalesInvoiceHint ||
+                    data.latestPaymentEntry) ? (
+                    <ProCard title="回退处理">
+                      <Alert
+                        action={
+                          <Space>
+                            {data.latestPaymentEntry ? (
+                              <Button
+                                danger
+                                loading={paymentCancelLoading}
+                                onClick={confirmCancelPayment}
+                                size="small"
+                              >
+                                回退收款
+                              </Button>
+                            ) : null}
+                            {data.canCancelSalesInvoice ? (
+                              <Button
+                                danger
+                                loading={cancelLoading}
+                                onClick={confirmCancel}
+                                size="small"
+                              >
+                                {data.latestPaymentEntry
+                                  ? '回退收款并作废发票'
+                                  : '作废销售发票'}
+                              </Button>
+                            ) : null}
+                          </Space>
+                        }
+                        description={
+                          data.latestPaymentEntry
+                            ? '这张发票已经有关联收款。若只是收款登记有误，可单独回退收款；若订单金额或开票结果有问题，应先回退收款，再作废发票。'
+                            : data.cancelSalesInvoiceHint ||
+                              '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
+                        }
+                        message="发票回退前请确认收款状态"
+                        showIcon
+                        type="warning"
+                      />
+                    </ProCard>
+                  ) : null}
+                </Space>
               </ProCard>
             </ProCard>
-
-            <ProCard title="关联单据">
-              <ProDescriptions column={2}>
-                <ProDescriptions.Item label="销售订单">
-                  {docLinks(data.salesOrders, '/sales/orders')}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="发货单">
-                  {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
-                </ProDescriptions.Item>
-              </ProDescriptions>
-            </ProCard>
-
-            <ProTable<SalesInvoicePaymentEntry>
-              columns={paymentEntryColumns}
-              dataSource={data.paymentEntries}
-              headerTitle="收款历史"
-              pagination={false}
-              rowKey="paymentEntry"
-              scroll={{ x: 1050 }}
-              search={false}
-              toolBarRender={false}
-            />
-
-            <ProCard title={cancelled ? '历史单据说明' : '流程承接'}>
-              <Alert
-                action={
-                  cancelled ? (
-                    sourceOrder ? (
-                      <Button size="small">
-                        <Link
-                          to={`/sales/orders/${encodeURIComponent(sourceOrder)}`}
-                        >
-                          返回订单
-                        </Link>
-                      </Button>
-                    ) : null
-                  ) : hasOutstanding && sourceOrder ? (
-                    <Button size="small" type="primary">
-                      <Link
-                        to={`/sales/orders/${encodeURIComponent(
-                          sourceOrder,
-                        )}?action=payment`}
-                      >
-                        前往收款
-                      </Link>
-                    </Button>
-                  ) : linkedDeliveryNote ? (
-                    <Button size="small">
-                      <Link
-                        to={`/sales/delivery-notes/${encodeURIComponent(
-                          linkedDeliveryNote,
-                        )}`}
-                      >
-                        查看发货单
-                      </Link>
-                    </Button>
-                  ) : null
-                }
-                description={paymentStatusHint(data)}
-                message={cancelled ? '这是一张历史发票' : '当前结算状态'}
-                showIcon
-                type={
-                  cancelled ? 'warning' : hasOutstanding ? 'info' : 'success'
-                }
-              />
-            </ProCard>
-
-            {!cancelled &&
-            (data.canCancelSalesInvoice ||
-              data.cancelSalesInvoiceHint ||
-              data.latestPaymentEntry) ? (
-              <ProCard title="回退处理">
-                <Alert
-                  action={
-                    <Space>
-                      {data.latestPaymentEntry ? (
-                        <Button
-                          danger
-                          loading={paymentCancelLoading}
-                          onClick={confirmCancelPayment}
-                          size="small"
-                        >
-                          回退收款
-                        </Button>
-                      ) : null}
-                      {data.canCancelSalesInvoice ? (
-                        <Button
-                          danger
-                          loading={cancelLoading}
-                          onClick={confirmCancel}
-                          size="small"
-                        >
-                          {data.latestPaymentEntry
-                            ? '回退收款并作废发票'
-                            : '作废销售发票'}
-                        </Button>
-                      ) : null}
-                    </Space>
-                  }
-                  description={
-                    data.latestPaymentEntry
-                      ? '这张发票已经有关联收款。若只是收款登记有误，可单独回退收款；若订单金额或开票结果有问题，应先回退收款，再作废发票。'
-                      : data.cancelSalesInvoiceHint ||
-                        '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
-                  }
-                  message="发票回退前请确认收款状态"
-                  showIcon
-                  type="warning"
-                />
-              </ProCard>
-            ) : null}
-
-            <ProTable<SalesOrderDetailItem>
-              columns={itemColumns}
-              dataSource={data.items}
-              pagination={false}
-              rowKey={(record) => `${record.itemCode}-${record.warehouse}`}
-              search={false}
-              toolBarRender={false}
-            />
           </>
         ) : null}
       </Space>
