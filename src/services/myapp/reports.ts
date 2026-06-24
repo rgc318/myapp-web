@@ -12,6 +12,7 @@ export type ReportFilter = {
   dateFrom?: string | null;
   dateTo?: string | null;
   limit?: number;
+  searchKey?: string | null;
 };
 
 export type BusinessOverview = {
@@ -370,6 +371,7 @@ export async function fetchCashflowEntries(
       ...buildPayload(filter),
       page: filter?.page ?? 1,
       page_size: filter?.pageSize ?? 20,
+      search_key: toOptionalText(filter?.searchKey),
     }),
   );
   const data = result.data ?? {};

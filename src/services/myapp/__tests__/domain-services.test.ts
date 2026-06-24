@@ -576,6 +576,24 @@ describe('myapp domain services', () => {
     expect(cashflow.hasMore).toBe(true);
   });
 
+  it('passes cashflow search key to gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        pagination: { total_count: 0 },
+        rows: [],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await fetchCashflowEntries({ searchKey: 'PE-0001' });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_cashflow_entries_v1',
+      expect.objectContaining({ search_key: 'PE-0001' }),
+    );
+  });
+
   it('maps product list media and totals', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {

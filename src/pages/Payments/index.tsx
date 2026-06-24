@@ -1,5 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { useLocation } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import React, { useRef } from 'react';
 import { RemoteLinkSelect } from '@/components';
@@ -26,8 +27,21 @@ function directionTag(value: CashflowEntry['direction']) {
   return <Tag color={item.color}>{item.text}</Tag>;
 }
 
-function buildColumns(defaultCompany: string): ProColumns<CashflowEntry>[] {
+function buildColumns(
+  defaultCompany: string,
+  initialSearchKey: string,
+): ProColumns<CashflowEntry>[] {
   return [
+    {
+      title: '关键词',
+      dataIndex: 'searchKey',
+      hideInTable: true,
+      initialValue: initialSearchKey,
+      fieldProps: {
+        allowClear: true,
+        placeholder: '收付款单号 / 往来方 / 参考号',
+      },
+    },
     {
       title: '公司',
       dataIndex: 'company',
@@ -118,8 +132,11 @@ function buildColumns(defaultCompany: string): ProColumns<CashflowEntry>[] {
 
 const PaymentsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const location = useLocation();
   const { defaultCompany } = useWorkspacePreferences();
-  const columns = buildColumns(defaultCompany);
+  const initialSearchKey =
+    new URLSearchParams(location.search).get('search') ?? '';
+  const columns = buildColumns(defaultCompany, initialSearchKey);
 
   return (
     <PageContainer
@@ -133,7 +150,7 @@ const PaymentsPage: React.FC = () => {
       <ProTable<CashflowEntry>
         actionRef={actionRef}
         columns={columns}
-        key={defaultCompany}
+        key={`${defaultCompany}-${initialSearchKey}`}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,
@@ -150,6 +167,7 @@ const PaymentsPage: React.FC = () => {
             dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
             page: current,
             pageSize,
+            searchKey: toOptionalText(params.searchKey),
           });
 
           return {

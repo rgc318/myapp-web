@@ -579,7 +579,11 @@ const SalesRefundReviewPage: React.FC = () => {
                           lastRefundResult.paymentEntry ? (
                             <Button
                               size="small"
-                              onClick={() => history.push('/payments')}
+                              onClick={() =>
+                                history.push(
+                                  `/payments?search=${encodeURIComponent(lastRefundResult.paymentEntry)}`,
+                                )
+                              }
                             >
                               查看收付款流水
                             </Button>

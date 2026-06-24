@@ -643,6 +643,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 时间线是后端聚合的展示型字段，前端不要再根据 `references.delivery_notes`、`references.sales_invoices` 和付款历史自行拼接流程。
 - 时间线事件应显示单据类型、单据号、状态、业务日期、金额和关联单据；能跳转的单据应提供链接。
 - 订单详情右侧关联单据和退货 / 退款入口应复用 `timeline[]` 中的收款单、退货发票和退款单信息；没有发货单 / 发票时禁用退货入口，没有退货发票时禁用退款核对入口；当存在多张可作为来源的发货单、销售发票或退货发票时，必须让用户选择具体单据，不能默认取第一张。
+- 时间线或退款结果中的 `Payment Entry` 链接应跳转到 `/payments?search=<收付款单号>`，让收付款流水页直接按该单号过滤。
 
 销售退货页面规则：
 
@@ -803,7 +804,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 当前页面：
 
 - `/payments` 已接入 `list_cashflow_entries_v1`。
-- 支持公司、日期和分页查询。
+- 支持关键词、公司、日期和分页查询；`/payments?search=<收付款单号>` 应自动填入关键词，用于从订单时间线或退款结果定位具体 `Payment Entry`。
 - 展示收付款单号、收款 / 付款 / 转账方向、往来方类型、往来方、付款方式、金额和参考号。
 - 当前服务层未暴露方向过滤，页面先不在前端做伪筛选；后续等后端接口支持后补方向、付款方式和往来方筛选。
 
