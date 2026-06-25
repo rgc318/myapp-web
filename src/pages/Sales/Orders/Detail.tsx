@@ -102,7 +102,7 @@ function documentPath(doctype: string, docname: string) {
     return `/sales/invoices/${encodeURIComponent(docname)}`;
   }
   if (doctype === 'Payment Entry') {
-    return `/payments?search=${encodeURIComponent(docname)}`;
+    return `/payments/${encodeURIComponent(docname)}`;
   }
   if (doctype === 'Sales Order') {
     return `/sales/orders/${encodeURIComponent(docname)}`;

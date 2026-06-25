@@ -577,7 +577,7 @@ const SalesRefundReviewPage: React.FC = () => {
                                     size="small"
                                     onClick={() =>
                                       history.push(
-                                        `/payments?search=${encodeURIComponent(lastRefundResult.paymentEntry)}`,
+                                        `/payments/${encodeURIComponent(lastRefundResult.paymentEntry)}`,
                                       )
                                     }
                                   >

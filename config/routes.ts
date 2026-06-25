@@ -181,6 +181,13 @@ export default [
     component: './Payments',
   },
   {
+    path: '/payments/:name',
+    name: 'payment-detail',
+    access: 'canViewFinance',
+    component: './Payments/Detail',
+    hideInMenu: true,
+  },
+  {
     path: '/finance',
     name: 'finance',
     icon: 'accountBook',

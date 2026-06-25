@@ -35,6 +35,7 @@ export default {
   'menu.purchase.refund-review': 'Purchase Refund Review',
   'menu.reports': 'Business Reports',
   'menu.payments': 'Payment Ledger',
+  'menu.payment-detail': 'Payment Detail',
   'menu.finance': 'Finance Overview',
   'menu.inventory': 'Inventory',
   'menu.inventory.stock': 'Stock',

@@ -72,6 +72,65 @@ export type CashflowEntry = {
   referenceNo: string | null;
 };
 
+export type PaymentEntryReference = {
+  account: string | null;
+  allocatedAmount: number;
+  dueDate: string | null;
+  exchangeRate: number;
+  isReturn: boolean;
+  outstandingAmount: number;
+  referenceDoctype: string | null;
+  referenceName: string | null;
+  returnAgainst: string | null;
+  totalAmount: number;
+};
+
+export type PaymentEntryDeduction = {
+  account: string | null;
+  amount: number;
+  costCenter: string | null;
+  description: string | null;
+};
+
+export type PaymentEntryDetail = {
+  actions: {
+    canCancel: boolean;
+    cancelHint: string;
+  };
+  amount: number;
+  businessType: string;
+  company: string | null;
+  currency: string | null;
+  deductions: PaymentEntryDeduction[];
+  differenceAmount: number;
+  direction: 'in' | 'out' | 'transfer';
+  docstatus: number;
+  documentStatus: string;
+  links: {
+    purchaseInvoices: string[];
+    purchaseOrders: string[];
+    returnInvoices: string[];
+    salesInvoices: string[];
+    salesOrders: string[];
+  };
+  modeOfPayment: string | null;
+  name: string;
+  paidAmount: number;
+  paidFrom: string | null;
+  paidTo: string | null;
+  party: string | null;
+  partyName: string | null;
+  partyType: string | null;
+  paymentType: string | null;
+  postingDate: string | null;
+  receivedAmount: number;
+  referenceDate: string | null;
+  referenceNo: string | null;
+  references: PaymentEntryReference[];
+  remarks: string | null;
+  unallocatedAmount: number;
+};
+
 export type BusinessReport = {
   meta: {
     company: string | null;
@@ -241,6 +300,93 @@ function mapCashflowEntry(value: unknown): CashflowEntry | null {
   };
 }
 
+function mapTextList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && Boolean(item))
+    : [];
+}
+
+function mapPaymentEntryReference(value: unknown): PaymentEntryReference {
+  const row = readObject(value);
+  return {
+    account: typeof row.account === 'string' ? row.account : null,
+    allocatedAmount: toNumber(row.allocated_amount),
+    dueDate: typeof row.due_date === 'string' ? row.due_date : null,
+    exchangeRate: toNumber(row.exchange_rate),
+    isReturn: Boolean(row.is_return),
+    outstandingAmount: toNumber(row.outstanding_amount),
+    referenceDoctype:
+      typeof row.reference_doctype === 'string' ? row.reference_doctype : null,
+    referenceName:
+      typeof row.reference_name === 'string' ? row.reference_name : null,
+    returnAgainst:
+      typeof row.return_against === 'string' ? row.return_against : null,
+    totalAmount: toNumber(row.total_amount),
+  };
+}
+
+function mapPaymentEntryDeduction(value: unknown): PaymentEntryDeduction {
+  const row = readObject(value);
+  return {
+    account: typeof row.account === 'string' ? row.account : null,
+    amount: toNumber(row.amount),
+    costCenter: typeof row.cost_center === 'string' ? row.cost_center : null,
+    description: typeof row.description === 'string' ? row.description : null,
+  };
+}
+
+function mapPaymentEntryDetail(value: unknown): PaymentEntryDetail {
+  const row = readObject(value);
+  const links = readObject(row.links);
+  const actions = readObject(row.actions);
+
+  return {
+    actions: {
+      canCancel: Boolean(actions.can_cancel),
+      cancelHint: typeof actions.cancel_hint === 'string' ? actions.cancel_hint : '',
+    },
+    amount: toNumber(row.amount),
+    businessType: typeof row.business_type === 'string' ? row.business_type : '',
+    company: typeof row.company === 'string' ? row.company : null,
+    currency: typeof row.currency === 'string' ? row.currency : null,
+    deductions: (Array.isArray(row.deductions) ? row.deductions : []).map(
+      mapPaymentEntryDeduction,
+    ),
+    differenceAmount: toNumber(row.difference_amount),
+    direction: row.direction === 'out' || row.direction === 'transfer' ? row.direction : 'in',
+    docstatus: toNumber(row.docstatus),
+    documentStatus:
+      typeof row.document_status === 'string' ? row.document_status : '',
+    links: {
+      purchaseInvoices: mapTextList(links.purchase_invoices),
+      purchaseOrders: mapTextList(links.purchase_orders),
+      returnInvoices: mapTextList(links.return_invoices),
+      salesInvoices: mapTextList(links.sales_invoices),
+      salesOrders: mapTextList(links.sales_orders),
+    },
+    modeOfPayment:
+      typeof row.mode_of_payment === 'string' ? row.mode_of_payment : null,
+    name: typeof row.name === 'string' ? row.name : '',
+    paidAmount: toNumber(row.paid_amount),
+    paidFrom: typeof row.paid_from === 'string' ? row.paid_from : null,
+    paidTo: typeof row.paid_to === 'string' ? row.paid_to : null,
+    party: typeof row.party === 'string' ? row.party : null,
+    partyName: typeof row.party_name === 'string' ? row.party_name : null,
+    partyType: typeof row.party_type === 'string' ? row.party_type : null,
+    paymentType: typeof row.payment_type === 'string' ? row.payment_type : null,
+    postingDate: typeof row.posting_date === 'string' ? row.posting_date : null,
+    receivedAmount: toNumber(row.received_amount),
+    referenceDate:
+      typeof row.reference_date === 'string' ? row.reference_date : null,
+    referenceNo: typeof row.reference_no === 'string' ? row.reference_no : null,
+    references: (Array.isArray(row.references) ? row.references : []).map(
+      mapPaymentEntryReference,
+    ),
+    remarks: typeof row.remarks === 'string' ? row.remarks : null,
+    unallocatedAmount: toNumber(row.unallocated_amount),
+  };
+}
+
 function mapReport(data: Record<string, any>, fallbackLimit = 0): BusinessReport {
   const tables = readObject(data.tables);
   return {
@@ -386,4 +532,14 @@ export async function fetchCashflowEntries(
     meta: mapMeta(data.meta),
     total: toNumber(pagination.total_count, rows.length),
   };
+}
+
+export async function getPaymentEntryDetail(
+  paymentEntryName: string,
+): Promise<PaymentEntryDetail> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_payment_entry_detail_v1',
+    { payment_entry_name: paymentEntryName },
+  );
+  return mapPaymentEntryDetail(result.data ?? {});
 }

@@ -35,6 +35,7 @@ export default {
   'menu.purchase.refund-review': '采购退款审核',
   'menu.reports': '经营报表',
   'menu.payments': '收付款流水',
+  'menu.payment-detail': '收付款详情',
   'menu.finance': '财务概览',
   'menu.inventory': '库存',
   'menu.inventory.stock': '商品库存',

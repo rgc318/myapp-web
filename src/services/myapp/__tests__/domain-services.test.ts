@@ -50,7 +50,11 @@ import {
   fetchPrintFile,
   fetchPrintPreview,
 } from '../printing';
-import { fetchCashflowEntries, fetchSalesReport } from '../reports';
+import {
+  fetchCashflowEntries,
+  fetchSalesReport,
+  getPaymentEntryDetail,
+} from '../reports';
 import {
   cancelDeliveryNote,
   cancelSalesOrder,
@@ -592,6 +596,61 @@ describe('myapp domain services', () => {
       'list_cashflow_entries_v1',
       expect.objectContaining({ search_key: 'PE-0001' }),
     );
+  });
+
+  it('maps payment entry detail for fund traceability', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: { can_cancel: true, cancel_hint: '' },
+        amount: '120',
+        business_type: 'customer_receipt',
+        company: 'rgc (Demo)',
+        currency: 'CNY',
+        direction: 'in',
+        docstatus: 1,
+        document_status: 'submitted',
+        mode_of_payment: 'Bank',
+        name: 'PE-0001',
+        party: 'CUST-0001',
+        party_name: '客户 A',
+        party_type: 'Customer',
+        references: [
+          {
+            allocated_amount: '120',
+            is_return: 0,
+            reference_doctype: 'Sales Invoice',
+            reference_name: 'SI-0001',
+            total_amount: '120',
+          },
+        ],
+        links: {
+          sales_invoices: ['SI-0001'],
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const detail = await getPaymentEntryDetail('PE-0001');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_payment_entry_detail_v1',
+      { payment_entry_name: 'PE-0001' },
+    );
+    expect(detail).toMatchObject({
+      amount: 120,
+      businessType: 'customer_receipt',
+      direction: 'in',
+      name: 'PE-0001',
+      partyName: '客户 A',
+    });
+    expect(detail.references[0]).toMatchObject({
+      allocatedAmount: 120,
+      referenceDoctype: 'Sales Invoice',
+      referenceName: 'SI-0001',
+    });
+    expect(detail.links.salesInvoices).toEqual(['SI-0001']);
+    expect(detail.actions.canCancel).toBe(true);
   });
 
   it('maps product list media and totals', async () => {

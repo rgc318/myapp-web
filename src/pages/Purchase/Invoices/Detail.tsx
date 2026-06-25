@@ -354,10 +354,17 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
 
               <ProCard title="付款信息">
                 <ProDescriptions column={1} dataSource={data}>
-                  <ProDescriptions.Item
-                    label="最近付款"
-                    dataIndex="latestPaymentEntry"
-                  />
+                  <ProDescriptions.Item label="最近付款">
+                    {data.latestPaymentEntry ? (
+                      <Link
+                        to={`/payments/${encodeURIComponent(data.latestPaymentEntry)}`}
+                      >
+                        {data.latestPaymentEntry}
+                      </Link>
+                    ) : (
+                      '无'
+                    )}
+                  </ProDescriptions.Item>
                   <ProDescriptions.Item label="备注" dataIndex="remarks" />
                 </ProDescriptions>
               </ProCard>

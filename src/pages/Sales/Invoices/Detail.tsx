@@ -48,7 +48,7 @@ function isCancelled(status: string) {
 }
 
 function paymentEntryPath(paymentEntry: string) {
-  return `/payments?search=${encodeURIComponent(paymentEntry)}`;
+  return `/payments/${encodeURIComponent(paymentEntry)}`;
 }
 
 function toPercent(

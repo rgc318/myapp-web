@@ -4,7 +4,7 @@ import {
   ProDescriptions,
   StatisticCard,
 } from '@ant-design/pro-components';
-import { history, useLocation, useRequest } from '@umijs/max';
+import { history, Link, useLocation, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -227,10 +227,17 @@ const PurchaseRefundReviewPage: React.FC = () => {
                 <ProDescriptions.Item label="付款状态">
                   <StatusTag value={data.paymentStatus} />
                 </ProDescriptions.Item>
-                <ProDescriptions.Item
-                  label="最近付款"
-                  dataIndex="latestPaymentEntry"
-                />
+                <ProDescriptions.Item label="最近付款">
+                  {data.latestPaymentEntry ? (
+                    <Link
+                      to={`/payments/${encodeURIComponent(data.latestPaymentEntry)}`}
+                    >
+                      {data.latestPaymentEntry}
+                    </Link>
+                  ) : (
+                    '无'
+                  )}
+                </ProDescriptions.Item>
                 <ProDescriptions.Item label="供应商" dataIndex="supplierName" />
                 <ProDescriptions.Item
                   label="备注"

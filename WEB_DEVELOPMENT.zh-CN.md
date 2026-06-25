@@ -606,7 +606,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/delivery-notes` 已接入销售发货单列表，支持关键词、公司、日期、单据状态、排序和分页。
 - `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细，并支持取消发货单；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示商品明细和后续处理，右侧展示单据属性、关联单据、收货信息和回退动作；详情页需要展示“后续处理 / 历史单据说明”，已开票时引导查看销售发票，未开票且有关联订单时引导返回订单详情并通过 `?action=invoice` 进入开票动作。
 - `/sales/invoices` 已接入销售发票列表，支持关键词、公司、日期、单据状态、排序和分页。
-- `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款历史、收款信息、关联销售订单 / 发货单和商品明细，并支持取消销售发票和取消最近收款；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示收款历史和商品明细，右侧展示单据属性、关联单据、结算信息和回退动作；详情页需要展示“流程承接 / 历史单据说明”，有未收金额时引导返回订单详情并通过 `?action=payment` 进入收款动作，已结清时引导查看发货单或打印留档。收款历史来自 `get_sales_invoice_detail_v2.payment.entries[]`，应展示每笔收款的收款单号、日期、付款方式、核销金额、实收金额、差额核销、多收保留和参考号，收款单号应链接到 `/payments?search=<收付款单号>`。
+- `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款历史、收款信息、关联销售订单 / 发货单和商品明细，并支持取消销售发票和取消最近收款；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示收款历史和商品明细，右侧展示单据属性、关联单据、结算信息和回退动作；详情页需要展示“流程承接 / 历史单据说明”，有未收金额时引导返回订单详情并通过 `?action=payment` 进入收款动作，已结清时引导查看发货单或打印留档。收款历史来自 `get_sales_invoice_detail_v2.payment.entries[]`，应展示每笔收款的收款单号、日期、付款方式、核销金额、实收金额、差额核销、多收保留和参考号，收款单号应链接到 `/payments/<收付款单号>`。
 - 销售订单、销售发货单和销售发票详情页已接入打印预览和 PDF 下载。
 - `/sales/returns/new` 已接入销售退货，支持基于销售发货单或销售发票读取可退明细、填写本次退货数量、提交独立退货单，并在来源发票退货后提示核对客户退款；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退货明细和提交结果，右侧展示来源信息、后续处理和提交动作。
 - `/sales/refunds/review` 已接入销售退款核对和客户退款登记，支持读取来源销售发票收款状态、收款历史、查看退货发票，并通过 `get_customer_refund_context_v1` 读取可退金额、已退金额、退款历史和动作权限，再基于已提交的退货发票调用 `create_customer_refund` 创建正式退款 `Payment Entry`；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退款登记、客户退款历史和来源发票收款历史，右侧展示处理建议、退货 / 来源发票关系、来源发票核对和回退动作；取消最近收款仅用于需要回退原收款凭证的场景。
@@ -643,7 +643,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 时间线是后端聚合的展示型字段，前端不要再根据 `references.delivery_notes`、`references.sales_invoices` 和付款历史自行拼接流程。
 - 时间线事件应显示单据类型、单据号、状态、业务日期、金额和关联单据；能跳转的单据应提供链接。
 - 订单详情右侧关联单据和退货 / 退款入口应复用 `timeline[]` 中的收款单、退货发票和退款单信息；没有发货单 / 发票时禁用退货入口，没有退货发票时禁用退款核对入口；当存在多张可作为来源的发货单、销售发票或退货发票时，必须让用户选择具体单据，不能默认取第一张。
-- 时间线或退款结果中的 `Payment Entry` 链接应跳转到 `/payments?search=<收付款单号>`，让收付款流水页直接按该单号过滤。
+- 时间线、发票详情、采购付款核对或退款结果中的 `Payment Entry` 链接应优先跳转到 `/payments/<收付款单号>`，直接打开收付款详情；`/payments?search=<收付款单号>` 仅作为列表搜索兼容入口保留。
 
 销售退货页面规则：
 
@@ -662,7 +662,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 正式客户退款调用 `create_customer_refund`，提交 `return_invoice_name`、`refund_amount`、`mode_of_payment`、`reference_no`、`reference_date` 和 `remarks`，由后端创建并提交 `Payment Entry`。
 - “取消最近收款”只用于需要回退原收款凭证的场景，不等同于正式客户退款。
 - 如业务已经线下退款，应通过正式退款登记补齐财务凭证，不在 Web 中伪造退款完成状态。
-- 页面应优先使用 Ant Design Pro 官方组件组织为“顶部 KPI + 左侧主工作区 + 右侧信息区”：主工作区放正式退款登记、退款历史和来源发票收款历史，右侧放处理建议、退货 / 来源发票关系、来源发票核对和原收款回退动作；退款登记成功结果应保留在主工作区，Payment Entry 入口跳转 `/payments?search=<收付款单号>`。
+- 页面应优先使用 Ant Design Pro 官方组件组织为“顶部 KPI + 左侧主工作区 + 右侧信息区”：主工作区放正式退款登记、退款历史和来源发票收款历史，右侧放处理建议、退货 / 来源发票关系、来源发票核对和原收款回退动作；退款登记成功结果应保留在主工作区，Payment Entry 入口跳转 `/payments/<收付款单号>`。
 
 ### 6.4 采购单据列表
 
@@ -795,6 +795,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 ```text
 /payments
+/payments/:name
 ```
 
 接口：
@@ -806,8 +807,10 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 当前页面：
 
 - `/payments` 已接入 `list_cashflow_entries_v1`。
-- 支持关键词、公司、日期和分页查询；`/payments?search=<收付款单号>` 应自动填入关键词，用于从订单时间线或退款结果定位具体 `Payment Entry`。
+- `/payments/:name` 已接入 `get_payment_entry_detail_v1`，用于查看单笔收付款凭证、核销明细、差额 / 扣减明细、关联销售 / 采购 / 退货发票和作废动作状态。
+- 支持关键词、公司、日期和分页查询；`/payments?search=<收付款单号>` 应自动填入关键词，用于保留列表搜索兼容能力，业务链路中的单号跳转应优先使用 `/payments/<收付款单号>`。
 - 展示收付款单号、收款 / 付款 / 转账方向、往来方类型、往来方、付款方式、金额和参考号。
+- 收付款流水中的单号应可点击进入 `/payments/:name`。
 - 当前服务层未暴露方向过滤，页面先不在前端做伪筛选；后续等后端接口支持后补方向、付款方式和往来方筛选。
 
 字段：

@@ -1,6 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { useLocation } from '@umijs/max';
+import { Link, useLocation } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import React, { useRef } from 'react';
 import { RemoteLinkSelect } from '@/components';
@@ -88,7 +88,14 @@ function buildColumns(
       dataIndex: 'name',
       search: false,
       width: 180,
-      renderText: (value) => value || '-',
+      render: (_, record) =>
+        record.name ? (
+          <Link to={`/payments/${encodeURIComponent(record.name)}`}>
+            {record.name}
+          </Link>
+        ) : (
+          '-'
+        ),
     },
     {
       title: '往来方类型',
