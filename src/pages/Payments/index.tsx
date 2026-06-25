@@ -1,14 +1,20 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link, useLocation } from '@umijs/max';
-import { Button, Tag } from 'antd';
-import React, { useRef } from 'react';
+import {
+  PageContainer,
+  ProTable,
+  StatisticCard,
+} from '@ant-design/pro-components';
+import { Link, useLocation, useRequest } from '@umijs/max';
+import { Button, Space, Tag, Typography } from 'antd';
+import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type CashflowEntry,
   fetchCashflowEntries,
+  fetchCashflowReport,
+  type ReportFilter,
 } from '@/services/myapp/reports';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
@@ -25,6 +31,23 @@ function directionTag(value: CashflowEntry['direction']) {
   };
   const item = map[value] ?? { color: 'default', text: '未知' };
   return <Tag color={item.color}>{item.text}</Tag>;
+}
+
+function buildReportFilter(params: Record<string, any>): ReportFilter {
+  const dateRange = Array.isArray(params.dateRange) ? params.dateRange : [];
+  return {
+    company: toOptionalText(params.company),
+    dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
+    dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
+  };
+}
+
+function reportFilterKey(filter: ReportFilter) {
+  return JSON.stringify({
+    company: filter.company ?? '',
+    dateFrom: filter.dateFrom ?? '',
+    dateTo: filter.dateTo ?? '',
+  });
 }
 
 function buildColumns(
@@ -124,7 +147,16 @@ function buildColumns(
       align: 'right',
       search: false,
       width: 130,
-      render: (_, record) => formatCurrencyValue(record.amount),
+      render: (_, record) => (
+        <Typography.Text
+          style={{
+            color: record.direction === 'in' ? '#389e0d' : undefined,
+          }}
+          type={record.direction === 'out' ? 'danger' : undefined}
+        >
+          {formatCurrencyValue(record.amount)}
+        </Typography.Text>
+      ),
     },
     {
       title: '参考号',
@@ -144,62 +176,114 @@ const PaymentsPage: React.FC = () => {
   const initialSearchKey =
     new URLSearchParams(location.search).get('search') ?? '';
   const columns = buildColumns(defaultCompany, initialSearchKey);
+  const [activeReportFilter, setActiveReportFilter] = useState<ReportFilter>({
+    company: defaultCompany,
+  });
+  const activeReportFilterKey = reportFilterKey(activeReportFilter);
+  const activeReportFilterKeyRef = useRef(activeReportFilterKey);
+  const {
+    data: cashflowReport,
+    loading: cashflowReportLoading,
+    refresh: refreshCashflowReport,
+  } = useRequest(() => fetchCashflowReport(activeReportFilter), {
+    formatResult: (result) => result,
+    refreshDeps: [activeReportFilterKey],
+  });
 
   return (
     <PageContainer
       title="收付款流水"
       extra={[
-        <Button key="refresh" onClick={() => actionRef.current?.reload()}>
+        <Button
+          key="refresh"
+          onClick={() => {
+            actionRef.current?.reload();
+            refreshCashflowReport();
+          }}
+        >
           刷新
         </Button>,
       ]}
     >
-      <ProTable<CashflowEntry>
-        actionRef={actionRef}
-        columns={columns}
-        key={`${defaultCompany}-${initialSearchKey}`}
-        pagination={{
-          defaultPageSize: PAGE_SIZE,
-          showSizeChanger: false,
-        }}
-        request={async (params) => {
-          const current = Number(params.current ?? 1);
-          const pageSize = Number(params.pageSize ?? PAGE_SIZE);
-          const dateRange = Array.isArray(params.dateRange)
-            ? params.dateRange
-            : [];
-          const result = await fetchCashflowEntries({
-            company: toOptionalText(params.company),
-            dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
-            dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
-            page: current,
-            pageSize,
-            searchKey: toOptionalText(params.searchKey),
-          });
+      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <StatisticCard.Group direction="row">
+          <StatisticCard
+            loading={cashflowReportLoading}
+            statistic={{
+              title: '收款合计',
+              value: formatCurrencyValue(
+                cashflowReport?.overview.receivedAmountTotal,
+              ),
+            }}
+          />
+          <StatisticCard
+            loading={cashflowReportLoading}
+            statistic={{
+              title: '付款合计',
+              value: formatCurrencyValue(
+                cashflowReport?.overview.paidAmountTotal,
+              ),
+            }}
+          />
+          <StatisticCard
+            loading={cashflowReportLoading}
+            statistic={{
+              title: '净现金流',
+              value: formatCurrencyValue(
+                cashflowReport?.overview.netCashflowTotal,
+              ),
+            }}
+          />
+        </StatisticCard.Group>
 
-          return {
-            data: result.items,
-            success: true,
-            total: result.total,
-          };
-        }}
-        rowKey={(record) =>
-          [
-            record.name,
-            record.postingDate,
-            record.party,
-            record.referenceNo,
-            record.amount,
-          ]
-            .filter(Boolean)
-            .join('-')
-        }
-        search={{
-          defaultCollapsed: false,
-          labelWidth: 88,
-        }}
-        toolBarRender={false}
-      />
+        <ProTable<CashflowEntry>
+          actionRef={actionRef}
+          columns={columns}
+          key={`${defaultCompany}-${initialSearchKey}`}
+          pagination={{
+            defaultPageSize: PAGE_SIZE,
+            showSizeChanger: false,
+          }}
+          request={async (params) => {
+            const current = Number(params.current ?? 1);
+            const pageSize = Number(params.pageSize ?? PAGE_SIZE);
+            const nextReportFilter = buildReportFilter(params);
+            const nextReportFilterKey = reportFilterKey(nextReportFilter);
+            if (activeReportFilterKeyRef.current !== nextReportFilterKey) {
+              activeReportFilterKeyRef.current = nextReportFilterKey;
+              setActiveReportFilter(nextReportFilter);
+            }
+            const result = await fetchCashflowEntries({
+              ...nextReportFilter,
+              page: current,
+              pageSize,
+              searchKey: toOptionalText(params.searchKey),
+            });
+
+            return {
+              data: result.items,
+              success: true,
+              total: result.total,
+            };
+          }}
+          rowKey={(record) =>
+            [
+              record.name,
+              record.postingDate,
+              record.party,
+              record.referenceNo,
+              record.amount,
+            ]
+              .filter(Boolean)
+              .join('-')
+          }
+          search={{
+            defaultCollapsed: false,
+            labelWidth: 88,
+          }}
+          toolBarRender={false}
+        />
+      </Space>
     </PageContainer>
   );
 };

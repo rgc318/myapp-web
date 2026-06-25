@@ -806,7 +806,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 当前页面：
 
-- `/payments` 已接入 `list_cashflow_entries_v1`。
+- `/payments` 已接入 `list_cashflow_entries_v1` 和 `get_cashflow_report_v1`，作为资金收支入口展示筛选范围内的收款合计、付款合计和净现金流 KPI。
 - `/payments/:name` 已接入 `get_payment_entry_detail_v1`，用于查看单笔收付款凭证、核销明细、差额 / 扣减明细、关联销售 / 采购 / 退货发票和作废动作状态。
 - 支持关键词、公司、日期和分页查询；`/payments?search=<收付款单号>` 应自动填入关键词，用于保留列表搜索兼容能力，业务链路中的单号跳转应优先使用 `/payments/<收付款单号>`。
 - 展示收付款单号、收款 / 付款 / 转账方向、往来方类型、往来方、付款方式、金额和参考号。
@@ -1299,7 +1299,7 @@ c4258c4 feat: localize app chrome
 - 销售 / 采购下游单据详情已接入取消动作，发票详情额外支持取消最近收款 / 付款。
 - 销售订单、销售发货单、销售发票、采购订单、采购收货单和采购发票详情页已接入打印预览和 PDF 下载。
 - 新增 `/reports`，接入经营报表入口和多组查询摘要。
-- 新增 `/payments`，接入收付款流水分页查询。
+- 新增 `/payments`，接入收付款流水分页查询、筛选范围 KPI 和单笔收付款详情。
 - 新增 `/finance`，接入应收 / 应付聚合查询。
 - 新增 `/inventory-ledger`，接入真实库存流水查询。
 - 新增 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms`，接入主数据辅助查询。

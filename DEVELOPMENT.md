@@ -261,7 +261,10 @@ Reusable business components should be used before adding page-local selectors o
   - received amount
   - posting date
 - Key actions:
-  - filter by receive/pay, company, date range
+  - show a filter-scoped KPI summary for received amount, paid amount, and net cashflow
+  - filter by company, date range, and keyword
+  - open a `Payment Entry` detail page from the payment entry number
+  - keep `/payments?search=<payment-entry-name>` as a compatibility search path
 
 ### Inventory Ledger Page
 
