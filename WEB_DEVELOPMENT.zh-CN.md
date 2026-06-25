@@ -608,8 +608,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/invoices` 已接入销售发票列表，支持关键词、公司、日期、单据状态、排序和分页。
 - `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款历史、收款信息、关联销售订单 / 发货单和商品明细，并支持取消销售发票和取消最近收款；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示收款历史和商品明细，右侧展示单据属性、关联单据、结算信息和回退动作；详情页需要展示“流程承接 / 历史单据说明”，有未收金额时引导返回订单详情并通过 `?action=payment` 进入收款动作，已结清时引导查看发货单或打印留档。收款历史来自 `get_sales_invoice_detail_v2.payment.entries[]`，应展示每笔收款的收款单号、日期、付款方式、核销金额、实收金额、差额核销、多收保留和参考号，收款单号应链接到 `/payments?search=<收付款单号>`。
 - 销售订单、销售发货单和销售发票详情页已接入打印预览和 PDF 下载。
-- `/sales/returns/new` 已接入销售退货，支持基于销售发货单或销售发票读取可退明细、填写本次退货数量、提交独立退货单，并在来源发票退货后提示核对客户退款。
-- `/sales/refunds/review` 已接入销售退款核对和客户退款登记，支持读取来源销售发票收款状态、收款历史、查看退货发票，并通过 `get_customer_refund_context_v1` 读取可退金额、已退金额、退款历史和动作权限，再基于已提交的退货发票调用 `create_customer_refund` 创建正式退款 `Payment Entry`；取消最近收款仅用于需要回退原收款凭证的场景。
+- `/sales/returns/new` 已接入销售退货，支持基于销售发货单或销售发票读取可退明细、填写本次退货数量、提交独立退货单，并在来源发票退货后提示核对客户退款；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退货明细和提交结果，右侧展示来源信息、后续处理和提交动作。
+- `/sales/refunds/review` 已接入销售退款核对和客户退款登记，支持读取来源销售发票收款状态、收款历史、查看退货发票，并通过 `get_customer_refund_context_v1` 读取可退金额、已退金额、退款历史和动作权限，再基于已提交的退货发票调用 `create_customer_refund` 创建正式退款 `Payment Entry`；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退款登记、客户退款历史和来源发票收款历史，右侧展示处理建议、退货 / 来源发票关系、来源发票核对和回退动作；取消最近收款仅用于需要回退原收款凭证的场景。
 
 新建订单页面规则：
 
@@ -650,6 +650,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 使用 `RemoteLinkSelect` 选择销售发货单或销售发票，调用 `get_return_source_context_v2` 读取可退明细。
 - 退货明细按后端返回的 `detail_submit_key` 构造 `return_items`，提交到 `process_sales_return`。
 - 退货是独立退货单，不直接改原销售订单；来源发票已收款时，页面提供“核对退款”入口。
+- 页面应优先使用 Ant Design Pro 官方组件组织为“顶部 KPI + 左侧主工作区 + 右侧信息区”：主工作区放退货明细 `ProTable` 和提交结果，右侧放来源 `ProDescriptions`、后续处理提示和提交动作；不要退回普通 `Table` 加纵向堆叠的结构。
 
 销售退款核对规则：
 
@@ -661,6 +662,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 正式客户退款调用 `create_customer_refund`，提交 `return_invoice_name`、`refund_amount`、`mode_of_payment`、`reference_no`、`reference_date` 和 `remarks`，由后端创建并提交 `Payment Entry`。
 - “取消最近收款”只用于需要回退原收款凭证的场景，不等同于正式客户退款。
 - 如业务已经线下退款，应通过正式退款登记补齐财务凭证，不在 Web 中伪造退款完成状态。
+- 页面应优先使用 Ant Design Pro 官方组件组织为“顶部 KPI + 左侧主工作区 + 右侧信息区”：主工作区放正式退款登记、退款历史和来源发票收款历史，右侧放处理建议、退货 / 来源发票关系、来源发票核对和原收款回退动作；退款登记成功结果应保留在主工作区，Payment Entry 入口跳转 `/payments?search=<收付款单号>`。
 
 ### 6.4 采购单据列表
 

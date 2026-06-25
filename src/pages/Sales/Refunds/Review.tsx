@@ -539,129 +539,278 @@ const SalesRefundReviewPage: React.FC = () => {
               />
             </StatisticCard.Group>
 
-            <ProCard title="处理建议">
-              <Alert
-                description={refundReviewTone(data).description}
-                message={refundReviewTone(data).message}
-                showIcon
-                type={refundReviewTone(data).type}
-              />
-            </ProCard>
-
-            <ProCard
-              extra={
-                returnInvoiceName ? (
-                  <Button
-                    onClick={() => history.push(invoicePath(returnInvoiceName))}
+            <ProCard split="vertical">
+              <ProCard colSpan="65%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard
+                    extra={
+                      returnInvoiceName ? (
+                        <Button
+                          onClick={() =>
+                            history.push(invoicePath(returnInvoiceName))
+                          }
+                        >
+                          查看退货发票
+                        </Button>
+                      ) : null
+                    }
+                    title="登记客户退款"
                   >
-                    查看退货发票
-                  </Button>
-                ) : null
-              }
-              title="登记客户退款"
-            >
-              {returnInvoiceName ? (
-                <Form<RefundFormValues>
-                  form={refundForm}
-                  initialValues={{
-                    referenceDate: new Date().toISOString().slice(0, 10),
-                  }}
-                  layout="vertical"
-                >
-                  <Space
-                    direction="vertical"
-                    size={16}
-                    style={{ width: '100%' }}
-                  >
-                    {lastRefundResult ? (
-                      <Alert
-                        action={
-                          lastRefundResult.paymentEntry ? (
-                            <Button
-                              size="small"
-                              onClick={() =>
-                                history.push(
-                                  `/payments?search=${encodeURIComponent(lastRefundResult.paymentEntry)}`,
-                                )
+                    {returnInvoiceName ? (
+                      <Form<RefundFormValues>
+                        form={refundForm}
+                        initialValues={{
+                          referenceDate: new Date().toISOString().slice(0, 10),
+                        }}
+                        layout="vertical"
+                      >
+                        <Space
+                          direction="vertical"
+                          size={16}
+                          style={{ width: '100%' }}
+                        >
+                          {lastRefundResult ? (
+                            <Alert
+                              action={
+                                lastRefundResult.paymentEntry ? (
+                                  <Button
+                                    size="small"
+                                    onClick={() =>
+                                      history.push(
+                                        `/payments?search=${encodeURIComponent(lastRefundResult.paymentEntry)}`,
+                                      )
+                                    }
+                                  >
+                                    查看收付款流水
+                                  </Button>
+                                ) : undefined
                               }
-                            >
-                              查看收付款流水
-                            </Button>
-                          ) : undefined
-                        }
-                        description={
-                          lastRefundResult.paymentEntry
-                            ? `本次退款单 ${lastRefundResult.paymentEntry} 已创建，退款金额 ${formatCurrencyValue(
-                                lastRefundResult.refundAmount,
+                              description={
+                                lastRefundResult.paymentEntry
+                                  ? `本次退款单 ${lastRefundResult.paymentEntry} 已创建，退款金额 ${formatCurrencyValue(
+                                      lastRefundResult.refundAmount,
+                                      refundContext?.refund.currency ??
+                                        data.currency,
+                                    )}。`
+                                  : '本次客户退款已登记。'
+                              }
+                              message="本次退款登记成功"
+                              showIcon
+                              type="success"
+                            />
+                          ) : null}
+                          <StatisticCard.Group direction="row">
+                            <StatisticCard
+                              statistic={{
+                                title: '退货发票金额',
+                                value: formatCurrencyValue(
+                                  refundContext?.refund.returnAmount,
+                                  refundContext?.refund.currency ??
+                                    data.currency,
+                                ),
+                              }}
+                            />
+                            <StatisticCard
+                              statistic={{
+                                title: '已退金额',
+                                value: formatCurrencyValue(
+                                  refundContext?.refund.refundedAmount,
+                                  refundContext?.refund.currency ??
+                                    data.currency,
+                                ),
+                              }}
+                            />
+                            <StatisticCard
+                              statistic={{
+                                title: '当前可退金额',
+                                value: formatCurrencyValue(
+                                  refundContext?.refund.refundableAmount,
+                                  refundContext?.refund.currency ??
+                                    data.currency,
+                                ),
+                              }}
+                            />
+                            <StatisticCard
+                              statistic={{
+                                title: '退货发票状态',
+                                value: refundStatusText(
+                                  refundContext?.refund.status,
+                                ),
+                              }}
+                            />
+                          </StatisticCard.Group>
+                          <ProCard
+                            size="small"
+                            title="退款进度"
+                            bodyStyle={{ paddingBlock: 16 }}
+                          >
+                            <Progress
+                              percent={refundProgress}
+                              status={isRefundCompleted ? 'success' : 'active'}
+                            />
+                            <Typography.Text type="secondary">
+                              已退{' '}
+                              {formatCurrencyValue(
+                                refundedAmount,
                                 refundContext?.refund.currency ?? data.currency,
-                              )}。`
-                            : '本次客户退款已登记。'
-                        }
-                        message="本次退款登记成功"
-                        showIcon
-                        type="success"
-                      />
-                    ) : null}
-                    <StatisticCard.Group direction="row">
-                      <StatisticCard
-                        statistic={{
-                          title: '退货发票金额',
-                          value: formatCurrencyValue(
-                            refundContext?.refund.returnAmount,
-                            refundContext?.refund.currency ?? data.currency,
-                          ),
-                        }}
-                      />
-                      <StatisticCard
-                        statistic={{
-                          title: '已退金额',
-                          value: formatCurrencyValue(
-                            refundContext?.refund.refundedAmount,
-                            refundContext?.refund.currency ?? data.currency,
-                          ),
-                        }}
-                      />
-                      <StatisticCard
-                        statistic={{
-                          title: '当前可退金额',
-                          value: formatCurrencyValue(
-                            refundContext?.refund.refundableAmount,
-                            refundContext?.refund.currency ?? data.currency,
-                          ),
-                        }}
-                      />
-                      <StatisticCard
-                        statistic={{
-                          title: '退货发票状态',
-                          value: refundStatusText(refundContext?.refund.status),
-                        }}
-                      />
-                    </StatisticCard.Group>
-                    <ProCard
-                      size="small"
-                      title="退款进度"
-                      bodyStyle={{ paddingBlock: 16 }}
-                    >
-                      <Progress
-                        percent={refundProgress}
-                        status={isRefundCompleted ? 'success' : 'active'}
-                      />
-                      <Typography.Text type="secondary">
-                        已退{' '}
-                        {formatCurrencyValue(
-                          refundedAmount,
-                          refundContext?.refund.currency ?? data.currency,
-                        )}
-                        ，剩余可退{' '}
-                        {formatCurrencyValue(
-                          refundableAmount,
-                          refundContext?.refund.currency ?? data.currency,
-                        )}
-                      </Typography.Text>
-                    </ProCard>
+                              )}
+                              ，剩余可退{' '}
+                              {formatCurrencyValue(
+                                refundableAmount,
+                                refundContext?.refund.currency ?? data.currency,
+                              )}
+                            </Typography.Text>
+                          </ProCard>
+                          {isRefundCompleted ? (
+                            <Alert
+                              message="退款已完成"
+                              description="当前退货发票没有剩余可退金额，不能继续登记客户退款。"
+                              showIcon
+                              type="success"
+                            />
+                          ) : null}
+                          <div
+                            style={{
+                              display: 'grid',
+                              gap: 16,
+                              gridTemplateColumns:
+                                'repeat(auto-fit, minmax(220px, 1fr))',
+                            }}
+                          >
+                            <Form.Item
+                              label="退款金额"
+                              name="refundAmount"
+                              rules={[
+                                { required: true, message: '请输入退款金额' },
+                                {
+                                  validator: (_, value) => {
+                                    const nextValue = Number(value ?? 0);
+                                    if (nextValue <= 0) {
+                                      return Promise.reject(
+                                        new Error('退款金额必须大于 0'),
+                                      );
+                                    }
+                                    if (
+                                      refundableAmount > 0 &&
+                                      nextValue > refundableAmount
+                                    ) {
+                                      return Promise.reject(
+                                        new Error(
+                                          '退款金额不能大于当前可退金额',
+                                        ),
+                                      );
+                                    }
+                                    return Promise.resolve();
+                                  },
+                                },
+                              ]}
+                            >
+                              <InputNumber
+                                min={0}
+                                precision={2}
+                                style={{ width: '100%' }}
+                              />
+                            </Form.Item>
+                            <Form.Item label="退款方式" name="modeOfPayment">
+                              <PaymentModeSelect
+                                onChange={(value) =>
+                                  refundForm.setFieldValue(
+                                    'modeOfPayment',
+                                    value,
+                                  )
+                                }
+                              />
+                            </Form.Item>
+                            <Form.Item label="参考号" name="referenceNo">
+                              <Input placeholder="银行流水号或退款凭证号" />
+                            </Form.Item>
+                            <Form.Item
+                              label="参考日期"
+                              name="referenceDate"
+                              rules={[
+                                {
+                                  pattern: /^\d{4}-\d{2}-\d{2}$/,
+                                  message: '日期格式应为 YYYY-MM-DD',
+                                },
+                              ]}
+                            >
+                              <Input placeholder="YYYY-MM-DD" />
+                            </Form.Item>
+                            <Form.Item label="备注" name="remarks">
+                              <Input.TextArea
+                                autoSize={{ minRows: 1, maxRows: 3 }}
+                                placeholder="填写退款原因或凭证说明"
+                              />
+                            </Form.Item>
+                          </div>
+                          <Alert
+                            message={
+                              refundContext?.actions.createRefundHint ||
+                              '退款登记会创建正式 Payment Entry，并核销当前退货发票的可退余额。'
+                            }
+                            showIcon
+                            type={
+                              refundContext?.actions.canCreateRefund
+                                ? 'success'
+                                : 'warning'
+                            }
+                          />
+                          <Button
+                            disabled={
+                              refundContextLoading ||
+                              isRefundCompleted ||
+                              !refundContext?.actions.canCreateRefund
+                            }
+                            loading={refundLoading}
+                            onClick={() => void confirmCreateRefund()}
+                            type="primary"
+                          >
+                            登记客户退款
+                          </Button>
+                          <ProTable<SalesInvoicePaymentEntry>
+                            columns={refundEntryColumns}
+                            dataSource={refundContext?.entries ?? []}
+                            headerTitle="客户退款历史"
+                            pagination={false}
+                            rowKey="paymentEntry"
+                            scroll={{ x: 1050 }}
+                            search={false}
+                            toolBarRender={false}
+                          />
+                        </Space>
+                      </Form>
+                    ) : (
+                      <Empty description="请选择退货发票后登记客户退款" />
+                    )}
+                  </ProCard>
+
+                  <ProTable<SalesInvoicePaymentEntry>
+                    columns={paymentEntryColumns}
+                    dataSource={data.paymentEntries}
+                    headerTitle="来源发票收款历史"
+                    pagination={false}
+                    rowKey="paymentEntry"
+                    scroll={{ x: 1050 }}
+                    search={false}
+                    toolBarRender={false}
+                  />
+                </Space>
+              </ProCard>
+
+              <ProCard colSpan="35%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="处理建议">
+                    <Alert
+                      description={refundReviewTone(data).description}
+                      message={refundReviewTone(data).message}
+                      showIcon
+                      type={refundReviewTone(data).type}
+                    />
+                  </ProCard>
+
+                  <ProCard title="退款单据关系">
                     <ProDescriptions
-                      bordered
-                      column={2}
+                      column={1}
                       dataSource={{
                         returnInvoice:
                           refundContext?.returnInvoice?.name ??
@@ -676,8 +825,6 @@ const SalesRefundReviewPage: React.FC = () => {
                         company:
                           refundContext?.returnInvoice?.company ?? data.company,
                       }}
-                      size="small"
-                      title="退款单据关系"
                     >
                       <ProDescriptions.Item
                         label="退货发票"
@@ -690,174 +837,57 @@ const SalesRefundReviewPage: React.FC = () => {
                       <ProDescriptions.Item label="客户" dataIndex="customer" />
                       <ProDescriptions.Item label="公司" dataIndex="company" />
                     </ProDescriptions>
-                    {isRefundCompleted ? (
-                      <Alert
-                        message="退款已完成"
-                        description="当前退货发票没有剩余可退金额，不能继续登记客户退款。"
-                        showIcon
-                        type="success"
+                  </ProCard>
+
+                  <ProCard title="来源发票核对">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item label="销售发票" dataIndex="name" />
+                      <ProDescriptions.Item label="公司" dataIndex="company" />
+                      <ProDescriptions.Item label="单据状态">
+                        <StatusTag value={data.documentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="收款状态">
+                        <StatusTag value={data.paymentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item
+                        label="最近收款"
+                        dataIndex="latestPaymentEntry"
                       />
-                    ) : null}
-                    <div
-                      style={{
-                        display: 'grid',
-                        gap: 16,
-                        gridTemplateColumns:
-                          'repeat(auto-fit, minmax(220px, 1fr))',
-                      }}
+                      <ProDescriptions.Item
+                        label="客户"
+                        dataIndex="contactDisplay"
+                      />
+                      <ProDescriptions.Item
+                        label="收货地址"
+                        dataIndex="addressDisplay"
+                      />
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="回退处理">
+                    <Space
+                      direction="vertical"
+                      size={12}
+                      style={{ width: '100%' }}
                     >
-                      <Form.Item
-                        label="退款金额"
-                        name="refundAmount"
-                        rules={[
-                          { required: true, message: '请输入退款金额' },
-                          {
-                            validator: (_, value) => {
-                              const nextValue = Number(value ?? 0);
-                              if (nextValue <= 0) {
-                                return Promise.reject(
-                                  new Error('退款金额必须大于 0'),
-                                );
-                              }
-                              if (
-                                refundableAmount > 0 &&
-                                nextValue > refundableAmount
-                              ) {
-                                return Promise.reject(
-                                  new Error('退款金额不能大于当前可退金额'),
-                                );
-                              }
-                              return Promise.resolve();
-                            },
-                          },
-                        ]}
+                      <Typography.Text type="secondary">
+                        如退货后需要回退原收款凭证，可取消最近收款；正式客户退款请优先基于退货发票登记。
+                      </Typography.Text>
+                      <Button
+                        danger
+                        disabled={
+                          !data.latestPaymentEntry ||
+                          isCancelled(data.documentStatus)
+                        }
+                        loading={cancelLoading}
+                        onClick={confirmCancelPayment}
                       >
-                        <InputNumber
-                          min={0}
-                          precision={2}
-                          style={{ width: '100%' }}
-                        />
-                      </Form.Item>
-                      <Form.Item label="退款方式" name="modeOfPayment">
-                        <PaymentModeSelect
-                          onChange={(value) =>
-                            refundForm.setFieldValue('modeOfPayment', value)
-                          }
-                        />
-                      </Form.Item>
-                      <Form.Item label="参考号" name="referenceNo">
-                        <Input placeholder="银行流水号或退款凭证号" />
-                      </Form.Item>
-                      <Form.Item
-                        label="参考日期"
-                        name="referenceDate"
-                        rules={[
-                          {
-                            pattern: /^\d{4}-\d{2}-\d{2}$/,
-                            message: '日期格式应为 YYYY-MM-DD',
-                          },
-                        ]}
-                      >
-                        <Input placeholder="YYYY-MM-DD" />
-                      </Form.Item>
-                      <Form.Item label="备注" name="remarks">
-                        <Input.TextArea
-                          autoSize={{ minRows: 1, maxRows: 3 }}
-                          placeholder="填写退款原因或凭证说明"
-                        />
-                      </Form.Item>
-                    </div>
-                    <Alert
-                      message={
-                        refundContext?.actions.createRefundHint ||
-                        '退款登记会创建正式 Payment Entry，并核销当前退货发票的可退余额。'
-                      }
-                      showIcon
-                      type={
-                        refundContext?.actions.canCreateRefund
-                          ? 'success'
-                          : 'warning'
-                      }
-                    />
-                    <Button
-                      disabled={
-                        refundContextLoading ||
-                        isRefundCompleted ||
-                        !refundContext?.actions.canCreateRefund
-                      }
-                      loading={refundLoading}
-                      onClick={() => void confirmCreateRefund()}
-                      type="primary"
-                    >
-                      登记客户退款
-                    </Button>
-                    <ProTable<SalesInvoicePaymentEntry>
-                      columns={refundEntryColumns}
-                      dataSource={refundContext?.entries ?? []}
-                      headerTitle="客户退款历史"
-                      pagination={false}
-                      rowKey="paymentEntry"
-                      scroll={{ x: 1050 }}
-                      search={false}
-                      toolBarRender={false}
-                    />
-                  </Space>
-                </Form>
-              ) : (
-                <Empty description="请选择退货发票后登记客户退款" />
-              )}
-            </ProCard>
-
-            <ProCard title="退款核对">
-              <ProDescriptions column={2} dataSource={data}>
-                <ProDescriptions.Item label="销售发票" dataIndex="name" />
-                <ProDescriptions.Item label="公司" dataIndex="company" />
-                <ProDescriptions.Item label="单据状态">
-                  <StatusTag value={data.documentStatus} />
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="收款状态">
-                  <StatusTag value={data.paymentStatus} />
-                </ProDescriptions.Item>
-                <ProDescriptions.Item
-                  label="最近收款"
-                  dataIndex="latestPaymentEntry"
-                />
-                <ProDescriptions.Item label="客户" dataIndex="contactDisplay" />
-                <ProDescriptions.Item
-                  label="收货地址"
-                  dataIndex="addressDisplay"
-                  span={2}
-                />
-              </ProDescriptions>
-            </ProCard>
-
-            <ProTable<SalesInvoicePaymentEntry>
-              columns={paymentEntryColumns}
-              dataSource={data.paymentEntries}
-              headerTitle="来源发票收款历史"
-              pagination={false}
-              rowKey="paymentEntry"
-              scroll={{ x: 1050 }}
-              search={false}
-              toolBarRender={false}
-            />
-
-            <ProCard>
-              <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Typography.Text type="secondary">
-                  如退货后需要回退原收款凭证，可取消最近收款；正式客户退款请优先基于退货发票登记。
-                </Typography.Text>
-                <Button
-                  danger
-                  disabled={
-                    !data.latestPaymentEntry || isCancelled(data.documentStatus)
-                  }
-                  loading={cancelLoading}
-                  onClick={confirmCancelPayment}
-                >
-                  取消最近收款
-                </Button>
-              </Space>
+                        取消最近收款
+                      </Button>
+                    </Space>
+                  </ProCard>
+                </Space>
+              </ProCard>
             </ProCard>
           </>
         ) : null}
