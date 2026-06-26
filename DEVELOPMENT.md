@@ -214,7 +214,8 @@ Reusable business components should be used before adding page-local selectors o
   Use it for Link-like table filters instead of plain text inputs. In ProTable search forms, wire it through `formItemRender`; focus/open should load initial options and typing should refresh options through remote search.
 - `src/components/ProductSelect.tsx`: enterprise product picker backed by `search_product_v2`.
   It opens a ProTable modal instead of a simple dropdown, shows product identity, UOM, stock, warehouse stock, context price, and sales/purchase tags, and returns normalized `ProductSummary` data.
-  Sales order pages must pass `itemContext="sales"`; purchase order pages must pass `itemContext="purchase"`.
+  Sales order pages must pass `itemContext="sales"`; purchase order pages must pass `itemContext="purchase"`; inventory adjustment pages must pass `itemContext="inventory"`.
+  The picker intentionally requires a keyword before querying because `search_product_v2` is optimized for targeted product search, not initial full-catalog browsing.
 - `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
 - `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
 - `src/components/PartyManagementPage.tsx`: shared lightweight Customer/Supplier maintenance page with status filtering and idempotent mutations.

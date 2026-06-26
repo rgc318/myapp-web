@@ -232,11 +232,19 @@ export function ProductSelect({
           options={false}
           pagination={{ pageSize: 10 }}
           request={async (params) => {
+            const searchKey = String(params.searchKey ?? '').trim();
+            if (!searchKey) {
+              return {
+                data: [],
+                success: true,
+                total: 0,
+              };
+            }
             const result = await searchProducts({
               company,
               itemContext,
               limit: params.pageSize,
-              searchKey: String(params.searchKey ?? ''),
+              searchKey,
               start: ((params.current ?? 1) - 1) * (params.pageSize ?? 10),
               warehouse,
             });
@@ -252,6 +260,9 @@ export function ProductSelect({
             labelWidth: 72,
           }}
           size="small"
+          locale={{
+            emptyText: '请输入商品名称、编码、条码、别名或规格搜索商品',
+          }}
         />
       </Modal>
     </>

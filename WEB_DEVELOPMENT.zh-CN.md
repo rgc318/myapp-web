@@ -357,6 +357,7 @@ Idempotency-Key: <uuid>
   - 企业级商品选择器，不再使用简单下拉。
   - 通过 `searchProducts` / `search_product_v2` 查询商品，使用 Ant Design Pro `ProTable` 弹窗展示商品、编码、规格、单位、总库存、当前仓库存、销售 / 采购参考价和商品用途标识。
   - 支持公司、仓库和 `itemContext` 上下文；销售开单传 `sales`，采购开单传 `purchase`，库存类场景可传 `inventory`，通用场景可传 `any`。
+  - 当前选择器要求输入关键词后再查询，避免把 `search_product_v2` 当作全量商品浏览接口使用；如果后续需要默认加载商品，应改用明确支持分页浏览的列表接口。
   - 返回已规范化的 `ProductSummary`，包含别名、单位、换算、价格摘要、销售 / 采购标识和库存参考字段。
 - `src/components/UomSelect.tsx`
   - 通过 `listUoms` / `list_uoms_v2` 查询启用单位。
@@ -622,6 +623,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 编辑订单页面规则：
 
 - 从 `get_sales_order_detail` 加载订单，再按商品编码调用 `get_product_detail_v2` 补全单位换算、默认单位、默认价格和库存参考。
+- 编辑页添加商品同样使用 `ProductSelect itemContext="sales"`，不能退回通用商品搜索或简单下拉。
 - 客户和公司只读展示；当前编辑入口不直接变更订单客户和公司。
 - 页面结构应使用企业级表单编辑模式：正文顶部显示金额摘要和编辑状态，中间分为订单基础信息和商品明细，底部使用 Ant Design Pro 官方 `FooterToolbar` 固定保存区。
 - 编辑页底部保存区应同时展示未保存状态、商品数量和订单金额，并提供取消与保存修改。表单、商品明细、添加商品和批量切换销售模式都应标记为未保存；浏览器刷新或关闭前应提示未保存修改。
@@ -755,8 +757,10 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - 使用 `RemoteLinkSelect` 选择供应商、公司和仓库，供应商变化后调用 `get_supplier_purchase_context` 自动带出默认公司、仓库、币种、联系人和地址。
 - 使用 `ProductSelect itemContext="purchase"` 搜索可采购商品；选择器应展示可判断的商品、库存、目标仓库存、单位和采购参考价，商品行使用 `purchase-order-editor.ts` 自动带出采购默认价、默认单位、可选单位、库存单位换算和金额合计。
+- 采购明细表支持“新增仓库行”，用于同一商品拆分到多个目标入库仓；该动作只复制当前商品上下文，仓库由用户在新行内选择。
 - 保存订单调用 `create_purchase_order`；快捷采购调用 `quick_create_purchase_order_v2`，由后端同时创建采购订单、采购收货单和采购发票。
 - 编辑页从 `get_purchase_order_detail_v2` 加载订单，再按商品编码调用 `get_product_detail_v2` 补全单位换算、默认单位、采购默认价和库存参考。
+- 编辑页添加商品同样使用 `ProductSelect itemContext="purchase"`，不能退回通用商品搜索或简单下拉。
 
 采购快捷回退规则：
 

@@ -162,6 +162,7 @@ const InventoryAdjustmentPage: React.FC = () => {
           <Form.Item label="商品" required>
             <ProductSelect
               company={company}
+              itemContext="inventory"
               warehouse={warehouse}
               onSelectProduct={handleProductSelect}
             />

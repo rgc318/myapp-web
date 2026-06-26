@@ -458,6 +458,7 @@ const SalesOrderEditPage: React.FC = () => {
           extra={
             <ProductSelect
               company={company}
+              itemContext="sales"
               warehouse={warehouse}
               onSelectProduct={addProduct}
               style={{ minWidth: 320 }}

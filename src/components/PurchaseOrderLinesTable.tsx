@@ -41,6 +41,18 @@ export function PurchaseOrderLinesTable({
     );
   };
 
+  const addWarehouseLine = (record: PurchaseOrderEditorLine) => {
+    onChange([
+      ...lines,
+      recalculatePurchaseOrderLine({
+        ...record,
+        key: `${record.itemCode}:warehouse:${Date.now()}`,
+        qty: 1,
+        warehouse: '',
+      }),
+    ]);
+  };
+
   const columns: ColumnsType<PurchaseOrderEditorLine> = [
     {
       dataIndex: 'itemName',
@@ -160,19 +172,24 @@ export function PurchaseOrderLinesTable({
     },
     {
       render: (_, record) => (
-        <Popconfirm
-          onConfirm={() => {
-            onChange(lines.filter((line) => line.key !== record.key));
-          }}
-          title="移除该商品？"
-        >
-          <Button danger type="link">
-            移除
+        <Space size={0}>
+          <Button onClick={() => addWarehouseLine(record)} type="link">
+            新增仓库行
           </Button>
-        </Popconfirm>
+          <Popconfirm
+            onConfirm={() => {
+              onChange(lines.filter((line) => line.key !== record.key));
+            }}
+            title="移除该商品？"
+          >
+            <Button danger type="link">
+              移除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
       title: '操作',
-      width: 90,
+      width: 180,
     },
   ];
 

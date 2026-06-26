@@ -317,6 +317,7 @@ const PurchaseOrderEditPage: React.FC = () => {
           extra={
             <ProductSelect
               company={company}
+              itemContext="purchase"
               onSelectProduct={addProduct}
               placeholder="搜索采购商品"
               style={{ minWidth: 320 }}
