@@ -11,6 +11,7 @@ import {
   createUom,
   listProducts,
   listUoms,
+  searchProducts,
   searchLinkOptions,
   setCustomerDisabled,
   setProductDisabled,
@@ -707,6 +708,50 @@ describe('myapp domain services', () => {
     expect(result.items[0].priceSummary?.wholesaleRate).toBe(180);
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+  });
+
+  it('searches products with business context', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            is_purchase_item: 1,
+            is_sales_item: 0,
+            item_code: 'SKU-1',
+            item_group: 'Products',
+            item_name: 'Camera',
+            nickname: 'Camera Alias',
+            stock_uom: 'Nos',
+          },
+        ],
+        meta: { total: 1 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await searchProducts({
+      company: 'rgc (Demo)',
+      itemContext: 'purchase',
+      searchKey: 'Camera',
+      warehouse: 'Stores - RD',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_product_v2',
+      expect.objectContaining({
+        company: 'rgc (Demo)',
+        item_context: 'purchase',
+        search_key: 'Camera',
+        warehouse: 'Stores - RD',
+      }),
+    );
+    expect(result.items[0]).toMatchObject({
+      isPurchaseItem: true,
+      isSalesItem: false,
+      itemCode: 'SKU-1',
+      nickname: 'Camera Alias',
+    });
   });
 
   it('maps inventory stock summary rows', async () => {

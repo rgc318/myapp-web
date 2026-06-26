@@ -354,9 +354,10 @@ Idempotency-Key: <uuid>
   - 顶部工作偏好入口，用于维护当前用户默认公司和默认仓库。
   - 保存到后端 `get_current_user_workspace_preferences_v1` / `update_current_user_workspace_preferences_v1` 对应的用户默认值。
 - `src/components/ProductSelect.tsx`
-  - 通过 `listProducts` / `list_products_v2` 查询商品。
-  - 支持公司和仓库上下文。
-  - 返回已规范化的 `ProductSummary`，包含单位、换算、价格摘要和库存参考字段。
+  - 企业级商品选择器，不再使用简单下拉。
+  - 通过 `searchProducts` / `search_product_v2` 查询商品，使用 Ant Design Pro `ProTable` 弹窗展示商品、编码、规格、单位、总库存、当前仓库存、销售 / 采购参考价和商品用途标识。
+  - 支持公司、仓库和 `itemContext` 上下文；销售开单传 `sales`，采购开单传 `purchase`，库存类场景可传 `inventory`，通用场景可传 `any`。
+  - 返回已规范化的 `ProductSummary`，包含别名、单位、换算、价格摘要、销售 / 采购标识和库存参考字段。
 - `src/components/UomSelect.tsx`
   - 通过 `listUoms` / `list_uoms_v2` 查询启用单位。
   - 商品维护和订单表单内的单位字段应优先使用该组件，不通过通用 Link 查询扩大 DocType 白名单。
@@ -614,7 +615,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 新建订单页面规则：
 
 - 使用 `RemoteLinkSelect` 选择客户、公司和仓库，客户变化后调用 `get_customer_sales_context` 自动带出默认公司、仓库、联系人和地址。
-- 使用 `ProductSelect` 搜索商品，商品行使用 `sales-order-editor.ts` 自动带出批发 / 零售默认单位、默认价格、可选单位、库存单位换算和金额合计。
+- 使用 `ProductSelect itemContext="sales"` 搜索可销售商品；选择器应展示可判断的商品、库存、仓库库存、单位和销售参考价，商品行使用 `sales-order-editor.ts` 自动带出批发 / 零售默认单位、默认价格、可选单位、库存单位换算和金额合计。
 - 保存订单调用 `create_order_v2`；快捷下单调用 `quick_create_order_v2`，由后端同时创建销售订单、发货单和销售发票。
 - 所有提交仍通过 `runGatewayMutation` 生成 `Idempotency-Key`，页面不手动拼 token。
 
@@ -753,7 +754,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 采购新建页约定：
 
 - 使用 `RemoteLinkSelect` 选择供应商、公司和仓库，供应商变化后调用 `get_supplier_purchase_context` 自动带出默认公司、仓库、币种、联系人和地址。
-- 使用 `ProductSelect` 搜索商品，商品行使用 `purchase-order-editor.ts` 自动带出采购默认价、默认单位、可选单位、库存单位换算和金额合计。
+- 使用 `ProductSelect itemContext="purchase"` 搜索可采购商品；选择器应展示可判断的商品、库存、目标仓库存、单位和采购参考价，商品行使用 `purchase-order-editor.ts` 自动带出采购默认价、默认单位、可选单位、库存单位换算和金额合计。
 - 保存订单调用 `create_purchase_order`；快捷采购调用 `quick_create_purchase_order_v2`，由后端同时创建采购订单、采购收货单和采购发票。
 - 编辑页从 `get_purchase_order_detail_v2` 加载订单，再按商品编码调用 `get_product_detail_v2` 补全单位换算、默认单位、采购默认价和库存参考。
 
@@ -909,6 +910,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 可供筛选、详情和后续管理页使用：
 
 - `myapp.api.gateway.search_product_v2`
+  - Web 订单选品必须显式传 `item_context`：销售订单为 `sales`，采购订单为 `purchase`，库存查询为 `inventory`，通用检索为 `any`。
+  - 返回值应继续映射到 `ProductSummary`，供 `ProductSelect`、订单行编辑器和库存页面复用。
 - `myapp.api.gateway.list_products_v2`
 - `myapp.api.gateway.get_product_detail_v2`
 - `myapp.api.gateway.upload_item_image`

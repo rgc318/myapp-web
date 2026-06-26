@@ -22,6 +22,7 @@ export type ListOptions = {
 export type ProductListOptions = ListOptions & {
   company?: string;
   inStockOnly?: boolean;
+  itemContext?: 'sales' | 'purchase' | 'inventory' | 'any';
   warehouse?: string;
 };
 
@@ -39,10 +40,13 @@ export type ProductSummary = {
   description: string;
   disabled: boolean;
   imageUrl: string;
+  isPurchaseItem?: boolean;
+  isSalesItem?: boolean;
   itemCode: string;
   itemGroup: string;
   itemName: string;
   modified: string | null;
+  nickname?: string | null;
   price: number | null;
   priceSummary: {
     currentPriceList?: string | null;
@@ -168,10 +172,19 @@ function mapProduct(row: Record<string, any>): ProductSummary {
           ? row.image_url
           : '',
     ),
+    isPurchaseItem:
+      row.is_purchase_item === undefined || row.is_purchase_item === null
+        ? undefined
+        : Boolean(Number(row.is_purchase_item)),
+    isSalesItem:
+      row.is_sales_item === undefined || row.is_sales_item === null
+        ? undefined
+        : Boolean(Number(row.is_sales_item)),
     itemCode: String(row.item_code ?? ''),
     itemGroup: String(row.item_group ?? ''),
     itemName: String(row.item_name ?? row.item_code ?? ''),
     modified: typeof row.modified === 'string' ? row.modified : null,
+    nickname: typeof row.nickname === 'string' ? row.nickname : null,
     price: toOptionalNumber(row.price),
     priceSummary: mapPriceSummary(row.price_summary),
     retailDefaultUom:
@@ -451,6 +464,33 @@ export async function listProducts(options: ProductListOptions = {}) {
       in_stock_only: options.inStockOnly ? 1 : undefined,
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
+      start: options.start ?? 0,
+      warehouse: toOptionalText(options.warehouse),
+    }),
+  );
+  return pageResult(result.data, mapProduct);
+}
+
+export async function searchProducts(options: ProductListOptions = {}) {
+  const result = await callGatewayMethod<unknown>(
+    'search_product_v2',
+    compactPayload({
+      company: toOptionalText(options.company),
+      disabled: options.disabled ?? 0,
+      in_stock_only: options.inStockOnly ? 1 : undefined,
+      item_context: options.itemContext ?? 'any',
+      limit: options.limit ?? 20,
+      search_fields: [
+        'item_code',
+        'item_name',
+        'barcode',
+        'nickname',
+        'description',
+        'specification',
+      ],
+      search_key: toOptionalText(options.searchKey),
+      sort_by: 'relevance',
+      sort_order: 'asc',
       start: options.start ?? 0,
       warehouse: toOptionalText(options.warehouse),
     }),
