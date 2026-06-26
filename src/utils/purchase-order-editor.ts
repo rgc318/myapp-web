@@ -10,14 +10,17 @@ export type PurchaseOrderEditorLine = {
   key: string;
   price: number | null;
   qty: number;
+  standardBuyingRate?: number | null;
   specification: string;
   stockQty: number | null;
   stockUom: string | null;
   stockUomDisplay?: string | null;
+  totalQty?: number | null;
   uom: string | null;
   uomConversions: ProductSummary['uomConversions'];
   uomDisplay?: string | null;
   warehouse: string;
+  warehouseStockDetails?: ProductSummary['warehouseStockDetails'];
 };
 
 function firstFiniteNumber(values: (number | null | undefined)[]) {
@@ -59,15 +62,18 @@ export function buildPurchaseOrderLineFromProduct(options: {
     key: `${product.itemCode}:${warehouse || 'default'}`,
     price,
     qty: 1,
+    standardBuyingRate: product.priceSummary?.standardBuyingRate ?? null,
     specification: product.specification,
     stockQty:
       product.warehouseStockQty ?? product.stockQty ?? product.totalQty ?? null,
     stockUom,
     stockUomDisplay: product.stockUomDisplay,
+    totalQty: product.totalQty,
     uom,
     uomConversions: product.uomConversions,
     uomDisplay: product.uomDisplay,
     warehouse,
+    warehouseStockDetails: product.warehouseStockDetails,
   } satisfies PurchaseOrderEditorLine;
 }
 

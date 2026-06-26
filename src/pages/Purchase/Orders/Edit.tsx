@@ -73,12 +73,15 @@ function fallbackLineFromItem(
       `${item.itemCode}:${item.warehouse || 'default'}`,
     price,
     qty: item.qty ?? 1,
+    standardBuyingRate: null,
     specification: '',
     stockQty: null,
     stockUom: uom,
+    totalQty: null,
     uom,
     uomConversions: [],
     warehouse: item.warehouse,
+    warehouseStockDetails: [],
   });
 }
 

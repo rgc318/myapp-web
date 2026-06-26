@@ -225,7 +225,7 @@ Reusable business components should be used before adding page-local selectors o
   Default company is only an initial query value. If the user clears the company filter, requests must send no company filter and return all companies; do not fall back with `params.company ?? defaultCompany`.
 - `src/utils/display-uom.ts` and `src/utils/uom-conversion.ts`: shared UOM display and stock-unit conversion helpers.
 - `src/utils/sales-order-editor.ts`: sales order line model, wholesale/retail default UOM and price, UOM conversion, line amount, and total calculation.
-- `src/components/PurchaseOrderLinesTable.tsx` and `src/utils/purchase-order-editor.ts`: purchase order line editing, purchase default price, UOM conversion reference, line amount, and total calculation.
+- `src/components/PurchaseOrderLinesTable.tsx` and `src/utils/purchase-order-editor.ts`: purchase order line editing, grouped-by-product display, purchase default price, warehouse split rows, warehouse-stock quick add, current/projected stock reference, UOM conversion, line amount, and total calculation.
 
 ### Purchase Document List
 

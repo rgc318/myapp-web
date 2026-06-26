@@ -381,7 +381,7 @@ Idempotency-Key: <uuid>
   - 客户 / 供应商轻量维护共用页面，支持关键词和状态筛选、新增、编辑、启用和停用。
   - 写操作统一走 `runGatewayMutation`，保持 `Idempotency-Key`。
 - `src/components/PurchaseOrderLinesTable.tsx`
-  - 采购订单新建明细表，支持数量、单位、采购价、仓库、库存参考和金额合计。
+  - 采购订单新建 / 编辑明细表，按商品分组展示，支持数量、单位、采购价、仓库、当前仓库存、本次入库、入库后库存、金额合计、同商品多仓库行和基于分仓库存的快捷新增仓库行。
 - `src/components/PageState`
   - 页面 loading、empty、error、retry 状态。
 
@@ -397,7 +397,7 @@ Idempotency-Key: <uuid>
   - 销售订单行模型、批发 / 零售默认单位和价格、单位换算、行金额和合计计算。
   - 后续销售订单编辑、退货、退款相关页面应继续复用该工具，不在页面内重新写单位换算。
 - `src/utils/purchase-order-editor.ts`
-  - 采购订单行模型、采购默认价、单位换算、行金额和合计计算。
+  - 采购订单行模型、采购默认价、总库存、分仓库存、单位换算、行金额和合计计算。
   - 后续采购订单编辑、退货、退款相关页面应继续复用该工具，不在页面内重新写单位换算。
 - `src/hooks/useWorkspacePreferences.ts`
   - 读取当前用户默认公司和默认仓库。
@@ -758,7 +758,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - 使用 `RemoteLinkSelect` 选择供应商、公司和仓库，供应商变化后调用 `get_supplier_purchase_context` 自动带出默认公司、仓库、币种、联系人和地址。
 - 使用 `ProductSelect itemContext="purchase"` 搜索可采购商品；选择器应展示可判断的商品、库存、目标仓库存、单位和采购参考价，商品行使用 `purchase-order-editor.ts` 自动带出采购默认价、默认单位、可选单位、库存单位换算和金额合计。
-- 采购明细表支持“新增仓库行”，用于同一商品拆分到多个目标入库仓；该动作只复制当前商品上下文，仓库由用户在新行内选择。
+- 采购明细表按商品分组展示，同组内可拆分多个目标入库仓；每组展示参考采购价、本次采购额、总库存、本次入库和入库后库存。
+- “新增仓库行”用于同一商品拆分到多个目标入库仓；手动新增时复制当前商品上下文，仓库由用户在新行内选择；如果商品带有 `warehouseStockDetails`，组头应展示分仓库存快捷入口，点击具体仓库直接新增该仓库行。
 - 保存订单调用 `create_purchase_order`；快捷采购调用 `quick_create_purchase_order_v2`，由后端同时创建采购订单、采购收货单和采购发票。
 - 编辑页从 `get_purchase_order_detail_v2` 加载订单，再按商品编码调用 `get_product_detail_v2` 补全单位换算、默认单位、采购默认价和库存参考。
 - 编辑页添加商品同样使用 `ProductSelect itemContext="purchase"`，不能退回通用商品搜索或简单下拉。
