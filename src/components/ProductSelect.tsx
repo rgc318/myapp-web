@@ -1,7 +1,7 @@
 import { SearchOutlined } from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
-import { Button, Image, Modal, Space, Tag, Typography } from 'antd';
+import { Button, Image, Modal, Space, Switch, Tag, Typography } from 'antd';
 import React, { useMemo, useState } from 'react';
 import {
   type ProductSummary,
@@ -9,6 +9,7 @@ import {
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 import { formatQty, resolveUomDisplay } from '@/utils/sales-order-editor';
+import { RemoteLinkSelect } from './RemoteLinkSelect';
 
 type ProductContext = 'sales' | 'purchase' | 'inventory' | 'any';
 
@@ -55,6 +56,7 @@ export function ProductSelect({
   style,
   warehouse,
   onSelectProduct,
+  onSelectProducts,
 }: {
   company?: string;
   itemContext?: ProductContext;
@@ -62,8 +64,32 @@ export function ProductSelect({
   style?: React.CSSProperties;
   warehouse?: string;
   onSelectProduct: (product: ProductSummary) => void;
+  onSelectProducts?: (products: ProductSummary[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [keepOpen, setKeepOpen] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<ProductSummary[]>([]);
+  const enableBatch = itemContext !== 'inventory';
+
+  const selectProducts = (
+    products: ProductSummary[],
+    closeAfterSelect = true,
+  ) => {
+    if (!products.length) {
+      return;
+    }
+    if (onSelectProducts) {
+      onSelectProducts(products);
+    } else {
+      products.forEach((product) => {
+        onSelectProduct(product);
+      });
+    }
+    setSelectedRows([]);
+    if (closeAfterSelect && !keepOpen) {
+      setOpen(false);
+    }
+  };
 
   const columns = useMemo<ProColumns<ProductSummary>[]>(
     () => [
@@ -126,7 +152,28 @@ export function ProductSelect({
         dataIndex: 'itemGroup',
         title: '分类',
         width: 140,
-        search: false,
+        formItemRender: (_, { onChange, value }) => (
+          <RemoteLinkSelect
+            doctype="Item Group"
+            filters={{ is_group: 0 }}
+            onChange={onChange}
+            placeholder="选择分类"
+            value={value}
+          />
+        ),
+      },
+      {
+        dataIndex: 'brand',
+        title: '品牌',
+        width: 120,
+        formItemRender: (_, { onChange, value }) => (
+          <RemoteLinkSelect
+            doctype="Brand"
+            onChange={onChange}
+            placeholder="选择品牌"
+            value={value}
+          />
+        ),
       },
       {
         dataIndex: 'stockUom',
@@ -139,6 +186,14 @@ export function ProductSelect({
             record.allUomDisplays,
             record.stockUomDisplay,
           ),
+      },
+      {
+        dataIndex: 'inStockOnly',
+        hideInTable: true,
+        title: '仅有库存',
+        formItemRender: (_, { onChange, value }) => (
+          <Switch checked={Boolean(value)} onChange={onChange} />
+        ),
       },
       {
         title: '库存',
@@ -196,8 +251,7 @@ export function ProductSelect({
           <Button
             key="select"
             onClick={() => {
-              onSelectProduct(record);
-              setOpen(false);
+              selectProducts([record]);
             }}
             type="link"
           >
@@ -206,7 +260,7 @@ export function ProductSelect({
         ],
       },
     ],
-    [itemContext, onSelectProduct, warehouse],
+    [itemContext, selectProducts, warehouse],
   );
 
   return (
@@ -222,18 +276,59 @@ export function ProductSelect({
       <Modal
         destroyOnClose
         footer={null}
-        onCancel={() => setOpen(false)}
+        onCancel={() => {
+          setSelectedRows([]);
+          setOpen(false);
+        }}
         open={open}
         title="选择商品"
         width={1080}
       >
         <ProTable<ProductSummary>
+          tableAlertOptionRender={false}
+          tableAlertRender={({ selectedRowKeys }) => (
+            <Space>
+              <Typography.Text>
+                已选择 {selectedRowKeys.length} 个商品
+              </Typography.Text>
+              <Button
+                disabled={!selectedRows.length}
+                onClick={() => selectProducts(selectedRows)}
+                type="link"
+              >
+                加入明细
+              </Button>
+            </Space>
+          )}
+          rowSelection={
+            enableBatch
+              ? {
+                  onChange: (_, rows) => setSelectedRows(rows),
+                  selectedRowKeys: selectedRows.map((row) => row.itemCode),
+                }
+              : undefined
+          }
+          toolbar={{
+            actions: [
+              <Space key="continuous" size={8}>
+                <Typography.Text type="secondary">连续选择</Typography.Text>
+                <Switch
+                  checked={keepOpen}
+                  onChange={setKeepOpen}
+                  size="small"
+                />
+              </Space>,
+            ],
+          }}
           columns={columns}
           options={false}
           pagination={{ pageSize: 10 }}
           request={async (params) => {
             const searchKey = String(params.searchKey ?? '').trim();
-            if (!searchKey) {
+            const itemGroup = String(params.itemGroup ?? '').trim();
+            const brand = String(params.brand ?? '').trim();
+            const inStockOnly = Boolean(params.inStockOnly);
+            if (!searchKey && !itemGroup && !brand) {
               return {
                 data: [],
                 success: true,
@@ -241,7 +336,10 @@ export function ProductSelect({
               };
             }
             const result = await searchProducts({
+              brand,
               company,
+              inStockOnly,
+              itemGroup,
               itemContext,
               limit: params.pageSize,
               searchKey,
@@ -261,7 +359,7 @@ export function ProductSelect({
           }}
           size="small"
           locale={{
-            emptyText: '请输入商品名称、编码、条码、别名或规格搜索商品',
+            emptyText: '请输入关键词，或选择商品分类/品牌后搜索商品',
           }}
         />
       </Modal>

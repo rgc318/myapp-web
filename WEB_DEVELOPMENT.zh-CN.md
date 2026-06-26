@@ -357,7 +357,8 @@ Idempotency-Key: <uuid>
   - 企业级商品选择器，不再使用简单下拉。
   - 通过 `searchProducts` / `search_product_v2` 查询商品，使用 Ant Design Pro `ProTable` 弹窗展示商品、编码、规格、单位、总库存、当前仓库存、销售 / 采购参考价和商品用途标识。
   - 支持公司、仓库和 `itemContext` 上下文；销售开单传 `sales`，采购开单传 `purchase`，库存类场景可传 `inventory`，通用场景可传 `any`。
-  - 当前选择器要求输入关键词后再查询，避免把 `search_product_v2` 当作全量商品浏览接口使用；如果后续需要默认加载商品，应改用明确支持分页浏览的列表接口。
+  - 支持关键词、商品分类、品牌和仅有库存筛选；关键词为空时必须至少选择分类或品牌，不把 `search_product_v2` 当作无条件全量商品浏览接口使用。
+  - 销售 / 采购场景支持表格勾选后批量加入明细，也支持“连续选择”模式；库存调整场景保持单选，因为页面一次只调整一个目标商品。
   - 返回已规范化的 `ProductSummary`，包含别名、单位、换算、价格摘要、销售 / 采购标识和库存参考字段。
 - `src/components/UomSelect.tsx`
   - 通过 `listUoms` / `list_uoms_v2` 查询启用单位。
@@ -915,6 +916,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - `myapp.api.gateway.search_product_v2`
   - Web 订单选品必须显式传 `item_context`：销售订单为 `sales`，采购订单为 `purchase`，库存查询为 `inventory`，通用检索为 `any`。
+  - Web 商品选择器可传 `item_group`、`brand` 和 `in_stock_only` 缩小候选范围；分类和品牌通过 `search_link_options_v1` 查询 `Item Group` / `Brand`。
   - 返回值应继续映射到 `ProductSummary`，供 `ProductSelect`、订单行编辑器和库存页面复用。
 - `myapp.api.gateway.list_products_v2`
 - `myapp.api.gateway.get_product_detail_v2`

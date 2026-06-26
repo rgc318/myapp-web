@@ -20,8 +20,10 @@ export type ListOptions = {
 };
 
 export type ProductListOptions = ListOptions & {
+  brand?: string;
   company?: string;
   inStockOnly?: boolean;
+  itemGroup?: string;
   itemContext?: 'sales' | 'purchase' | 'inventory' | 'any';
   warehouse?: string;
 };
@@ -476,8 +478,10 @@ export async function searchProducts(options: ProductListOptions = {}) {
     'search_product_v2',
     compactPayload({
       company: toOptionalText(options.company),
+      brand: toOptionalText(options.brand),
       disabled: options.disabled ?? 0,
       in_stock_only: options.inStockOnly ? 1 : undefined,
+      item_group: toOptionalText(options.itemGroup),
       item_context: options.itemContext ?? 'any',
       limit: options.limit ?? 20,
       search_fields: [

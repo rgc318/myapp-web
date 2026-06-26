@@ -215,7 +215,8 @@ Reusable business components should be used before adding page-local selectors o
 - `src/components/ProductSelect.tsx`: enterprise product picker backed by `search_product_v2`.
   It opens a ProTable modal instead of a simple dropdown, shows product identity, UOM, stock, warehouse stock, context price, and sales/purchase tags, and returns normalized `ProductSummary` data.
   Sales order pages must pass `itemContext="sales"`; purchase order pages must pass `itemContext="purchase"`; inventory adjustment pages must pass `itemContext="inventory"`.
-  The picker intentionally requires a keyword before querying because `search_product_v2` is optimized for targeted product search, not initial full-catalog browsing.
+  The picker should query by keyword, item group, or brand; it also supports an in-stock-only filter. Do not use it for unfiltered full-catalog browsing.
+  Sales and purchase contexts support row selection for batch adding plus a continuous-pick mode. Inventory adjustment stays single-select because the form edits one target item at a time.
 - `src/components/PaymentModeSelect.tsx`: payment mode selector for sales and purchase payment actions.
 - `src/components/LineQtyEditor.tsx`: per-line quantity editor for downstream delivery, receipt, and invoice actions.
 - `src/components/PartyManagementPage.tsx`: shared lightweight Customer/Supplier maintenance page with status filtering and idempotent mutations.

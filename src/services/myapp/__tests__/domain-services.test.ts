@@ -731,7 +731,10 @@ describe('myapp domain services', () => {
     });
 
     const result = await searchProducts({
+      brand: 'Brand A',
       company: 'rgc (Demo)',
+      inStockOnly: true,
+      itemGroup: 'Products',
       itemContext: 'purchase',
       searchKey: 'Camera',
       warehouse: 'Stores - RD',
@@ -740,7 +743,10 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'search_product_v2',
       expect.objectContaining({
+        brand: 'Brand A',
         company: 'rgc (Demo)',
+        in_stock_only: 1,
+        item_group: 'Products',
         item_context: 'purchase',
         search_key: 'Camera',
         warehouse: 'Stores - RD',
