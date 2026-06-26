@@ -807,7 +807,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 当前页面：
 
 - `/payments` 已接入 `list_cashflow_entries_v1` 和 `get_cashflow_report_v1`，作为资金收支入口展示筛选范围内的收款合计、付款合计和净现金流 KPI。
-- `/payments/:name` 已接入 `get_payment_entry_detail_v1`，用于查看单笔收付款凭证、核销明细、差额 / 扣减明细、关联销售 / 采购 / 退货发票和作废动作状态。
+- `/payments/:name` 已接入 `get_payment_entry_detail_v1`，用于查看单笔收付款凭证、业务链路、核销明细、差额 / 扣减明细、关联销售 / 采购 / 退货发票和作废动作状态。
 - 支持关键词、公司、日期和分页查询；`/payments?search=<收付款单号>` 应自动填入关键词，用于保留列表搜索兼容能力，业务链路中的单号跳转应优先使用 `/payments/<收付款单号>`。
 - 展示收付款单号、收款 / 付款 / 转账方向、往来方类型、往来方、付款方式、金额和参考号。
 - 收付款流水中的单号应可点击进入 `/payments/:name`。

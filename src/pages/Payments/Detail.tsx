@@ -100,6 +100,44 @@ function returnInvoiceDoctype(data: PaymentEntryDetail) {
     : 'Sales Invoice';
 }
 
+function firstBusinessDocument(data: PaymentEntryDetail) {
+  const candidates = [
+    { doctype: 'Sales Invoice', names: data.links.salesInvoices },
+    { doctype: 'Purchase Invoice', names: data.links.purchaseInvoices },
+    { doctype: 'Sales Order', names: data.links.salesOrders },
+    { doctype: 'Purchase Order', names: data.links.purchaseOrders },
+    { doctype: returnInvoiceDoctype(data), names: data.links.returnInvoices },
+  ];
+  const candidate = candidates.find((item) => item.names.length > 0);
+  if (!candidate) {
+    return null;
+  }
+  return {
+    doctype: candidate.doctype,
+    name: candidate.names[0],
+    path: documentPath(candidate.doctype, candidate.names[0]),
+  };
+}
+
+function businessTraceMessage(data: PaymentEntryDetail) {
+  if (data.businessType === 'customer_receipt') {
+    return '这是一笔客户收款，可从核销发票或销售订单继续追溯销售链路。';
+  }
+  if (data.businessType === 'supplier_payment') {
+    return '这是一笔供应商付款，可从核销发票或采购订单继续追溯采购链路。';
+  }
+  if (data.businessType === 'customer_refund') {
+    return '这是一笔客户退款，应重点核对退货发票、来源销售发票和原收款链路。';
+  }
+  if (data.businessType === 'supplier_refund') {
+    return '这是一笔供应商退款或付款回退，应重点核对退货发票、来源采购发票和原付款链路。';
+  }
+  if (data.direction === 'transfer') {
+    return '这是一笔内部转账，主要核对付款账户、收款账户和参考号。';
+  }
+  return '这笔收付款暂未归类到明确业务类型，请结合核销明细、账户和参考号核对。';
+}
+
 const referenceColumns: ProColumns<PaymentEntryReference>[] = [
   {
     title: '引用单据',
@@ -191,6 +229,7 @@ const PaymentEntryDetailPage: React.FC = () => {
       refreshDeps: [paymentEntryName],
     },
   );
+  const primaryBusinessDocument = data ? firstBusinessDocument(data) : null;
 
   return (
     <PageContainer
@@ -269,6 +308,69 @@ const PaymentEntryDetailPage: React.FC = () => {
             <ProCard split="vertical">
               <ProCard colSpan="65%">
                 <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="业务链路">
+                    <Space
+                      direction="vertical"
+                      size={12}
+                      style={{ width: '100%' }}
+                    >
+                      <Alert
+                        action={
+                          primaryBusinessDocument?.path ? (
+                            <Button size="small" type="primary">
+                              <Link to={primaryBusinessDocument.path}>
+                                查看关联单据
+                              </Link>
+                            </Button>
+                          ) : null
+                        }
+                        description={businessTraceMessage(data)}
+                        message={businessTypeText(data.businessType)}
+                        showIcon
+                        type={
+                          data.direction === 'transfer' ? 'info' : 'success'
+                        }
+                      />
+                      <ProDescriptions column={2}>
+                        <ProDescriptions.Item label="往来方">
+                          {data.partyName || data.party || '无'}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="首要关联">
+                          {primaryBusinessDocument
+                            ? documentLink(
+                                primaryBusinessDocument.doctype,
+                                primaryBusinessDocument.name,
+                              )
+                            : '无'}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="销售订单">
+                          {docLinks(data.links.salesOrders, 'Sales Order')}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="销售发票">
+                          {docLinks(data.links.salesInvoices, 'Sales Invoice')}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="采购订单">
+                          {docLinks(
+                            data.links.purchaseOrders,
+                            'Purchase Order',
+                          )}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="采购发票">
+                          {docLinks(
+                            data.links.purchaseInvoices,
+                            'Purchase Invoice',
+                          )}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="退货发票" span={2}>
+                          {docLinks(
+                            data.links.returnInvoices,
+                            returnInvoiceDoctype(data),
+                          )}
+                        </ProDescriptions.Item>
+                      </ProDescriptions>
+                    </Space>
+                  </ProCard>
+
                   <ProTable<PaymentEntryReference>
                     columns={referenceColumns}
                     dataSource={data.references}
