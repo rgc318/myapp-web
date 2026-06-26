@@ -33,6 +33,10 @@ function invoicePath(name: string) {
   return `/purchase/invoices/${encodeURIComponent(name)}`;
 }
 
+function paymentEntryPath(name: string) {
+  return `/payments/${encodeURIComponent(name)}`;
+}
+
 const PurchaseRefundReviewPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
@@ -217,50 +221,117 @@ const PurchaseRefundReviewPage: React.FC = () => {
               />
             </StatisticCard.Group>
 
-            <ProCard title="退款核对">
-              <ProDescriptions column={2} dataSource={data}>
-                <ProDescriptions.Item label="采购发票" dataIndex="name" />
-                <ProDescriptions.Item label="公司" dataIndex="company" />
-                <ProDescriptions.Item label="单据状态">
-                  <StatusTag value={data.documentStatus} />
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="付款状态">
-                  <StatusTag value={data.paymentStatus} />
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="最近付款">
-                  {data.latestPaymentEntry ? (
-                    <Link
-                      to={`/payments/${encodeURIComponent(data.latestPaymentEntry)}`}
-                    >
-                      {data.latestPaymentEntry}
-                    </Link>
-                  ) : (
-                    '无'
-                  )}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="供应商" dataIndex="supplierName" />
-                <ProDescriptions.Item
-                  label="备注"
-                  dataIndex="remarks"
-                  span={2}
-                />
-              </ProDescriptions>
-            </ProCard>
+            <ProCard split="vertical">
+              <ProCard colSpan="65%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="退款核对">
+                    <ProDescriptions column={2} dataSource={data}>
+                      <ProDescriptions.Item label="采购发票" dataIndex="name" />
+                      <ProDescriptions.Item label="公司" dataIndex="company" />
+                      <ProDescriptions.Item label="供应商">
+                        {data.supplierName || data.supplier || '-'}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="付款状态">
+                        <StatusTag value={data.paymentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="最近付款">
+                        {data.latestPaymentEntry ? (
+                          <Link to={paymentEntryPath(data.latestPaymentEntry)}>
+                            {data.latestPaymentEntry}
+                          </Link>
+                        ) : (
+                          '无'
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item
+                        label="备注"
+                        dataIndex="remarks"
+                        span={2}
+                      />
+                    </ProDescriptions>
+                  </ProCard>
 
-            <ProCard>
-              <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                <Typography.Text type="secondary">
-                  如退货后需要回退原付款，可取消最近付款；如供应商已线下退款，请保留财务凭证并按实际流程登记。
-                </Typography.Text>
-                <Button
-                  danger
-                  disabled={!data.latestPaymentEntry}
-                  loading={cancelLoading}
-                  onClick={confirmCancelPayment}
-                >
-                  取消最近付款
-                </Button>
-              </Space>
+                  <ProCard title="后续处理">
+                    <Alert
+                      action={
+                        data.latestPaymentEntry ? (
+                          <Button
+                            danger
+                            loading={cancelLoading}
+                            onClick={confirmCancelPayment}
+                            size="small"
+                          >
+                            取消最近付款
+                          </Button>
+                        ) : null
+                      }
+                      description="如退货后需要回退原付款，可取消最近付款；如供应商已线下退款，请保留财务凭证并按实际流程登记。"
+                      message="当前页面用于付款回退核对"
+                      showIcon
+                      type={data.latestPaymentEntry ? 'warning' : 'info'}
+                    />
+                  </ProCard>
+                </Space>
+              </ProCard>
+
+              <ProCard colSpan="35%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="处理建议">
+                    <Typography.Paragraph style={{ marginBottom: 0 }}>
+                      当前系统尚未提供独立供应商退款入账接口。供应商退款应先以采购退货和来源发票为业务依据，再根据实际资金流向决定是否回退最近付款。
+                    </Typography.Paragraph>
+                  </ProCard>
+
+                  <ProCard title="发票关系">
+                    <ProDescriptions column={1}>
+                      <ProDescriptions.Item label="来源采购发票">
+                        <Link to={invoicePath(data.name)}>{data.name}</Link>
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="退货发票">
+                        {returnInvoiceName ? (
+                          <Link to={invoicePath(returnInvoiceName)}>
+                            {returnInvoiceName}
+                          </Link>
+                        ) : (
+                          '未选择'
+                        )}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="付款状态">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item label="单据状态">
+                        <StatusTag value={data.documentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="付款状态">
+                        <StatusTag value={data.paymentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="最近付款">
+                        {data.latestPaymentEntry ? (
+                          <Link to={paymentEntryPath(data.latestPaymentEntry)}>
+                            {data.latestPaymentEntry}
+                          </Link>
+                        ) : (
+                          '无'
+                        )}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="回退动作">
+                    <Button
+                      block
+                      danger
+                      disabled={!data.latestPaymentEntry}
+                      loading={cancelLoading}
+                      onClick={confirmCancelPayment}
+                    >
+                      取消最近付款
+                    </Button>
+                  </ProCard>
+                </Space>
+              </ProCard>
             </ProCard>
           </>
         ) : null}

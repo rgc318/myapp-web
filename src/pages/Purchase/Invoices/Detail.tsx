@@ -13,6 +13,7 @@ import {
   InputNumber,
   Modal,
   message,
+  Progress,
   Skeleton,
   Space,
 } from 'antd';
@@ -42,6 +43,42 @@ function docLinks(values: string[], basePath: string) {
         </React.Fragment>
       ))
     : '无';
+}
+
+function isCancelled(status: string) {
+  return status === 'cancelled' || status === '已作废';
+}
+
+function paymentEntryPath(paymentEntry: string) {
+  return `/payments/${encodeURIComponent(paymentEntry)}`;
+}
+
+function toPercent(
+  value: number | null | undefined,
+  total: number | null | undefined,
+) {
+  const totalValue = Number(total ?? 0);
+  if (!Number.isFinite(totalValue) || totalValue <= 0) {
+    return 0;
+  }
+  return Math.min(Math.round((Number(value ?? 0) / totalValue) * 100), 100);
+}
+
+function paymentStatusHint(data: {
+  documentStatus: string;
+  latestPaymentEntry: string;
+  outstandingAmount: number | null;
+}) {
+  if (isCancelled(data.documentStatus)) {
+    return '当前采购发票已经作废，仅作为历史单据查看。后续处理应返回仍然有效的采购订单或收货单。';
+  }
+  if ((data.outstandingAmount ?? 0) > 0) {
+    return '当前采购发票仍有未付金额，可继续登记付款；如果需要回改单据，请先确认是否要同步回退付款登记。';
+  }
+  if (data.latestPaymentEntry) {
+    return '当前采购发票已经结清。若需要回退开票结果，应先确认是否要回退关联付款，再作废采购发票。';
+  }
+  return '当前采购发票没有未付金额，可继续打印留档或返回来源单据核对业务链路。';
 }
 
 const itemColumns = [
@@ -105,6 +142,8 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
       refreshDeps: [invoiceName],
     },
   );
+  const cancelled = data ? isCancelled(data.documentStatus) : false;
+  const hasOutstanding = (data?.outstandingAmount ?? 0) > 0;
 
   const confirmCancel = () => {
     Modal.confirm({
@@ -238,10 +277,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
           </Button>
         ) : null,
         <Button
-          disabled={
-            data?.documentStatus === 'cancelled' ||
-            (data?.outstandingAmount ?? 0) <= 0
-          }
+          disabled={cancelled || !hasOutstanding}
           key="payment"
           loading={paymentLoading}
           onClick={confirmRecordPayment}
@@ -314,6 +350,19 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
                 }}
               />
               <StatisticCard
+                chart={
+                  <Progress
+                    percent={toPercent(data.paidAmount, data.amount)}
+                    size="small"
+                    status={hasOutstanding ? 'active' : 'success'}
+                  />
+                }
+                statistic={{
+                  title: '付款进度',
+                  value: `${toPercent(data.paidAmount, data.amount)}%`,
+                }}
+              />
+              <StatisticCard
                 statistic={{
                   title: '未付金额',
                   value: formatCurrencyValue(
@@ -325,70 +374,189 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
             </StatisticCard.Group>
 
             <ProCard split="vertical">
-              <ProCard title="基本信息">
-                <ProDescriptions column={2} dataSource={data}>
-                  <ProDescriptions.Item
-                    label="供应商"
-                    dataIndex="supplierName"
+              <ProCard colSpan="65%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProTable<PurchaseDocumentItem>
+                    columns={itemColumns}
+                    dataSource={data.items}
+                    headerTitle="商品明细"
+                    pagination={false}
+                    rowKey={(record) =>
+                      `${record.itemCode}-${record.warehouse}`
+                    }
+                    search={false}
+                    toolBarRender={false}
                   />
-                  <ProDescriptions.Item label="公司" dataIndex="company" />
-                  <ProDescriptions.Item
-                    label="过账日期"
-                    dataIndex="postingDate"
-                  />
-                  <ProDescriptions.Item label="到期日期" dataIndex="dueDate" />
-                  <ProDescriptions.Item label="币种">
-                    {formatCurrencyCode(data.currency)}
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="单据状态">
-                    <StatusTag value={data.documentStatus} />
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="付款状态">
-                    <StatusTag value={data.paymentStatus} />
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="可取消">
-                    {data.canCancel ? '是' : '否'}
-                  </ProDescriptions.Item>
-                </ProDescriptions>
+
+                  <ProCard title={cancelled ? '历史单据说明' : '流程承接'}>
+                    <Alert
+                      action={
+                        cancelled && data.purchaseOrders[0] ? (
+                          <Button size="small">
+                            <Link
+                              to={`/purchase/orders/${encodeURIComponent(
+                                data.purchaseOrders[0],
+                              )}`}
+                            >
+                              返回订单
+                            </Link>
+                          </Button>
+                        ) : hasOutstanding ? (
+                          <Button
+                            onClick={confirmRecordPayment}
+                            size="small"
+                            type="primary"
+                          >
+                            记录付款
+                          </Button>
+                        ) : data.purchaseReceipts[0] ? (
+                          <Button size="small">
+                            <Link
+                              to={`/purchase/receipts/${encodeURIComponent(
+                                data.purchaseReceipts[0],
+                              )}`}
+                            >
+                              查看收货单
+                            </Link>
+                          </Button>
+                        ) : null
+                      }
+                      description={paymentStatusHint(data)}
+                      message={cancelled ? '这是一张历史发票' : '当前结算状态'}
+                      showIcon
+                      type={
+                        cancelled
+                          ? 'warning'
+                          : hasOutstanding
+                            ? 'info'
+                            : 'success'
+                      }
+                    />
+                  </ProCard>
+                </Space>
               </ProCard>
 
-              <ProCard title="付款信息">
-                <ProDescriptions column={1} dataSource={data}>
-                  <ProDescriptions.Item label="最近付款">
-                    {data.latestPaymentEntry ? (
-                      <Link
-                        to={`/payments/${encodeURIComponent(data.latestPaymentEntry)}`}
-                      >
-                        {data.latestPaymentEntry}
-                      </Link>
-                    ) : (
-                      '无'
-                    )}
-                  </ProDescriptions.Item>
-                  <ProDescriptions.Item label="备注" dataIndex="remarks" />
-                </ProDescriptions>
+              <ProCard colSpan="35%">
+                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                  <ProCard title="基本信息">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item
+                        label="供应商"
+                        dataIndex="supplierName"
+                      />
+                      <ProDescriptions.Item label="公司" dataIndex="company" />
+                      <ProDescriptions.Item
+                        label="过账日期"
+                        dataIndex="postingDate"
+                      />
+                      <ProDescriptions.Item
+                        label="到期日期"
+                        dataIndex="dueDate"
+                      />
+                      <ProDescriptions.Item label="币种">
+                        {formatCurrencyCode(data.currency)}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="单据状态">
+                        <StatusTag value={data.documentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="付款状态">
+                        <StatusTag value={data.paymentStatus} />
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="可取消">
+                        {data.canCancel ? '是' : '否'}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="关联单据">
+                    <ProDescriptions column={1}>
+                      <ProDescriptions.Item label="采购订单">
+                        {docLinks(data.purchaseOrders, '/purchase/orders')}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="采购收货单">
+                        {docLinks(data.purchaseReceipts, '/purchase/receipts')}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="付款信息">
+                    <ProDescriptions column={1} dataSource={data}>
+                      <ProDescriptions.Item
+                        label="已付金额"
+                        dataIndex="paidAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.paidAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item
+                        label="未付金额"
+                        dataIndex="outstandingAmount"
+                        render={(_, record) =>
+                          formatCurrencyValue(
+                            record.outstandingAmount,
+                            record.currency,
+                          )
+                        }
+                      />
+                      <ProDescriptions.Item label="最近付款">
+                        {data.latestPaymentEntry ? (
+                          <Link to={paymentEntryPath(data.latestPaymentEntry)}>
+                            {data.latestPaymentEntry}
+                          </Link>
+                        ) : (
+                          '无'
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="备注">
+                        {data.remarks || '无'}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  {!cancelled && (data.canCancel || data.latestPaymentEntry) ? (
+                    <ProCard title="回退处理">
+                      <Alert
+                        action={
+                          <Space>
+                            {data.latestPaymentEntry ? (
+                              <Button
+                                danger
+                                loading={paymentCancelLoading}
+                                onClick={confirmCancelPayment}
+                                size="small"
+                              >
+                                回退付款
+                              </Button>
+                            ) : null}
+                            {data.canCancel ? (
+                              <Button
+                                danger
+                                loading={cancelLoading}
+                                onClick={confirmCancel}
+                                size="small"
+                              >
+                                作废采购发票
+                              </Button>
+                            ) : null}
+                          </Space>
+                        }
+                        description={
+                          data.latestPaymentEntry
+                            ? '这张发票已经有关联付款。若只是付款登记有误，可单独回退付款；若采购金额或开票结果有问题，应先核对付款，再作废发票。'
+                            : '如需修改采购订单或重走开票流程，可以先作废当前采购发票，再回到收货或订单页面继续处理。'
+                        }
+                        message="发票回退前请确认付款状态"
+                        showIcon
+                        type="warning"
+                      />
+                    </ProCard>
+                  ) : null}
+                </Space>
               </ProCard>
             </ProCard>
-
-            <ProCard title="关联单据">
-              <ProDescriptions column={2}>
-                <ProDescriptions.Item label="采购订单">
-                  {docLinks(data.purchaseOrders, '/purchase/orders')}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="采购收货单">
-                  {docLinks(data.purchaseReceipts, '/purchase/receipts')}
-                </ProDescriptions.Item>
-              </ProDescriptions>
-            </ProCard>
-
-            <ProTable<PurchaseDocumentItem>
-              columns={itemColumns}
-              dataSource={data.items}
-              pagination={false}
-              rowKey={(record) => `${record.itemCode}-${record.warehouse}`}
-              search={false}
-              toolBarRender={false}
-            />
           </>
         ) : null}
       </Space>
