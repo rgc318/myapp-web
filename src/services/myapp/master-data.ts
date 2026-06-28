@@ -34,6 +34,12 @@ export type ProductWarehouseStockDetail = {
   warehouse: string;
 };
 
+export type ProductPriceEntry = {
+  currency: string;
+  priceList: string;
+  rate: number | null;
+};
+
 export type ProductSummary = {
   allUomDisplays: Record<string, string>;
   allUoms: string[];
@@ -54,6 +60,8 @@ export type ProductSummary = {
     currentPriceList?: string | null;
     currentRate?: number | null;
     retailRate?: number | null;
+    buyingPrices?: ProductPriceEntry[];
+    sellingPrices?: ProductPriceEntry[];
     standardBuyingRate?: number | null;
     standardSellingRate?: number | null;
     valuationRate?: number | null;
@@ -99,11 +107,13 @@ export type SaveProductPayload = {
   itemGroup?: string | null;
   itemName: string;
   retailDefaultUom?: string | null;
+  retailRate?: number | null;
   standardBuyingRate?: number | null;
   standardSellingRate?: number | null;
   stockUom?: string | null;
   valuationRate?: number | null;
   wholesaleDefaultUom?: string | null;
+  wholesaleRate?: number | null;
 };
 
 export type PartySummary = {
@@ -333,17 +343,39 @@ function mapPriceSummary(value: unknown): ProductSummary['priceSummary'] {
 
   const row = value as Record<string, unknown>;
   return {
+    buyingPrices: mapPriceEntries(row.buying_prices),
     currentPriceList:
       typeof row.current_price_list === 'string'
         ? row.current_price_list
         : null,
     currentRate: toOptionalNumber(row.current_rate),
     retailRate: toOptionalNumber(row.retail_rate),
+    sellingPrices: mapPriceEntries(row.selling_prices),
     standardBuyingRate: toOptionalNumber(row.standard_buying_rate),
     standardSellingRate: toOptionalNumber(row.standard_selling_rate),
     valuationRate: toOptionalNumber(row.valuation_rate),
     wholesaleRate: toOptionalNumber(row.wholesale_rate),
   };
+}
+
+function mapPriceEntries(value: unknown): ProductPriceEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry): ProductPriceEntry | null => {
+      const row = readObject(entry);
+      const priceList = toOptionalText(row.price_list);
+      if (!priceList) {
+        return null;
+      }
+      return {
+        currency: String(row.currency ?? ''),
+        priceList,
+        rate: toOptionalNumber(row.rate ?? row.price_list_rate),
+      };
+    })
+    .filter((entry): entry is ProductPriceEntry => Boolean(entry));
 }
 
 function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
@@ -462,8 +494,10 @@ export async function listProducts(options: ProductListOptions = {}) {
     'list_products_v2',
     compactPayload({
       company: toOptionalText(options.company),
+      brand: toOptionalText(options.brand),
       disabled: options.disabled ?? 0,
       in_stock_only: options.inStockOnly ? 1 : undefined,
+      item_group: toOptionalText(options.itemGroup),
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
       start: options.start ?? 0,
@@ -518,16 +552,35 @@ export async function getProductDetail(
 }
 
 function productSavePayload(payload: SaveProductPayload) {
-  const sellingPrices =
+  type PricePayloadEntry = {
+    currency: string | undefined;
+    price_list: string;
+    rate: number;
+  };
+
+  const sellingPrices = [
     payload.standardSellingRate === undefined || payload.standardSellingRate === null
-      ? undefined
-      : [
-          {
-            currency: toOptionalText(payload.currency),
-            price_list: 'Standard Selling',
-            rate: payload.standardSellingRate,
-          },
-        ];
+      ? null
+      : {
+          currency: toOptionalText(payload.currency),
+          price_list: 'Standard Selling',
+          rate: payload.standardSellingRate,
+        },
+    payload.wholesaleRate === undefined || payload.wholesaleRate === null
+      ? null
+      : {
+          currency: toOptionalText(payload.currency),
+          price_list: 'Wholesale',
+          rate: payload.wholesaleRate,
+        },
+    payload.retailRate === undefined || payload.retailRate === null
+      ? null
+      : {
+          currency: toOptionalText(payload.currency),
+          price_list: 'Retail',
+          rate: payload.retailRate,
+        },
+  ].filter((entry): entry is PricePayloadEntry => Boolean(entry));
   const buyingPrices =
     payload.standardBuyingRate === undefined || payload.standardBuyingRate === null
       ? undefined
@@ -550,7 +603,7 @@ function productSavePayload(payload: SaveProductPayload) {
     item_group: payload.itemGroup ?? '',
     item_name: payload.itemName,
     retail_default_uom: payload.retailDefaultUom ?? stockUom ?? '',
-    selling_prices: sellingPrices,
+    selling_prices: sellingPrices.length ? sellingPrices : undefined,
     standard_rate: payload.standardSellingRate ?? undefined,
     stock_uom: stockUom,
     uom_conversions: stockUom

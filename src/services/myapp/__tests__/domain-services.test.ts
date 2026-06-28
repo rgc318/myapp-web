@@ -668,7 +668,29 @@ describe('myapp domain services', () => {
               { conversion_factor: 12, uom: 'Box', uom_display: '箱' },
             ],
             price: '19.9',
-            price_summary: { retail_rate: '22', wholesale_rate: '180' },
+            price_summary: {
+              buying_prices: [
+                {
+                  currency: 'CNY',
+                  price_list: 'Standard Buying',
+                  rate: '11',
+                },
+              ],
+              retail_rate: '22',
+              selling_prices: [
+                {
+                  currency: 'CNY',
+                  price_list: 'Standard Selling',
+                  rate: '19.9',
+                },
+                {
+                  currency: 'CNY',
+                  price_list: 'Wholesale',
+                  rate: '180',
+                },
+              ],
+              wholesale_rate: '180',
+            },
             retail_default_uom: 'Nos',
             stock_uom: 'Nos',
             total_qty: '5',
@@ -686,7 +708,12 @@ describe('myapp domain services', () => {
       raw: {},
     });
 
-    const result = await listProducts({ searchKey: 'Camera' });
+    const result = await listProducts({
+      brand: 'Brand',
+      inStockOnly: true,
+      itemGroup: 'Products',
+      searchKey: 'Camera',
+    });
 
     expect(result.items[0]).toMatchObject({
       imageUrl: 'http://api.example.test/files/item.png',
@@ -706,8 +733,24 @@ describe('myapp domain services', () => {
       wholesaleDefaultUom: 'Box',
     });
     expect(result.items[0].priceSummary?.wholesaleRate).toBe(180);
+    expect(result.items[0].priceSummary?.sellingPrices).toEqual([
+      { currency: 'CNY', priceList: 'Standard Selling', rate: 19.9 },
+      { currency: 'CNY', priceList: 'Wholesale', rate: 180 },
+    ]);
+    expect(result.items[0].priceSummary?.buyingPrices).toEqual([
+      { currency: 'CNY', priceList: 'Standard Buying', rate: 11 },
+    ]);
     expect(result.total).toBe(8);
     expect(result.hasMore).toBe(true);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_products_v2',
+      expect.objectContaining({
+        brand: 'Brand',
+        in_stock_only: 1,
+        item_group: 'Products',
+        search_key: 'Camera',
+      }),
+    );
   });
 
   it('searches products with business context', async () => {
@@ -1567,11 +1610,13 @@ describe('myapp domain services', () => {
       itemGroup: 'All Item Groups',
       itemName: '新品',
       retailDefaultUom: 'Nos',
+      retailRate: 14,
       standardBuyingRate: 8,
       standardSellingRate: 12,
       stockUom: 'Nos',
       valuationRate: 7,
       wholesaleDefaultUom: 'Box',
+      wholesaleRate: 10,
     });
     await updateProduct('ITEM-001', {
       barcode: '',
@@ -1582,11 +1627,13 @@ describe('myapp domain services', () => {
       itemGroup: '',
       itemName: '新品2',
       retailDefaultUom: 'Nos',
+      retailRate: 15,
       standardBuyingRate: 9,
       standardSellingRate: 13,
       stockUom: 'Nos',
       valuationRate: 8,
       wholesaleDefaultUom: 'Box',
+      wholesaleRate: 11,
     });
     await setProductDisabled('ITEM-001', true);
 
@@ -1608,6 +1655,8 @@ describe('myapp domain services', () => {
         retail_default_uom: 'Nos',
         selling_prices: [
           { currency: 'CNY', price_list: 'Standard Selling', rate: 12 },
+          { currency: 'CNY', price_list: 'Wholesale', rate: 10 },
+          { currency: 'CNY', price_list: 'Retail', rate: 14 },
         ],
         standard_rate: 12,
         stock_uom: 'Nos',
@@ -1635,6 +1684,8 @@ describe('myapp domain services', () => {
         retail_default_uom: 'Nos',
         selling_prices: [
           { currency: 'CNY', price_list: 'Standard Selling', rate: 13 },
+          { currency: 'CNY', price_list: 'Wholesale', rate: 11 },
+          { currency: 'CNY', price_list: 'Retail', rate: 15 },
         ],
         standard_rate: 13,
         stock_uom: 'Nos',

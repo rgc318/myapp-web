@@ -1,5 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
+import { Link } from '@umijs/max';
 import {
   Button,
   Form,
@@ -86,9 +87,73 @@ function buildColumns({
       title: '仓库',
       dataIndex: 'warehouseFilter',
       hideInTable: true,
-      fieldProps: {
-        allowClear: true,
-        placeholder: '仓库',
+      formItemRender: (_, { onChange, value }, form) => (
+        <RemoteLinkSelect
+          doctype="Warehouse"
+          onChange={(nextValue) => {
+            const warehouse = toOptionalText(nextValue);
+            form.setFieldValue?.('warehouseFilter', warehouse);
+            onChange?.(warehouse);
+          }}
+          placeholder="搜索仓库"
+          style={{ width: '100%' }}
+          value={
+            toOptionalText(value) ??
+            toOptionalText(form.getFieldValue?.('warehouseFilter'))
+          }
+        />
+      ),
+    },
+    {
+      title: '商品分类',
+      dataIndex: 'itemGroupFilter',
+      hideInTable: true,
+      formItemRender: (_, { onChange, value }, form) => (
+        <RemoteLinkSelect
+          doctype="Item Group"
+          onChange={(nextValue) => {
+            const itemGroup = toOptionalText(nextValue);
+            form.setFieldValue?.('itemGroupFilter', itemGroup);
+            onChange?.(itemGroup);
+          }}
+          placeholder="搜索商品分类"
+          style={{ width: '100%' }}
+          value={
+            toOptionalText(value) ??
+            toOptionalText(form.getFieldValue?.('itemGroupFilter'))
+          }
+        />
+      ),
+    },
+    {
+      title: '品牌',
+      dataIndex: 'brandFilter',
+      hideInTable: true,
+      formItemRender: (_, { onChange, value }, form) => (
+        <RemoteLinkSelect
+          doctype="Brand"
+          onChange={(nextValue) => {
+            const brand = toOptionalText(nextValue);
+            form.setFieldValue?.('brandFilter', brand);
+            onChange?.(brand);
+          }}
+          placeholder="搜索品牌"
+          style={{ width: '100%' }}
+          value={
+            toOptionalText(value) ??
+            toOptionalText(form.getFieldValue?.('brandFilter'))
+          }
+        />
+      ),
+    },
+    {
+      title: '库存范围',
+      dataIndex: 'stockScope',
+      hideInTable: true,
+      initialValue: 'all',
+      valueEnum: {
+        all: { text: '全部' },
+        in_stock: { text: '仅有库存' },
       },
     },
     {
@@ -119,6 +184,13 @@ function buildColumns({
       dataIndex: 'itemCode',
       search: false,
       width: 160,
+      render: (_, record) => (
+        <Link
+          to={`/master-data/products/${encodeURIComponent(record.itemCode)}`}
+        >
+          {record.itemCode}
+        </Link>
+      ),
     },
     {
       title: '商品名称',
@@ -132,6 +204,22 @@ function buildColumns({
       search: false,
       ellipsis: true,
       width: 160,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '分类',
+      dataIndex: 'itemGroup',
+      search: false,
+      ellipsis: true,
+      width: 140,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '品牌',
+      dataIndex: 'brand',
+      search: false,
+      ellipsis: true,
+      width: 120,
       renderText: (value) => value || '-',
     },
     {
@@ -159,6 +247,33 @@ function buildColumns({
       render: (_, record) => formatCurrencyValue(record.price),
     },
     {
+      title: '批发价',
+      dataIndex: ['priceSummary', 'wholesaleRate'],
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.priceSummary?.wholesaleRate),
+    },
+    {
+      title: '零售价',
+      dataIndex: ['priceSummary', 'retailRate'],
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.priceSummary?.retailRate),
+    },
+    {
+      title: '采购价',
+      dataIndex: ['priceSummary', 'standardBuyingRate'],
+      align: 'right',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.priceSummary?.standardBuyingRate),
+    },
+    {
       title: '状态',
       dataIndex: 'disabled',
       search: false,
@@ -171,6 +286,13 @@ function buildColumns({
       valueType: 'option',
       width: 150,
       render: (_, record) => [
+        <Button key="view" type="link">
+          <Link
+            to={`/master-data/products/${encodeURIComponent(record.itemCode)}`}
+          >
+            查看
+          </Link>
+        </Button>,
         <Button key="edit" type="link" onClick={() => onEdit(record)}>
           编辑
         </Button>,
@@ -237,9 +359,11 @@ const ProductsPage: React.FC = () => {
         record.priceSummary?.standardSellingRate ??
         record.priceSummary?.currentRate ??
         undefined,
+      retailRate: record.priceSummary?.retailRate ?? undefined,
       stockUom: record.stockUom,
       valuationRate: record.priceSummary?.valuationRate ?? undefined,
       wholesaleDefaultUom: record.wholesaleDefaultUom ?? record.stockUom,
+      wholesaleRate: record.priceSummary?.wholesaleRate ?? undefined,
     });
     setModalOpen(true);
   };
@@ -308,7 +432,9 @@ const ProductsPage: React.FC = () => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const disabledFilter = String(params.disabledFilter ?? 'enabled');
+          const stockScope = String(params.stockScope ?? 'all');
           const result = await listProducts({
+            brand: toOptionalText(params.brandFilter),
             company: toOptionalText(params.company),
             disabled:
               disabledFilter === 'enabled'
@@ -316,10 +442,12 @@ const ProductsPage: React.FC = () => {
                 : disabledFilter === 'disabled'
                   ? 1
                   : undefined,
+            inStockOnly: stockScope === 'in_stock',
+            itemGroup: toOptionalText(params.itemGroupFilter),
             limit: pageSize,
             searchKey: String(params.searchKey ?? ''),
             start: (current - 1) * pageSize,
-            warehouse: String(params.warehouseFilter ?? ''),
+            warehouse: toOptionalText(params.warehouseFilter),
           });
 
           return {
@@ -378,10 +506,13 @@ const ProductsPage: React.FC = () => {
               name="itemGroup"
               style={{ minWidth: 220 }}
             >
-              <Input placeholder="例如 All Item Groups" />
+              <RemoteLinkSelect
+                doctype="Item Group"
+                placeholder="搜索商品分类"
+              />
             </Form.Item>
             <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
-              <Input placeholder="品牌" />
+              <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
             </Form.Item>
             <Form.Item label="条码" name="barcode" style={{ minWidth: 200 }}>
               <Input placeholder="主条码" />
@@ -426,6 +557,22 @@ const ProductsPage: React.FC = () => {
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
+            <Form.Item
+              label="批发价"
+              name="wholesaleRate"
+              style={{ minWidth: 160 }}
+            >
+              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              label="零售价"
+              name="retailRate"
+              style={{ minWidth: 160 }}
+            >
+              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            </Form.Item>
+          </Space>
+          <Space size={16} style={{ width: '100%' }}>
             <Form.Item
               label="估值价"
               name="valuationRate"

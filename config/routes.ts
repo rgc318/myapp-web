@@ -252,6 +252,10 @@ export default [
         component: './MasterData/Products',
       },
       {
+        path: '/master-data/products/:itemCode',
+        component: './MasterData/Products/Detail',
+      },
+      {
         path: '/master-data/customers',
         name: 'customers',
         component: './MasterData/Customers',
