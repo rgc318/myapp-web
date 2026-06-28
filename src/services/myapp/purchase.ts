@@ -282,6 +282,60 @@ export type PurchaseInvoiceDetail = {
   supplierName: string;
 };
 
+export type SupplierRefundPaymentEntry = {
+  allocatedAmount: number | null;
+  modeOfPayment: string;
+  paidAmount: number | null;
+  paymentEntry: string;
+  postingDate: string;
+  receivedAmount: number | null;
+  referenceName: string;
+};
+
+export type SupplierRefundResult = {
+  modeOfPayment: string;
+  paymentEntry: string;
+  refundableAmountBeforeRefund: number | null;
+  referenceDate: string;
+  referenceNo: string;
+  refundAmount: number | null;
+  returnInvoice: string;
+  sourceInvoice: string;
+};
+
+export type SupplierRefundInvoiceSnapshot = {
+  company: string;
+  currency: string;
+  docstatus: number;
+  documentStatus: string;
+  grandTotal: number | null;
+  isReturn: boolean;
+  name: string;
+  outstandingAmount: number | null;
+  postingDate: string;
+  returnAgainst: string;
+  supplier: string;
+  supplierName: string;
+};
+
+export type SupplierRefundContext = {
+  actions: {
+    canCreateRefund: boolean;
+    createRefundHint: string;
+  };
+  entries: SupplierRefundPaymentEntry[];
+  refund: {
+    currency: string;
+    refundableAmount: number | null;
+    refundedAmount: number | null;
+    returnAmount: number | null;
+    status: string;
+    suggestedRefundAmount: number | null;
+  };
+  returnInvoice: SupplierRefundInvoiceSnapshot | null;
+  sourceInvoice: SupplierRefundInvoiceSnapshot | null;
+};
+
 function mapSummaryRow(row: Record<string, any>): PurchaseOrderSummary {
   const receiving = readObject(row.receiving);
   const payment = readObject(row.payment);
@@ -344,6 +398,54 @@ function normalizeReferences(value: unknown) {
     },
     {},
   );
+}
+
+function normalizeSupplierRefundInvoiceSnapshot(
+  value: unknown,
+): SupplierRefundInvoiceSnapshot | null {
+  const row = readObject(value);
+  if (!Object.keys(row).length) {
+    return null;
+  }
+  return {
+    company: String(row.company ?? ''),
+    currency: String(row.currency ?? 'CNY'),
+    docstatus: Number(row.docstatus ?? 0),
+    documentStatus: String(row.document_status ?? ''),
+    grandTotal: toOptionalNumber(row.grand_total),
+    isReturn: Boolean(row.is_return),
+    name: String(row.name ?? ''),
+    outstandingAmount: toOptionalNumber(row.outstanding_amount),
+    postingDate: String(row.posting_date ?? ''),
+    returnAgainst: String(row.return_against ?? ''),
+    supplier: String(row.supplier ?? ''),
+    supplierName: String(row.supplier_name ?? row.supplier ?? ''),
+  };
+}
+
+function normalizeSupplierRefundPaymentEntries(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((row) => {
+          const entry = readObject(row);
+          const paymentEntry = String(entry.payment_entry ?? '');
+          if (!paymentEntry) {
+            return null;
+          }
+          return {
+            allocatedAmount: toOptionalNumber(entry.allocated_amount),
+            modeOfPayment: String(entry.mode_of_payment ?? ''),
+            paidAmount: toOptionalNumber(entry.paid_amount),
+            paymentEntry,
+            postingDate: String(entry.posting_date ?? ''),
+            receivedAmount: toOptionalNumber(entry.received_amount),
+            referenceName: String(entry.reference_name ?? ''),
+          } satisfies SupplierRefundPaymentEntry;
+        })
+        .filter(
+          (entry): entry is SupplierRefundPaymentEntry => Boolean(entry),
+        )
+    : [];
 }
 
 function normalizePurchaseOrderItems(items: PurchaseOrderItemInput[]) {
@@ -1001,5 +1103,78 @@ export async function cancelSupplierPaymentEntry(paymentEntryName: string) {
   return runGatewayMutation('cancel_supplier_payment', {
     payload: { payment_entry_name: paymentEntryName },
     successMessage: '采购付款已取消',
+  });
+}
+
+export async function getSupplierRefundContext(
+  returnInvoiceName: string,
+): Promise<SupplierRefundContext | null> {
+  const result = await callGatewayMethod<Record<string, any>>(
+    'get_supplier_refund_context_v1',
+    { return_invoice_name: returnInvoiceName },
+  );
+  const data = result.data;
+
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const refund = readObject(data.refund);
+  const actions = readObject(data.actions);
+
+  return {
+    actions: {
+      canCreateRefund: Boolean(actions.can_create_refund),
+      createRefundHint: String(actions.create_refund_hint ?? ''),
+    },
+    entries: normalizeSupplierRefundPaymentEntries(data.entries),
+    refund: {
+      currency: String(refund.currency ?? 'CNY'),
+      refundableAmount: toOptionalNumber(refund.refundable_amount),
+      refundedAmount: toOptionalNumber(refund.refunded_amount),
+      returnAmount: toOptionalNumber(refund.return_amount),
+      status: String(refund.status ?? ''),
+      suggestedRefundAmount: toOptionalNumber(refund.suggested_refund_amount),
+    },
+    returnInvoice: normalizeSupplierRefundInvoiceSnapshot(data.return_invoice),
+    sourceInvoice: normalizeSupplierRefundInvoiceSnapshot(data.source_invoice),
+  };
+}
+
+export async function createSupplierRefund(
+  returnInvoiceName: string,
+  refundAmount: number,
+  options: {
+    modeOfPayment?: string;
+    referenceDate?: string;
+    referenceNo?: string;
+    remarks?: string;
+  } = {},
+) {
+  return runGatewayMutation<SupplierRefundResult>('create_supplier_refund', {
+    payload: compactPayload({
+      mode_of_payment: options.modeOfPayment,
+      reference_date: options.referenceDate,
+      reference_no: options.referenceNo,
+      refund_amount: refundAmount,
+      remarks: options.remarks,
+      return_invoice_name: returnInvoiceName,
+    }),
+    successMessage: '供应商退款已登记',
+    transform: (data) => {
+      const row = readObject(data);
+      return {
+        modeOfPayment: String(row.mode_of_payment ?? ''),
+        paymentEntry: String(row.payment_entry ?? ''),
+        refundableAmountBeforeRefund: toOptionalNumber(
+          row.refundable_amount_before_refund,
+        ),
+        referenceDate: String(row.reference_date ?? ''),
+        referenceNo: String(row.reference_no ?? ''),
+        refundAmount: toOptionalNumber(row.refund_amount),
+        returnInvoice: String(row.return_invoice ?? returnInvoiceName),
+        sourceInvoice: String(row.source_invoice ?? ''),
+      };
+    },
   });
 }

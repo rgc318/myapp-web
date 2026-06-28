@@ -10,6 +10,8 @@ import {
   Button,
   Empty,
   Form,
+  Input,
+  InputNumber,
   Modal,
   message,
   Skeleton,
@@ -20,7 +22,10 @@ import React, { useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import {
   cancelSupplierPaymentEntry,
+  createSupplierRefund,
   getPurchaseInvoiceDetail,
+  getSupplierRefundContext,
+  type SupplierRefundResult,
 } from '@/services/myapp/purchase';
 import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 
@@ -44,8 +49,13 @@ const PurchaseRefundReviewPage: React.FC = () => {
   const [invoiceName, setInvoiceName] = useState(
     query.get('sourceInvoice') ?? '',
   );
-  const returnInvoiceName = query.get('returnInvoice') ?? '';
+  const [returnInvoiceName, setReturnInvoiceName] = useState(
+    query.get('returnInvoice') ?? '',
+  );
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [lastRefundResult, setLastRefundResult] =
+    useState<SupplierRefundResult>();
 
   const { data, error, loading, refresh } = useRequest(
     () =>
@@ -58,9 +68,123 @@ const PurchaseRefundReviewPage: React.FC = () => {
     },
   );
 
+  const {
+    data: refundContext,
+    error: refundContextError,
+    loading: refundContextLoading,
+    refresh: refreshRefundContext,
+  } = useRequest(
+    () =>
+      returnInvoiceName
+        ? getSupplierRefundContext(returnInvoiceName)
+        : Promise.resolve(null),
+    {
+      formatResult: (result) => result,
+      onSuccess: (nextContext) => {
+        const suggestedAmount =
+          nextContext?.refund.suggestedRefundAmount ??
+          nextContext?.refund.refundableAmount ??
+          0;
+        if (suggestedAmount > 0) {
+          setLastRefundResult(undefined);
+        }
+      },
+      refreshDeps: [returnInvoiceName],
+    },
+  );
+
   const loadInvoice = async () => {
-    const values = await form.validateFields(['invoiceName']);
+    const values = await form.validateFields([
+      'invoiceName',
+      'returnInvoiceName',
+    ]);
     setInvoiceName(values.invoiceName);
+    setReturnInvoiceName(values.returnInvoiceName ?? '');
+  };
+
+  const confirmCreateRefund = () => {
+    const refundableAmount = refundContext?.refund.refundableAmount ?? 0;
+    const suggestedAmount =
+      refundContext?.refund.suggestedRefundAmount ?? refundableAmount;
+
+    if (!returnInvoiceName) {
+      message.warning('请先选择采购退货发票');
+      return;
+    }
+    if (!refundContext?.actions.canCreateRefund) {
+      message.warning(
+        refundContext?.actions.createRefundHint || '当前不能登记供应商退款',
+      );
+      return;
+    }
+
+    let refundAmount = suggestedAmount;
+    let modeOfPayment = '';
+    let remarks = '';
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <InputNumber
+            addonBefore="退款金额"
+            defaultValue={refundAmount}
+            max={refundableAmount || undefined}
+            min={0}
+            onChange={(value) => {
+              refundAmount = Number(value ?? 0);
+            }}
+            precision={2}
+            style={{ width: '100%' }}
+          />
+          <Input
+            onChange={(event) => {
+              modeOfPayment = event.target.value;
+            }}
+            placeholder="付款方式，可留空使用默认值"
+          />
+          <Input.TextArea
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onChange={(event) => {
+              remarks = event.target.value;
+            }}
+            placeholder="备注"
+          />
+        </Space>
+      ),
+      okText: '登记退款',
+      onOk: async () => {
+        if (refundAmount <= 0) {
+          message.error('退款金额必须大于 0');
+          throw new Error('Invalid refund amount');
+        }
+        if (refundableAmount > 0 && refundAmount > refundableAmount) {
+          message.error('退款金额不能超过当前可退金额');
+          throw new Error('Refund amount exceeds refundable amount');
+        }
+
+        setRefundLoading(true);
+        try {
+          const result = await createSupplierRefund(
+            returnInvoiceName,
+            refundAmount,
+            {
+              modeOfPayment,
+              remarks,
+            },
+          );
+          setLastRefundResult(result.data);
+          refreshRefundContext();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setRefundLoading(false);
+        }
+      },
+      title: `登记供应商退款 ${returnInvoiceName}`,
+      width: 560,
+    });
   };
 
   const confirmCancelPayment = () => {
@@ -103,7 +227,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
     >
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="当前系统尚未提供独立供应商退款入账接口。本页用于退货后核对来源采购发票付款状态，并在需要时回退最近付款。"
+          message="本页用于核对采购退货后的供应商退款，可基于采购退货发票登记退款，也可在需要时回退原付款。"
           showIcon
           type="info"
         />
@@ -183,6 +307,19 @@ const PurchaseRefundReviewPage: React.FC = () => {
           />
         ) : null}
 
+        {refundContextError ? (
+          <Alert
+            description={
+              refundContextError instanceof Error
+                ? refundContextError.message
+                : '请稍后重试。'
+            }
+            message="供应商退款上下文加载失败"
+            showIcon
+            type="error"
+          />
+        ) : null}
+
         {loading && invoiceName ? (
           <ProCard>
             <Skeleton active paragraph={{ rows: 6 }} />
@@ -254,22 +391,62 @@ const PurchaseRefundReviewPage: React.FC = () => {
                   <ProCard title="后续处理">
                     <Alert
                       action={
-                        data.latestPaymentEntry ? (
+                        <Space>
                           <Button
-                            danger
-                            loading={cancelLoading}
-                            onClick={confirmCancelPayment}
+                            disabled={!refundContext?.actions.canCreateRefund}
+                            loading={refundLoading || refundContextLoading}
+                            onClick={confirmCreateRefund}
                             size="small"
+                            type="primary"
                           >
-                            取消最近付款
+                            登记供应商退款
                           </Button>
-                        ) : null
+                          {data.latestPaymentEntry ? (
+                            <Button
+                              danger
+                              loading={cancelLoading}
+                              onClick={confirmCancelPayment}
+                              size="small"
+                            >
+                              取消最近付款
+                            </Button>
+                          ) : null}
+                        </Space>
                       }
-                      description="如退货后需要回退原付款，可取消最近付款；如供应商已线下退款，请保留财务凭证并按实际流程登记。"
-                      message="当前页面用于付款回退核对"
+                      description={
+                        refundContext?.actions.createRefundHint ||
+                        '如供应商已退款，可基于采购退货发票登记退款；如原付款登记有误，可取消最近付款。'
+                      }
+                      message="当前页面用于供应商退款核对"
                       showIcon
-                      type={data.latestPaymentEntry ? 'warning' : 'info'}
+                      type={
+                        refundContext?.actions.canCreateRefund
+                          ? 'success'
+                          : 'info'
+                      }
                     />
+                    {lastRefundResult ? (
+                      <Alert
+                        description={
+                          lastRefundResult.paymentEntry ? (
+                            <Link
+                              to={paymentEntryPath(
+                                lastRefundResult.paymentEntry,
+                              )}
+                            >
+                              查看退款单 {lastRefundResult.paymentEntry}
+                            </Link>
+                          ) : null
+                        }
+                        message={`供应商退款已登记：${formatCurrencyValue(
+                          lastRefundResult.refundAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}`}
+                        showIcon
+                        style={{ marginTop: 12 }}
+                        type="success"
+                      />
+                    ) : null}
                   </ProCard>
                 </Space>
               </ProCard>
@@ -278,7 +455,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
                 <Space direction="vertical" size={16} style={{ width: '100%' }}>
                   <ProCard title="处理建议">
                     <Typography.Paragraph style={{ marginBottom: 0 }}>
-                      当前系统尚未提供独立供应商退款入账接口。供应商退款应先以采购退货和来源发票为业务依据，再根据实际资金流向决定是否回退最近付款。
+                      供应商退款应以采购退货发票为依据登记。若只是原付款登记错误，优先回退付款；若供应商实际退回资金，则登记供应商退款并保留对应凭证。
                     </Typography.Paragraph>
                   </ProCard>
 
@@ -295,6 +472,32 @@ const PurchaseRefundReviewPage: React.FC = () => {
                         ) : (
                           '未选择'
                         )}
+                      </ProDescriptions.Item>
+                    </ProDescriptions>
+                  </ProCard>
+
+                  <ProCard title="退款状态">
+                    <ProDescriptions column={1}>
+                      <ProDescriptions.Item label="退货金额">
+                        {formatCurrencyValue(
+                          refundContext?.refund.returnAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="已退金额">
+                        {formatCurrencyValue(
+                          refundContext?.refund.refundedAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="可退金额">
+                        {formatCurrencyValue(
+                          refundContext?.refund.refundableAmount,
+                          refundContext?.refund.currency ?? data.currency,
+                        )}
+                      </ProDescriptions.Item>
+                      <ProDescriptions.Item label="状态">
+                        <StatusTag value={refundContext?.refund.status ?? ''} />
                       </ProDescriptions.Item>
                     </ProDescriptions>
                   </ProCard>
@@ -320,15 +523,26 @@ const PurchaseRefundReviewPage: React.FC = () => {
                   </ProCard>
 
                   <ProCard title="回退动作">
-                    <Button
-                      block
-                      danger
-                      disabled={!data.latestPaymentEntry}
-                      loading={cancelLoading}
-                      onClick={confirmCancelPayment}
-                    >
-                      取消最近付款
-                    </Button>
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      <Button
+                        block
+                        disabled={!refundContext?.actions.canCreateRefund}
+                        loading={refundLoading || refundContextLoading}
+                        onClick={confirmCreateRefund}
+                        type="primary"
+                      >
+                        登记供应商退款
+                      </Button>
+                      <Button
+                        block
+                        danger
+                        disabled={!data.latestPaymentEntry}
+                        loading={cancelLoading}
+                        onClick={confirmCancelPayment}
+                      >
+                        取消最近付款
+                      </Button>
+                    </Space>
                   </ProCard>
                 </Space>
               </ProCard>

@@ -16,6 +16,7 @@ import {
   message,
   Skeleton,
   Space,
+  Tooltip,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
@@ -36,6 +37,7 @@ import {
   getPurchaseInvoiceDetail,
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
+  type PurchaseReturnSourceDoctype,
   quickCancelPurchaseOrderV2,
   receivePurchaseOrder,
   recordSupplierPayment,
@@ -103,6 +105,94 @@ function quickCancelStepLabel(step: string) {
     return '采购收货单';
   }
   return step;
+}
+
+type PurchaseReturnSourceOption = {
+  doctype: PurchaseReturnSourceDoctype;
+  name: string;
+};
+
+function purchaseReturnSourcePath(source: PurchaseReturnSourceOption) {
+  const params = new URLSearchParams({
+    sourceDoctype: source.doctype,
+    sourceName: source.name,
+  });
+  return `/purchase/returns/new?${params.toString()}`;
+}
+
+function purchaseRefundReviewPath(returnInvoice: string, sourceInvoice = '') {
+  const params = new URLSearchParams({
+    returnInvoice,
+  });
+  if (sourceInvoice) {
+    params.set('sourceInvoice', sourceInvoice);
+  }
+  return `/purchase/refunds/review?${params.toString()}`;
+}
+
+function receiptDisabledReason(detail: {
+  canReceive: boolean;
+  documentStatus: string;
+  receivingStatus: string;
+}) {
+  if (detail.canReceive) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已取消，不能创建收货单';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的采购订单才能创建收货单';
+  }
+  if (detail.receivingStatus === 'received') {
+    return '订单已全部收货';
+  }
+  return '当前订单暂不满足收货条件';
+}
+
+function invoiceDisabledReason(detail: {
+  canCreateInvoice: boolean;
+  documentStatus: string;
+  outstandingAmount: number | null;
+  purchaseInvoices: string[];
+}) {
+  if (detail.canCreateInvoice) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已取消，不能创建采购发票';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的采购订单才能创建采购发票';
+  }
+  if (detail.purchaseInvoices.length) {
+    return '当前订单已存在采购发票';
+  }
+  if ((detail.outstandingAmount ?? 0) <= 0) {
+    return '当前订单没有待开票/待付款金额';
+  }
+  return '当前订单暂不满足开票条件';
+}
+
+function paymentDisabledReason(detail: {
+  canRecordPayment: boolean;
+  documentStatus: string;
+  outstandingAmount: number | null;
+  purchaseInvoices: string[];
+}) {
+  if (detail.canRecordPayment && (detail.outstandingAmount ?? 0) > 0) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已取消，不能记录付款';
+  }
+  if (!detail.purchaseInvoices.length) {
+    return '请先创建采购发票后再记录付款';
+  }
+  if ((detail.outstandingAmount ?? 0) <= 0) {
+    return '当前订单没有未付金额';
+  }
+  return '当前订单暂不满足付款条件';
 }
 
 const itemColumns = [
@@ -479,6 +569,82 @@ const PurchaseOrderDetailPage: React.FC = () => {
     });
   };
 
+  const returnSourceOptions: PurchaseReturnSourceOption[] = data
+    ? [
+        ...data.purchaseReceipts.map((name) => ({
+          doctype: 'Purchase Receipt' as const,
+          name,
+        })),
+        ...data.purchaseInvoices.map((name) => ({
+          doctype: 'Purchase Invoice' as const,
+          name,
+        })),
+      ]
+    : [];
+  const openReturnSource = () => {
+    if (!returnSourceOptions.length) {
+      return;
+    }
+    if (returnSourceOptions.length === 1) {
+      history.push(purchaseReturnSourcePath(returnSourceOptions[0]));
+      return;
+    }
+    Modal.info({
+      content: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {returnSourceOptions.map((source) => (
+            <Button
+              block
+              key={`${source.doctype}-${source.name}`}
+              onClick={() => {
+                Modal.destroyAll();
+                history.push(purchaseReturnSourcePath(source));
+              }}
+            >
+              {source.doctype === 'Purchase Receipt'
+                ? '采购收货单'
+                : '采购发票'}{' '}
+              {source.name}
+            </Button>
+          ))}
+        </Space>
+      ),
+      title: '选择退货来源单据',
+      width: 560,
+    });
+  };
+
+  const openRefundReview = () => {
+    const invoiceNames = data?.purchaseInvoices ?? [];
+    if (!invoiceNames.length) {
+      return;
+    }
+    if (invoiceNames.length === 1) {
+      history.push(purchaseRefundReviewPath(invoiceNames[0]));
+      return;
+    }
+    Modal.info({
+      content: (
+        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          {invoiceNames.map((name) => (
+            <Button
+              block
+              key={name}
+              onClick={() => {
+                Modal.destroyAll();
+                history.push(purchaseRefundReviewPath(name));
+              }}
+            >
+              采购发票 {name}
+            </Button>
+          ))}
+        </Space>
+      ),
+      title: '选择需要核对退款的采购发票',
+      width: 560,
+    });
+  };
+
   return (
     <PageContainer
       title={orderName || '采购订单详情'}
@@ -604,31 +770,75 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
               <ProCard title="采购动作">
                 <Space wrap>
-                  <Button
-                    disabled={!data.canReceive}
-                    loading={actionLoading === 'receipt'}
-                    onClick={confirmReceivePurchaseOrder}
-                    type="primary"
-                  >
-                    创建收货单
-                  </Button>
-                  <Button
-                    disabled={!data.canCreateInvoice}
-                    loading={actionLoading === 'invoice'}
-                    onClick={confirmCreateInvoice}
-                  >
-                    创建采购发票
-                  </Button>
-                  <Button
-                    disabled={
-                      !data.canRecordPayment ||
-                      (data.outstandingAmount ?? 0) <= 0
+                  <Tooltip title={receiptDisabledReason(data)}>
+                    <span>
+                      <Button
+                        disabled={!data.canReceive}
+                        loading={actionLoading === 'receipt'}
+                        onClick={confirmReceivePurchaseOrder}
+                        type="primary"
+                      >
+                        创建收货单
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={invoiceDisabledReason(data)}>
+                    <span>
+                      <Button
+                        disabled={!data.canCreateInvoice}
+                        loading={actionLoading === 'invoice'}
+                        onClick={confirmCreateInvoice}
+                      >
+                        创建采购发票
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip title={paymentDisabledReason(data)}>
+                    <span>
+                      <Button
+                        disabled={
+                          !data.canRecordPayment ||
+                          (data.outstandingAmount ?? 0) <= 0
+                        }
+                        loading={actionLoading === 'payment'}
+                        onClick={confirmRecordPayment}
+                      >
+                        记录付款
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      returnSourceOptions.length
+                        ? ''
+                        : '需要先完成收货或开票后再发起退货'
                     }
-                    loading={actionLoading === 'payment'}
-                    onClick={confirmRecordPayment}
                   >
-                    记录付款
-                  </Button>
+                    <span>
+                      <Button
+                        disabled={!returnSourceOptions.length}
+                        onClick={openReturnSource}
+                      >
+                        发起退货
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      data.purchaseInvoices.length
+                        ? ''
+                        : '需要先创建退货发票后再核对退款'
+                    }
+                  >
+                    <span>
+                      <Button
+                        disabled={!data.purchaseInvoices.length}
+                        onClick={openRefundReview}
+                      >
+                        退款核对
+                      </Button>
+                    </span>
+                  </Tooltip>
                   <Button
                     danger
                     disabled={
@@ -640,21 +850,31 @@ const PurchaseOrderDetailPage: React.FC = () => {
                   >
                     快捷回退下游
                   </Button>
-                  <Button
-                    danger
-                    disabled={!data.canCancelOrder}
-                    loading={actionLoading === 'cancel'}
-                    onClick={() =>
-                      runOrderAction(
-                        'cancel',
-                        `取消采购订单 ${data.name}？`,
-                        () => cancelPurchaseOrder(data.name),
-                        true,
-                      )
+                  <Tooltip
+                    title={
+                      data.canCancelOrder
+                        ? ''
+                        : '如已存在收货、发票或付款，请先回退下游单据'
                     }
                   >
-                    取消采购订单
-                  </Button>
+                    <span>
+                      <Button
+                        danger
+                        disabled={!data.canCancelOrder}
+                        loading={actionLoading === 'cancel'}
+                        onClick={() =>
+                          runOrderAction(
+                            'cancel',
+                            `取消采购订单 ${data.name}？`,
+                            () => cancelPurchaseOrder(data.name),
+                            true,
+                          )
+                        }
+                      >
+                        取消采购订单
+                      </Button>
+                    </span>
+                  </Tooltip>
                 </Space>
               </ProCard>
             </ProCard>
