@@ -62,8 +62,10 @@ function fallbackLineFromItem(
 ): PurchaseOrderEditorLine {
   const uom = item.uom || null;
   const price = item.rate ?? 0;
+  const allUomDisplays =
+    uom && item.uomDisplay ? { [uom]: item.uomDisplay } : {};
   return recalculatePurchaseOrderLine({
-    allUomDisplays: {},
+    allUomDisplays,
     allUoms: uom ? [uom] : [],
     amount: item.amount ?? 0,
     itemCode: item.itemCode,
@@ -77,9 +79,11 @@ function fallbackLineFromItem(
     specification: '',
     stockQty: null,
     stockUom: uom,
+    stockUomDisplay: item.uomDisplay,
     totalQty: null,
     uom,
-    uomConversions: [],
+    uomConversions: uom ? [{ conversionFactor: 1, uom }] : [],
+    uomDisplay: item.uomDisplay,
     warehouse: item.warehouse,
     warehouseStockDetails: [],
   });

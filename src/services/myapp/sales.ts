@@ -166,6 +166,7 @@ export type SalesReturnSourceContextItem = {
   sourceQty: number | null;
   specification: string;
   uom: string;
+  uomDisplay: string | null;
   warehouse: string;
 };
 
@@ -1141,6 +1142,8 @@ export async function getSalesReturnSourceContext(
           sourceQty: toNumber(item.source_qty),
           specification: String(item.specification ?? ''),
           uom: String(item.uom ?? ''),
+          uomDisplay:
+            typeof item.uom_display === 'string' ? item.uom_display : null,
           warehouse: String(item.warehouse ?? ''),
         } satisfies SalesReturnSourceContextItem;
       })

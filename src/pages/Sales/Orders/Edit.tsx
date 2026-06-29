@@ -84,8 +84,10 @@ function fallbackLineFromItem(
 ): SalesOrderEditorLine {
   const uom = item.uom || null;
   const price = item.rate ?? 0;
+  const allUomDisplays =
+    uom && item.uomDisplay ? { [uom]: item.uomDisplay } : {};
   return recalculateSalesOrderLine({
-    allUomDisplays: {},
+    allUomDisplays,
     allUoms: uom ? [uom] : [],
     amount: item.amount ?? 0,
     imageUrl: item.imageUrl,
@@ -103,8 +105,10 @@ function fallbackLineFromItem(
     specification: item.specification,
     stockQty: null,
     stockUom: uom,
+    stockUomDisplay: item.uomDisplay,
     uom,
-    uomConversions: [],
+    uomConversions: uom ? [{ conversionFactor: 1, uom }] : [],
+    uomDisplay: item.uomDisplay,
     warehouse: item.warehouse,
   });
 }

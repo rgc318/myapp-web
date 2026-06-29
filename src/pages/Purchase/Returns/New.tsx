@@ -32,7 +32,7 @@ import {
 } from '@/services/myapp/purchase';
 import {
   formatCurrencyValue,
-  formatDisplayUom,
+  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -246,7 +246,7 @@ const PurchaseReturnNewPage: React.FC = () => {
     },
     {
       dataIndex: 'uom',
-      render: (_, record) => formatDisplayUom(record.uom),
+      render: (_, record) => resolveDisplayUom(record.uom, record.uomDisplay),
       title: '单位',
       width: 90,
     },

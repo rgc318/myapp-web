@@ -138,6 +138,7 @@ export type PurchaseReturnSourceContextItem = {
   sourceQty: number | null;
   specification: string;
   uom: string;
+  uomDisplay: string | null;
   warehouse: string;
 };
 
@@ -809,6 +810,8 @@ export async function getPurchaseReturnSourceContext(
             item.specification ?? item.custom_specification ?? '',
           ),
           uom: String(item.uom ?? ''),
+          uomDisplay:
+            typeof item.uom_display === 'string' ? item.uom_display : null,
           warehouse: String(item.warehouse ?? ''),
         } satisfies PurchaseReturnSourceContextItem;
       })

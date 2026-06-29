@@ -1214,6 +1214,7 @@ describe('myapp domain services', () => {
             rate: 50,
             source_qty: 2,
             uom: 'Nos',
+            uom_display: '件',
             warehouse: 'Stores - RD',
           },
         ],
@@ -1235,7 +1236,13 @@ describe('myapp domain services', () => {
     expect(context).toMatchObject({
       canProcessReturn: true,
       company: 'rgc (Demo)',
-      items: [{ detailId: 'SII-0001', detailSubmitKey: 'sales_invoice_item' }],
+      items: [
+        {
+          detailId: 'SII-0001',
+          detailSubmitKey: 'sales_invoice_item',
+          uomDisplay: '件',
+        },
+      ],
       partyDisplayName: 'ACME',
       primaryAmount: 100,
       sourceDoctype: 'Sales Invoice',
@@ -1267,6 +1274,7 @@ describe('myapp domain services', () => {
             rate: 44,
             source_qty: 2,
             uom: 'Nos',
+            uom_display: '件',
             warehouse: 'Stores - RD',
           },
         ],
@@ -1293,6 +1301,7 @@ describe('myapp domain services', () => {
           detailId: 'PRI-0001',
           detailSubmitKey: 'purchase_receipt_item',
           maxReturnableQty: 2,
+          uomDisplay: '件',
         },
       ],
       partyDisplayName: 'Supplier A',
