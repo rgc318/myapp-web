@@ -40,10 +40,18 @@ export type ProductPriceEntry = {
   rate: number | null;
 };
 
+export type ProductBarcode = {
+  barcode: string;
+  idx: number;
+  isPrimary: boolean;
+  name: string | null;
+};
+
 export type ProductSummary = {
   allUomDisplays: Record<string, string>;
   allUoms: string[];
   barcode: string;
+  barcodes: ProductBarcode[];
   brand: string;
   description: string;
   disabled: boolean;
@@ -176,6 +184,7 @@ function mapProduct(row: Record<string, any>): ProductSummary {
     allUomDisplays: mapUomDisplays(row.all_uoms),
     allUoms,
     barcode: String(row.barcode ?? ''),
+    barcodes: mapProductBarcodes(row.barcodes, row.barcode),
     brand: String(row.brand ?? ''),
     description: String(row.description ?? ''),
     disabled: Boolean(row.disabled),
@@ -244,6 +253,38 @@ function mapProduct(row: Record<string, any>): ProductSummary {
       row.global_warehouse_stock_details,
     ),
   };
+}
+
+function mapProductBarcodes(value: unknown, primaryBarcode: unknown) {
+  const rows = Array.isArray(value) ? value : [];
+  const primaryText = toOptionalText(primaryBarcode);
+  const mapped = rows
+    .map((entry, index): ProductBarcode | null => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+      const row = entry as Record<string, unknown>;
+      const barcode = toOptionalText(row.barcode);
+      if (!barcode) {
+        return null;
+      }
+      return {
+        barcode,
+        idx: Number(row.idx ?? index + 1),
+        isPrimary:
+          row.is_primary === true ||
+          Number(row.is_primary ?? 0) === 1 ||
+          barcode === primaryText,
+        name: toOptionalText(row.name) ?? null,
+      };
+    })
+    .filter((entry): entry is ProductBarcode => Boolean(entry));
+
+  if (!mapped.length && primaryText) {
+    return [{ barcode: primaryText, idx: 1, isPrimary: true, name: null }];
+  }
+
+  return mapped;
 }
 
 function mapWarehouseStockDetails(
@@ -689,6 +730,41 @@ export async function bulkUpdateProducts(
     results.push(result.data);
   }
   return results;
+}
+
+export async function addProductBarcode(
+  itemCode: string,
+  barcode: string,
+  options: { setPrimary?: boolean } = {},
+) {
+  return runGatewayMutation<ProductSummary>('add_product_barcode_v2', {
+    payload: {
+      barcode,
+      item_code: itemCode,
+      set_primary: options.setPrimary ? 1 : 0,
+    },
+    successMessage: '条码已新增',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
+export async function setPrimaryProductBarcode(
+  itemCode: string,
+  barcode: string,
+) {
+  return runGatewayMutation<ProductSummary>('set_primary_product_barcode_v2', {
+    payload: { barcode, item_code: itemCode },
+    successMessage: '主条码已更新',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
+export async function deleteProductBarcode(itemCode: string, barcode: string) {
+  return runGatewayMutation<ProductSummary>('delete_product_barcode_v2', {
+    payload: { barcode, item_code: itemCode },
+    successMessage: '条码已删除',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
 }
 
 export async function listCustomers(options: ListOptions = {}) {

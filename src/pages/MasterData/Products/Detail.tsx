@@ -1,3 +1,4 @@
+import { DeleteOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
 import {
   PageContainer,
   ProCard,
@@ -33,17 +34,24 @@ import {
   type StockLedgerEntry,
 } from '@/services/myapp/inventory';
 import {
+  addProductBarcode,
+  deleteProductBarcode,
   getProductDetail,
+  type ProductBarcode,
   type ProductPriceEntry,
   type ProductSummary,
   type ProductWarehouseStockDetail,
   type SaveProductPayload,
+  setPrimaryProductBarcode,
   setProductDisabled,
   updateProduct,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
 type ProductFormValues = SaveProductPayload;
+type BarcodeFormValues = {
+  barcode: string;
+};
 type ProductQualityIssue = {
   action?: 'edit' | 'inventory';
   description: string;
@@ -339,10 +347,80 @@ function PriceEntriesTable({
   );
 }
 
+function BarcodeTable({
+  loading,
+  onDelete,
+  onSetPrimary,
+  rows,
+}: {
+  loading?: string;
+  onDelete: (record: ProductBarcode) => void;
+  onSetPrimary: (record: ProductBarcode) => void;
+  rows: ProductBarcode[];
+}) {
+  return (
+    <Table<ProductBarcode>
+      columns={[
+        {
+          dataIndex: 'barcode',
+          title: '条码',
+        },
+        {
+          dataIndex: 'isPrimary',
+          title: '主条码',
+          width: 100,
+          render: (_, record) =>
+            record.isPrimary ? <Tag color="green">主条码</Tag> : '-',
+        },
+        {
+          title: '操作',
+          width: 180,
+          render: (_, record) => [
+            <Button
+              disabled={record.isPrimary}
+              icon={<StarOutlined />}
+              key="primary"
+              loading={loading === `primary:${record.barcode}`}
+              size="small"
+              type="link"
+              onClick={() => onSetPrimary(record)}
+            >
+              设为主条码
+            </Button>,
+            <Popconfirm
+              cancelText="取消"
+              key="delete"
+              okText="删除"
+              onConfirm={() => onDelete(record)}
+              title={`删除条码 ${record.barcode}？`}
+            >
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                loading={loading === `delete:${record.barcode}`}
+                size="small"
+                type="link"
+              >
+                删除
+              </Button>
+            </Popconfirm>,
+          ],
+        },
+      ]}
+      dataSource={rows}
+      locale={{ emptyText: '暂无条码' }}
+      pagination={false}
+      rowKey={(record) => record.barcode}
+      size="small"
+    />
+  );
+}
+
 const ProductDetailPage: React.FC = () => {
   const params = useParams();
   const location = useLocation();
   const [form] = Form.useForm<ProductFormValues>();
+  const [barcodeForm] = Form.useForm<BarcodeFormValues>();
   const { defaultCompany } = useWorkspacePreferences();
   const query = new URLSearchParams(location.search);
   const itemCode = decodeURIComponent(String(params.itemCode ?? ''));
@@ -351,6 +429,7 @@ const ProductDetailPage: React.FC = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [barcodeSubmitting, setBarcodeSubmitting] = useState<string>();
 
   const { data, error, loading, refresh } = useRequest(
     () => getProductDetail(itemCode, { company, warehouse }),
@@ -416,6 +495,59 @@ const ProductDetailPage: React.FC = () => {
       message.error(caught instanceof Error ? caught.message : '操作失败');
     } finally {
       setToggling(false);
+    }
+  };
+
+  const handleAddBarcode = async (values: BarcodeFormValues) => {
+    if (!data) {
+      return;
+    }
+    const barcode = values.barcode?.trim();
+    if (!barcode) {
+      message.warning('请输入条码');
+      return;
+    }
+    setBarcodeSubmitting('add');
+    try {
+      await addProductBarcode(data.itemCode, barcode);
+      barcodeForm.resetFields();
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '新增条码失败');
+    } finally {
+      setBarcodeSubmitting(undefined);
+    }
+  };
+
+  const handleSetPrimaryBarcode = async (record: ProductBarcode) => {
+    if (!data) {
+      return;
+    }
+    setBarcodeSubmitting(`primary:${record.barcode}`);
+    try {
+      await setPrimaryProductBarcode(data.itemCode, record.barcode);
+      refresh();
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : '设置主条码失败',
+      );
+    } finally {
+      setBarcodeSubmitting(undefined);
+    }
+  };
+
+  const handleDeleteBarcode = async (record: ProductBarcode) => {
+    if (!data) {
+      return;
+    }
+    setBarcodeSubmitting(`delete:${record.barcode}`);
+    try {
+      await deleteProductBarcode(data.itemCode, record.barcode);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '删除条码失败');
+    } finally {
+      setBarcodeSubmitting(undefined);
     }
   };
 
@@ -673,6 +805,39 @@ const ProductDetailPage: React.FC = () => {
                   </ProDescriptions.Item>
                 </ProDescriptions>
               </ProCard>
+            </ProCard>
+
+            <ProCard title="条码">
+              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Form<BarcodeFormValues>
+                  form={barcodeForm}
+                  layout="inline"
+                  onFinish={handleAddBarcode}
+                >
+                  <Form.Item
+                    name="barcode"
+                    rules={[{ required: true, message: '请输入条码' }]}
+                  >
+                    <Input placeholder="新增条码" style={{ width: 260 }} />
+                  </Form.Item>
+                  <Form.Item>
+                    <Button
+                      htmlType="submit"
+                      icon={<PlusOutlined />}
+                      loading={barcodeSubmitting === 'add'}
+                      type="primary"
+                    >
+                      新增条码
+                    </Button>
+                  </Form.Item>
+                </Form>
+                <BarcodeTable
+                  loading={barcodeSubmitting}
+                  onDelete={handleDeleteBarcode}
+                  onSetPrimary={handleSetPrimaryBarcode}
+                  rows={data.barcodes}
+                />
+              </Space>
             </ProCard>
 
             <ProCard split="vertical">

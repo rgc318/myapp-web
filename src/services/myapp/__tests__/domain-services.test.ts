@@ -5,16 +5,20 @@ import {
 } from '../inventory';
 import { listBusinessDocuments } from '../documents';
 import {
+  addProductBarcode,
   bulkSetProductsDisabled,
   bulkUpdateProducts,
   createCustomer,
   createProduct,
   createSupplier,
   createUom,
+  deleteProductBarcode,
+  getProductDetail,
   listProducts,
   listUoms,
   searchProducts,
   searchLinkOptions,
+  setPrimaryProductBarcode,
   setCustomerDisabled,
   setProductDisabled,
   setSupplierDisabled,
@@ -803,6 +807,34 @@ describe('myapp domain services', () => {
       itemCode: 'SKU-1',
       nickname: 'Camera Alias',
     });
+  });
+
+  it('maps product detail barcodes', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        barcode: 'BAR-001',
+        barcodes: [
+          { barcode: 'BAR-001', idx: 1, is_primary: 1, name: 'ROW-1' },
+          { barcode: 'BAR-002', idx: 2, is_primary: 0, name: 'ROW-2' },
+        ],
+        item_code: 'SKU-1',
+        item_name: 'Camera',
+        stock_uom: 'Nos',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await getProductDetail('SKU-1');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_product_detail_v2',
+      { item_code: 'SKU-1' },
+    );
+    expect(result?.barcodes).toEqual([
+      { barcode: 'BAR-001', idx: 1, isPrimary: true, name: 'ROW-1' },
+      { barcode: 'BAR-002', idx: 2, isPrimary: false, name: 'ROW-2' },
+    ]);
   });
 
   it('maps inventory stock summary rows', async () => {
@@ -1756,6 +1788,35 @@ describe('myapp domain services', () => {
       4,
       'disable_product_v2',
       { disabled: 1, item_code: 'ITEM-002' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs product barcode mutations through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
+    });
+
+    await addProductBarcode('ITEM-001', 'BAR-002', { setPrimary: true });
+    await setPrimaryProductBarcode('ITEM-001', 'BAR-002');
+    await deleteProductBarcode('ITEM-001', 'BAR-002');
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'add_product_barcode_v2',
+      { barcode: 'BAR-002', item_code: 'ITEM-001', set_primary: 1 },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'set_primary_product_barcode_v2',
+      { barcode: 'BAR-002', item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'delete_product_barcode_v2',
+      { barcode: 'BAR-002', item_code: 'ITEM-001' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

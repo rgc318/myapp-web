@@ -10,6 +10,7 @@ const product: ProductSummary = {
   allUomDisplays: { Box: '箱', Nos: '个' },
   allUoms: ['Nos', 'Box'],
   barcode: '',
+  barcodes: [],
   brand: '',
   description: '',
   disabled: false,
