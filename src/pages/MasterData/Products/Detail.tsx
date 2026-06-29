@@ -2,6 +2,7 @@ import { DeleteOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
 import {
   PageContainer,
   ProCard,
+  type ProColumns,
   ProDescriptions,
   ProTable,
   StatisticCard,
@@ -358,60 +359,74 @@ function BarcodeTable({
   onSetPrimary: (record: ProductBarcode) => void;
   rows: ProductBarcode[];
 }) {
+  const columns: ProColumns<ProductBarcode>[] = [
+    {
+      dataIndex: 'barcode',
+      title: '条码',
+      copyable: true,
+      ellipsis: true,
+    },
+    {
+      dataIndex: 'isPrimary',
+      title: '主条码',
+      width: 100,
+      render: (_, record) =>
+        record.isPrimary ? <Tag color="green">主条码</Tag> : '-',
+      sorter: (left, right) => Number(right.isPrimary) - Number(left.isPrimary),
+    },
+    {
+      dataIndex: 'idx',
+      title: '顺序',
+      width: 80,
+      align: 'right',
+      sorter: (left, right) => left.idx - right.idx,
+    },
+    {
+      title: '操作',
+      valueType: 'option',
+      width: 180,
+      render: (_, record) => [
+        <Button
+          disabled={record.isPrimary}
+          icon={<StarOutlined />}
+          key="primary"
+          loading={loading === `primary:${record.barcode}`}
+          size="small"
+          type="link"
+          onClick={() => onSetPrimary(record)}
+        >
+          设为主条码
+        </Button>,
+        <Popconfirm
+          cancelText="取消"
+          key="delete"
+          okText="删除"
+          onConfirm={() => onDelete(record)}
+          title={`删除条码 ${record.barcode}？`}
+        >
+          <Button
+            danger
+            icon={<DeleteOutlined />}
+            loading={loading === `delete:${record.barcode}`}
+            size="small"
+            type="link"
+          >
+            删除
+          </Button>
+        </Popconfirm>,
+      ],
+    },
+  ];
+
   return (
-    <Table<ProductBarcode>
-      columns={[
-        {
-          dataIndex: 'barcode',
-          title: '条码',
-        },
-        {
-          dataIndex: 'isPrimary',
-          title: '主条码',
-          width: 100,
-          render: (_, record) =>
-            record.isPrimary ? <Tag color="green">主条码</Tag> : '-',
-        },
-        {
-          title: '操作',
-          width: 180,
-          render: (_, record) => [
-            <Button
-              disabled={record.isPrimary}
-              icon={<StarOutlined />}
-              key="primary"
-              loading={loading === `primary:${record.barcode}`}
-              size="small"
-              type="link"
-              onClick={() => onSetPrimary(record)}
-            >
-              设为主条码
-            </Button>,
-            <Popconfirm
-              cancelText="取消"
-              key="delete"
-              okText="删除"
-              onConfirm={() => onDelete(record)}
-              title={`删除条码 ${record.barcode}？`}
-            >
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                loading={loading === `delete:${record.barcode}`}
-                size="small"
-                type="link"
-              >
-                删除
-              </Button>
-            </Popconfirm>,
-          ],
-        },
-      ]}
+    <ProTable<ProductBarcode>
+      columns={columns}
       dataSource={rows}
-      locale={{ emptyText: '暂无条码' }}
       pagination={false}
       rowKey={(record) => record.barcode}
+      search={false}
       size="small"
+      toolBarRender={false}
     />
   );
 }
@@ -792,7 +807,7 @@ const ProductDetailPage: React.FC = () => {
                     dataIndex="itemGroup"
                   />
                   <ProDescriptions.Item label="品牌" dataIndex="brand" />
-                  <ProDescriptions.Item label="条码" dataIndex="barcode" />
+                  <ProDescriptions.Item label="主条码" dataIndex="barcode" />
                   <ProDescriptions.Item label="销售商品">
                     {data.isSalesItem === false ? '否' : '是'}
                   </ProDescriptions.Item>
@@ -807,7 +822,7 @@ const ProductDetailPage: React.FC = () => {
               </ProCard>
             </ProCard>
 
-            <ProCard title="条码">
+            <ProCard extra={<Tag>{data.barcodes.length} 条</Tag>} title="条码">
               <Space direction="vertical" size={12} style={{ width: '100%' }}>
                 <Form<BarcodeFormValues>
                   form={barcodeForm}
@@ -997,7 +1012,7 @@ const ProductDetailPage: React.FC = () => {
             <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
               <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
             </Form.Item>
-            <Form.Item label="条码" name="barcode" style={{ minWidth: 200 }}>
+            <Form.Item label="主条码" name="barcode" style={{ minWidth: 200 }}>
               <Input placeholder="主条码" />
             </Form.Item>
           </Space>

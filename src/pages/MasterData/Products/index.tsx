@@ -5,11 +5,13 @@ import {
   PlusOutlined,
   ReloadOutlined,
   StopOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
 import {
+  Alert,
   Button,
   Form,
   Image,
@@ -21,6 +23,8 @@ import {
   Space,
   Switch,
   Tag,
+  Typography,
+  Upload,
 } from 'antd';
 import React, { useRef, useState } from 'react';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
@@ -57,11 +61,297 @@ type ProductBulkFormValues = {
   brand?: string | null;
   itemGroup?: string | null;
 };
+type ProductImportAction = 'create' | 'update';
+type ProductImportStatus = 'pending' | 'success' | 'error';
+type ProductImportRowBase = {
+  action: ProductImportAction;
+  error?: string;
+  itemCode?: string | null;
+  itemName: string;
+  line: number;
+  status: ProductImportStatus;
+};
+type ProductImportRow =
+  | (ProductImportRowBase & {
+      action: 'create';
+      payload: SaveProductPayload;
+    })
+  | (ProductImportRowBase & {
+      action: 'update';
+      payload: Partial<SaveProductPayload>;
+    });
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: 2,
   }).format(value ?? 0);
+}
+
+function formatBarcodeList(record: ProductSummary) {
+  const barcodes = record.barcodes.map((row) => row.barcode).filter(Boolean);
+  if (barcodes.length) {
+    return barcodes.join(' / ');
+  }
+  return record.barcode || '';
+}
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .trim()
+    .replace(/^\uFEFF/, '')
+    .toLowerCase();
+}
+
+function splitCsvLine(line: string) {
+  const cells: string[] = [];
+  let current = '';
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    const nextChar = line[index + 1];
+    if (char === '"' && quoted && nextChar === '"') {
+      current += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === ',' && !quoted) {
+      cells.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  cells.push(current.trim());
+  return cells;
+}
+
+function parseCsv(text: string) {
+  const lines = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .filter((line) => line.trim());
+  if (lines.length < 2) {
+    return [];
+  }
+  const headers = splitCsvLine(lines[0]).map(normalizeCsvHeader);
+  return lines.slice(1).map((line, index) => {
+    const cells = splitCsvLine(line);
+    return headers.reduce<Record<string, string>>(
+      (row, header, cellIndex) => {
+        row[header] = cells[cellIndex]?.trim() ?? '';
+        return row;
+      },
+      { __line: String(index + 2) },
+    );
+  });
+}
+
+function readCsvField(row: Record<string, string>, keys: string[]) {
+  for (const key of keys) {
+    const value = row[normalizeCsvHeader(key)]?.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function readCsvNumber(row: Record<string, string>, keys: string[]) {
+  const value = readCsvField(row, keys);
+  if (!value) {
+    return undefined;
+  }
+  const parsed = Number(value.replaceAll(',', ''));
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function readCsvBoolean(row: Record<string, string>, keys: string[]) {
+  const value = readCsvField(row, keys)?.toLowerCase();
+  if (!value) {
+    return undefined;
+  }
+  if (['1', 'true', 'yes', 'y', '停用', '禁用', 'disabled'].includes(value)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'n', '启用', 'enabled'].includes(value)) {
+    return false;
+  }
+  return undefined;
+}
+
+function mapImportAction(value?: string): ProductImportAction {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'update' || normalized === '更新') {
+    return 'update';
+  }
+  return 'create';
+}
+
+function setOptionalTextPayload<K extends keyof SaveProductPayload>(
+  payload: Partial<SaveProductPayload>,
+  key: K,
+  value: SaveProductPayload[K] | undefined,
+) {
+  if (value !== undefined) {
+    payload[key] = value;
+  }
+}
+
+function setOptionalNumberPayload<K extends keyof SaveProductPayload>(
+  payload: Partial<SaveProductPayload>,
+  key: K,
+  value: SaveProductPayload[K] | undefined,
+) {
+  if (value !== undefined) {
+    payload[key] = value;
+  }
+}
+
+function buildImportRows(
+  rawRows: Record<string, string>[],
+): ProductImportRow[] {
+  return rawRows.map((row) => {
+    const action = mapImportAction(readCsvField(row, ['action', '导入动作']));
+    const itemCode = readCsvField(row, ['itemCode', 'item_code', '商品编码']);
+    const itemName =
+      readCsvField(row, ['itemName', 'item_name', '商品名称']) ?? '';
+    const stockUom =
+      readCsvField(row, ['stockUom', 'stock_uom', '库存单位']) ?? 'Nos';
+    const barcode = readCsvField(row, ['barcode', '主条码', '条码']);
+    const brand = readCsvField(row, ['brand', '品牌']);
+    const currency = readCsvField(row, ['currency', '币种']);
+    const description = readCsvField(row, ['description', '描述']);
+    const disabled = readCsvBoolean(row, ['disabled', '停用']);
+    const itemGroup = readCsvField(row, [
+      'itemGroup',
+      'item_group',
+      '商品分类',
+    ]);
+    const retailDefaultUom = readCsvField(row, [
+      'retailDefaultUom',
+      'retail_default_uom',
+      '零售默认单位',
+    ]);
+    const retailRate = readCsvNumber(row, [
+      'retailRate',
+      'retail_rate',
+      '零售价',
+    ]);
+    const standardBuyingRate = readCsvNumber(row, [
+      'standardBuyingRate',
+      'standard_buying_rate',
+      '标准采购价',
+      '采购价',
+    ]);
+    const standardSellingRate = readCsvNumber(row, [
+      'standardSellingRate',
+      'standard_rate',
+      '标准售价',
+    ]);
+    const valuationRate = readCsvNumber(row, [
+      'valuationRate',
+      'valuation_rate',
+      '估值价',
+    ]);
+    const wholesaleDefaultUom = readCsvField(row, [
+      'wholesaleDefaultUom',
+      'wholesale_default_uom',
+      '批发默认单位',
+    ]);
+    const wholesaleRate = readCsvNumber(row, [
+      'wholesaleRate',
+      'wholesale_rate',
+      '批发价',
+    ]);
+
+    if (action === 'update') {
+      const payload: Partial<SaveProductPayload> = {};
+      setOptionalTextPayload(payload, 'barcode', barcode);
+      setOptionalTextPayload(payload, 'brand', brand);
+      setOptionalTextPayload(payload, 'currency', currency);
+      setOptionalTextPayload(payload, 'description', description);
+      setOptionalTextPayload(payload, 'itemGroup', itemGroup);
+      setOptionalTextPayload(payload, 'itemName', itemName || undefined);
+      setOptionalTextPayload(payload, 'retailDefaultUom', retailDefaultUom);
+      setOptionalTextPayload(
+        payload,
+        'stockUom',
+        readCsvField(row, ['stockUom', 'stock_uom', '库存单位']),
+      );
+      setOptionalTextPayload(
+        payload,
+        'wholesaleDefaultUom',
+        wholesaleDefaultUom,
+      );
+      setOptionalNumberPayload(payload, 'retailRate', retailRate);
+      setOptionalNumberPayload(
+        payload,
+        'standardBuyingRate',
+        standardBuyingRate,
+      );
+      setOptionalNumberPayload(
+        payload,
+        'standardSellingRate',
+        standardSellingRate,
+      );
+      setOptionalNumberPayload(payload, 'valuationRate', valuationRate);
+      setOptionalNumberPayload(payload, 'wholesaleRate', wholesaleRate);
+      if (disabled !== undefined) {
+        payload.disabled = disabled;
+      }
+      const error = !itemCode
+        ? '更新商品必须填写商品编码'
+        : Object.keys(payload).length === 0
+          ? '更新商品必须至少填写一个更新字段'
+          : undefined;
+      return {
+        action,
+        error,
+        itemCode,
+        itemName,
+        line: Number(row.__line ?? 0),
+        payload,
+        status: error ? 'error' : 'pending',
+      };
+    }
+
+    const payload: SaveProductPayload = {
+      barcode: barcode ?? null,
+      brand: brand ?? null,
+      currency: currency ?? 'CNY',
+      description: description ?? null,
+      disabled,
+      itemCode: itemCode ?? null,
+      itemGroup: itemGroup ?? null,
+      itemName,
+      retailDefaultUom: retailDefaultUom ?? stockUom,
+      retailRate,
+      standardBuyingRate,
+      standardSellingRate,
+      stockUom,
+      valuationRate,
+      wholesaleDefaultUom: wholesaleDefaultUom ?? stockUom,
+      wholesaleRate,
+    };
+    const error =
+      !itemName && action === 'create' ? '新增商品必须填写商品名称' : undefined;
+    return {
+      action,
+      error,
+      itemCode,
+      itemName,
+      line: Number(row.__line ?? 0),
+      payload,
+      status: error ? 'error' : 'pending',
+    };
+  });
 }
 
 function buildProductListOptions(
@@ -253,10 +543,10 @@ function buildColumns({
       title: '图片',
       dataIndex: 'imageUrl',
       search: false,
-      width: 80,
+      width: 64,
       render: (_, record) =>
         record.imageUrl ? (
-          <Image height={48} src={record.imageUrl} width={48} />
+          <Image height={40} src={record.imageUrl} width={40} />
         ) : (
           '-'
         ),
@@ -265,12 +555,19 @@ function buildColumns({
       title: '商品编码',
       dataIndex: 'itemCode',
       search: false,
-      width: 160,
+      fixed: 'left',
+      width: 180,
       render: (_, record) => (
         <Link
+          style={{ display: 'inline-block', maxWidth: 164 }}
           to={`/master-data/products/${encodeURIComponent(record.itemCode)}`}
         >
-          {record.itemCode}
+          <Typography.Text
+            ellipsis={{ tooltip: record.itemCode }}
+            style={{ maxWidth: 164, whiteSpace: 'nowrap' }}
+          >
+            {record.itemCode}
+          </Typography.Text>
         </Link>
       ),
     },
@@ -279,13 +576,14 @@ function buildColumns({
       dataIndex: 'itemName',
       search: false,
       ellipsis: true,
+      width: 220,
     },
     {
       title: '规格',
       dataIndex: 'specification',
       search: false,
       ellipsis: true,
-      width: 160,
+      width: 140,
       renderText: (value) => value || '-',
     },
     {
@@ -293,7 +591,7 @@ function buildColumns({
       dataIndex: 'itemGroup',
       search: false,
       ellipsis: true,
-      width: 140,
+      width: 120,
       renderText: (value) => value || '-',
     },
     {
@@ -303,6 +601,27 @@ function buildColumns({
       ellipsis: true,
       width: 120,
       renderText: (value) => value || '-',
+    },
+    {
+      title: '条码',
+      dataIndex: 'barcode',
+      search: false,
+      ellipsis: true,
+      width: 160,
+      render: (_, record) => {
+        const count = record.barcodes.length;
+        return (
+          <Space size={4} wrap>
+            <Typography.Text
+              ellipsis={{ tooltip: record.barcode }}
+              style={{ maxWidth: count > 1 ? 92 : 132, whiteSpace: 'nowrap' }}
+            >
+              {record.barcode || '-'}
+            </Typography.Text>
+            {count > 1 ? <Tag>{count} 条</Tag> : null}
+          </Space>
+        );
+      },
     },
     {
       title: '库存',
@@ -330,6 +649,7 @@ function buildColumns({
     },
     {
       title: '批发价',
+      key: 'wholesaleRate',
       dataIndex: ['priceSummary', 'wholesaleRate'],
       align: 'right',
       search: false,
@@ -339,6 +659,7 @@ function buildColumns({
     },
     {
       title: '零售价',
+      key: 'retailRate',
       dataIndex: ['priceSummary', 'retailRate'],
       align: 'right',
       search: false,
@@ -348,6 +669,7 @@ function buildColumns({
     },
     {
       title: '采购价',
+      key: 'standardBuyingRate',
       dataIndex: ['priceSummary', 'standardBuyingRate'],
       align: 'right',
       search: false,
@@ -365,8 +687,9 @@ function buildColumns({
     },
     {
       title: '操作',
+      fixed: 'right',
       valueType: 'option',
-      width: 150,
+      width: 136,
       render: (_, record) => [
         <Button key="view" type="link">
           <Link
@@ -412,11 +735,15 @@ const ProductsPage: React.FC = () => {
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importRows, setImportRows] = useState<ProductImportRow[]>([]);
+  const [importSubmitting, setImportSubmitting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [togglingProduct, setTogglingProduct] = useState<string>();
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string>();
 
   const selectedItemCodes = selectedRowKeys.map(String);
+  const validImportRows = importRows.filter((row) => !row.error);
 
   const reload = () => {
     setSelectedRowKeys([]);
@@ -561,6 +888,7 @@ const ProductsPage: React.FC = () => {
           '分类',
           '品牌',
           '主条码',
+          '全部条码',
           '库存',
           '总库存',
           '单位',
@@ -577,6 +905,7 @@ const ProductsPage: React.FC = () => {
           item.itemGroup,
           item.brand,
           item.barcode,
+          formatBarcodeList(item),
           String(item.stockQty ?? ''),
           String(item.totalQty ?? ''),
           resolveDisplayUom(item.stockUom, item.stockUomDisplay),
@@ -592,6 +921,124 @@ const ProductsPage: React.FC = () => {
       message.error(caught instanceof Error ? caught.message : '导出失败');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const downloadImportTemplate = () => {
+    downloadCsv('products-import-template.csv', [
+      [
+        '导入动作',
+        '商品编码',
+        '商品名称',
+        '商品分类',
+        '品牌',
+        '主条码',
+        '库存单位',
+        '批发默认单位',
+        '零售默认单位',
+        '标准售价',
+        '批发价',
+        '零售价',
+        '标准采购价',
+        '估值价',
+        '币种',
+        '停用',
+        '描述',
+      ],
+      [
+        'create',
+        'ITEM-001',
+        '示例商品',
+        'All Item Groups',
+        '示例品牌',
+        '690000000001',
+        'Nos',
+        'Nos',
+        'Nos',
+        '12.00',
+        '10.00',
+        '13.00',
+        '8.00',
+        '8.00',
+        'CNY',
+        '0',
+        '示例描述',
+      ],
+      [
+        'update',
+        'ITEM-001',
+        '示例商品-更新',
+        '',
+        '',
+        '',
+        'Nos',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        'CNY',
+        '',
+        '',
+      ],
+    ]);
+  };
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const rows = buildImportRows(parseCsv(text));
+      setImportRows(rows);
+      setImportModalOpen(true);
+      if (!rows.length) {
+        message.warning('未读取到可导入的商品行');
+      }
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '读取 CSV 失败');
+    }
+    return Upload.LIST_IGNORE;
+  };
+
+  const handleRunImport = async () => {
+    if (!validImportRows.length) {
+      message.warning('没有可执行的导入行');
+      return;
+    }
+    setImportSubmitting(true);
+    const nextRows = [...importRows];
+    try {
+      for (const row of nextRows) {
+        if (row.error) {
+          continue;
+        }
+        try {
+          if (row.action === 'update') {
+            await updateProduct(String(row.itemCode), row.payload);
+          } else {
+            await createProduct(row.payload);
+          }
+          row.status = 'success';
+          row.error = undefined;
+        } catch (caught) {
+          row.status = 'error';
+          row.error = caught instanceof Error ? caught.message : '导入失败';
+        }
+        setImportRows([...nextRows]);
+      }
+      const successCount = nextRows.filter(
+        (row) => row.status === 'success',
+      ).length;
+      const errorCount = nextRows.filter(
+        (row) => row.status === 'error',
+      ).length;
+      message.success(
+        `导入完成：成功 ${successCount} 行，失败 ${errorCount} 行`,
+      );
+      reload();
+    } finally {
+      setImportSubmitting(false);
     }
   };
 
@@ -614,6 +1061,15 @@ const ProductsPage: React.FC = () => {
         >
           新增商品
         </Button>,
+        <Upload
+          accept=".csv,text/csv"
+          beforeUpload={handleImportFile}
+          key="import"
+          maxCount={1}
+          showUploadList={false}
+        >
+          <Button icon={<UploadOutlined />}>导入</Button>
+        </Upload>,
         <Button
           icon={<ReloadOutlined />}
           key="refresh"
@@ -626,6 +1082,13 @@ const ProductsPage: React.FC = () => {
       <ProTable<ProductSummary>
         actionRef={actionRef}
         columns={columns}
+        columnsState={{
+          defaultValue: {
+            retailRate: { show: false },
+            standardBuyingRate: { show: false },
+            wholesaleRate: { show: false },
+          },
+        }}
         key={defaultCompany}
         pagination={{
           defaultPageSize: PAGE_SIZE,
@@ -651,6 +1114,7 @@ const ProductsPage: React.FC = () => {
           selectedRowKeys,
           onChange: (keys) => setSelectedRowKeys(keys),
         }}
+        scroll={{ x: 1460 }}
         search={{
           defaultCollapsed: false,
           labelWidth: 88,
@@ -710,6 +1174,114 @@ const ProductsPage: React.FC = () => {
           </Button>,
         ]}
       />
+      <Modal
+        cancelText="关闭"
+        confirmLoading={importSubmitting}
+        destroyOnHidden
+        okButtonProps={{
+          disabled: !validImportRows.length,
+        }}
+        okText="开始导入"
+        onCancel={() => setImportModalOpen(false)}
+        onOk={handleRunImport}
+        open={importModalOpen}
+        title="批量导入商品"
+        width={1040}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            message="CSV 导入按行执行；导入动作为 create 时创建商品，为 update 时按商品编码更新商品。"
+            showIcon
+            type="info"
+          />
+          <Space wrap>
+            <Button
+              icon={<DownloadOutlined />}
+              onClick={downloadImportTemplate}
+            >
+              下载模板
+            </Button>
+            <Typography.Text type="secondary">
+              已读取 {importRows.length} 行，可执行 {validImportRows.length} 行
+            </Typography.Text>
+          </Space>
+          <ProTable<ProductImportRow>
+            columns={[
+              {
+                title: '行号',
+                dataIndex: 'line',
+                width: 72,
+              },
+              {
+                title: '动作',
+                dataIndex: 'action',
+                width: 88,
+                render: (_, record) =>
+                  record.action === 'update' ? (
+                    <Tag color="blue">更新</Tag>
+                  ) : (
+                    <Tag color="green">新增</Tag>
+                  ),
+              },
+              {
+                title: '商品编码',
+                dataIndex: 'itemCode',
+                ellipsis: true,
+                width: 160,
+                renderText: (value) => value || '-',
+              },
+              {
+                title: '商品名称',
+                dataIndex: 'itemName',
+                ellipsis: true,
+              },
+              {
+                title: '分类',
+                renderText: (_, record) => record.payload.itemGroup || '-',
+                width: 140,
+              },
+              {
+                title: '品牌',
+                renderText: (_, record) => record.payload.brand || '-',
+                width: 120,
+              },
+              {
+                title: '主条码',
+                renderText: (_, record) => record.payload.barcode || '-',
+                width: 150,
+              },
+              {
+                title: '状态',
+                dataIndex: 'status',
+                width: 100,
+                render: (_, record) => {
+                  if (record.status === 'success') {
+                    return <Tag color="green">成功</Tag>;
+                  }
+                  if (record.status === 'error') {
+                    return <Tag color="red">失败</Tag>;
+                  }
+                  return <Tag>待导入</Tag>;
+                },
+              },
+              {
+                title: '提示',
+                dataIndex: 'error',
+                ellipsis: true,
+                renderText: (value) => value || '-',
+              },
+            ]}
+            dataSource={importRows}
+            pagination={{ defaultPageSize: 8, showSizeChanger: false }}
+            rowKey={(record) =>
+              `${record.line}:${record.itemCode ?? record.itemName}`
+            }
+            search={false}
+            size="small"
+            toolBarRender={false}
+          />
+        </Space>
+      </Modal>
       <Modal
         confirmLoading={bulkSubmitting}
         destroyOnHidden
@@ -783,7 +1355,7 @@ const ProductsPage: React.FC = () => {
             <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
               <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
             </Form.Item>
-            <Form.Item label="条码" name="barcode" style={{ minWidth: 200 }}>
+            <Form.Item label="主条码" name="barcode" style={{ minWidth: 200 }}>
               <Input placeholder="主条码" />
             </Form.Item>
           </Space>
