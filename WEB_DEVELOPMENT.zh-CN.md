@@ -890,7 +890,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/inventory/stock/:itemCode` 已接入 `get_product_detail_v2` 和 `list_stock_ledger_entries_v1`，展示单个商品的库存摘要、仓库库存、单位换算和最近库存流水。
 - `/inventory/alerts` 已接入 `list_inventory_stock_summary_v1`，支持低库存、无库存、负库存筛选，展示库存预警汇总和明细。
 - `/inventory/adjustments` 已接入库存目标数量调整，支持选择商品、公司、仓库、过账日期、目标数量、单位和估值价。
-- `/inventory/adjustments` 底层复用 `update_product_v2` 的 `warehouse_stock_qty` 正式库存调整链路，写操作走 `runGatewayMutation` 和 `Idempotency-Key`。
+- `/inventory/adjustments` 底层调用 `reconcile_inventory_stock_v1`，由后端统一 UOM 换算并创建正式 `Stock Entry` 调整单据，写操作走 `runGatewayMutation` 和 `Idempotency-Key`。
+- `/inventory/transfers` 已接入 `transfer_inventory_stock_v1`，支持同公司仓库之间按商品单位转仓，由后端统一 UOM 换算并创建正式 `Stock Entry` 转移单据。
 - `/inventory/ledger` 已接入 `list_stock_ledger_entries_v1`。
 - `/inventory/ledger` 支持公司、商品、仓库、日期、凭证类型、凭证编号筛选和分页。
 - `/inventory/ledger` 默认查询最近 30 天。
@@ -973,7 +974,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/master-data/customers` 已接入客户列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
 - `/master-data/suppliers` 已接入供应商列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
 - `/master-data/uoms` 已接入计量单位列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
-- 商品轻量维护当前覆盖基础字段、图片、库存单位、批发 / 零售默认单位和标准价格；库存目标数量调整已在 `/inventory/adjustments` 接入，转仓和盘点仍归后续库存写操作模块。
+- 商品轻量维护当前覆盖基础字段、图片、库存单位、批发 / 零售默认单位和标准价格；库存目标数量调整已在 `/inventory/adjustments` 接入，库存转仓已在 `/inventory/transfers` 接入；完整批量盘点单仍归后续库存写操作模块。
 
 ## 7. Ant Design Pro 模板清理要求
 

@@ -162,6 +162,18 @@ const InventoryStockDetailPage: React.FC = () => {
         >
           查看流水
         </Button>,
+        <Button
+          key="transfers"
+          onClick={() => history.push('/inventory/transfers')}
+        >
+          库存转仓
+        </Button>,
+        <Button
+          key="adjustments"
+          onClick={() => history.push('/inventory/adjustments')}
+        >
+          库存调整
+        </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,

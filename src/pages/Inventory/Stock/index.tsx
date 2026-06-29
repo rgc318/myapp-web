@@ -285,6 +285,12 @@ const InventoryStockPage: React.FC = () => {
         >
           库存调整
         </Button>,
+        <Button
+          key="transfers"
+          onClick={() => history.push('/inventory/transfers')}
+        >
+          库存转仓
+        </Button>,
         <Button key="ledger" onClick={() => history.push('/inventory/ledger')}>
           库存流水
         </Button>,

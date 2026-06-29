@@ -87,10 +87,41 @@ export type InventoryStockAdjustmentPayload = {
   company?: string;
   itemCode: string;
   postingDate?: string;
+  remarks?: string;
   targetQty: number;
   uom?: string;
   valuationRate?: number | null;
   warehouse: string;
+};
+
+export type InventoryStockTransferPayload = {
+  itemCode: string;
+  postingDate?: string;
+  qty: number;
+  remarks?: string;
+  sourceWarehouse: string;
+  targetWarehouse: string;
+  uom?: string;
+};
+
+export type InventoryStockMutationResult = {
+  company?: string;
+  conversionFactor: number;
+  currentStockQty?: number;
+  inputQty: number;
+  inputUom: string;
+  itemCode: string;
+  itemName: string;
+  qtyDelta?: number;
+  sourceQtyAfter?: number;
+  sourceQtyBefore?: number;
+  sourceWarehouse?: string;
+  stockEntry: string | null;
+  stockQty?: number;
+  stockUom: string;
+  targetStockQty?: number;
+  targetWarehouse?: string;
+  warehouse?: string;
 };
 
 function mapStockLedgerEntry(row: Record<string, any>): StockLedgerEntry {
@@ -217,17 +248,90 @@ export async function listInventoryStockSummary(
 export async function adjustInventoryStock(
   payload: InventoryStockAdjustmentPayload,
 ) {
-  return runGatewayMutation<Record<string, unknown>>('update_product_v2', {
-    payload: compactPayload({
-      company: toOptionalText(payload.company),
-      item_code: payload.itemCode,
-      posting_date: toOptionalText(payload.postingDate),
-      valuation_rate: payload.valuationRate ?? undefined,
-      warehouse: payload.warehouse,
-      warehouse_stock_qty: payload.targetQty,
-      warehouse_stock_uom: toOptionalText(payload.uom),
-    }),
-    successMessage: '库存已调整',
-    transform: (raw) => readObject(raw),
-  });
+  return runGatewayMutation<InventoryStockMutationResult>(
+    'reconcile_inventory_stock_v1',
+    {
+      payload: compactPayload({
+        item_code: payload.itemCode,
+        posting_date: toOptionalText(payload.postingDate),
+        remarks: toOptionalText(payload.remarks),
+        target_qty: payload.targetQty,
+        uom: toOptionalText(payload.uom),
+        valuation_rate: payload.valuationRate ?? undefined,
+        warehouse: payload.warehouse,
+      }),
+      successMessage: '库存已调整',
+      transform: (raw) => mapInventoryStockMutationResult(readObject(raw)),
+    },
+  );
+}
+
+export async function transferInventoryStock(
+  payload: InventoryStockTransferPayload,
+) {
+  return runGatewayMutation<InventoryStockMutationResult>(
+    'transfer_inventory_stock_v1',
+    {
+      payload: compactPayload({
+        item_code: payload.itemCode,
+        posting_date: toOptionalText(payload.postingDate),
+        qty: payload.qty,
+        remarks: toOptionalText(payload.remarks),
+        source_warehouse: payload.sourceWarehouse,
+        target_warehouse: payload.targetWarehouse,
+        uom: toOptionalText(payload.uom),
+      }),
+      successMessage: '库存已转仓',
+      transform: (raw) => mapInventoryStockMutationResult(readObject(raw)),
+    },
+  );
+}
+
+function mapInventoryStockMutationResult(
+  row: Record<string, any>,
+): InventoryStockMutationResult {
+  return {
+    company:
+      typeof row.company === 'string' && row.company ? row.company : undefined,
+    conversionFactor: toNumber(row.conversion_factor),
+    currentStockQty:
+      row.current_stock_qty === undefined
+        ? undefined
+        : toNumber(row.current_stock_qty),
+    inputQty: toNumber(row.input_qty),
+    inputUom: String(row.input_uom ?? ''),
+    itemCode: String(row.item_code ?? ''),
+    itemName: String(row.item_name ?? row.item_code ?? ''),
+    qtyDelta: row.qty_delta === undefined ? undefined : toNumber(row.qty_delta),
+    sourceQtyAfter:
+      row.source_qty_after === undefined
+        ? undefined
+        : toNumber(row.source_qty_after),
+    sourceQtyBefore:
+      row.source_qty_before === undefined
+        ? undefined
+        : toNumber(row.source_qty_before),
+    sourceWarehouse:
+      typeof row.source_warehouse === 'string' && row.source_warehouse
+        ? row.source_warehouse
+        : undefined,
+    stockEntry:
+      typeof row.stock_entry === 'string' && row.stock_entry
+        ? row.stock_entry
+        : null,
+    stockQty: row.stock_qty === undefined ? undefined : toNumber(row.stock_qty),
+    stockUom: String(row.stock_uom ?? ''),
+    targetStockQty:
+      row.target_stock_qty === undefined
+        ? undefined
+        : toNumber(row.target_stock_qty),
+    targetWarehouse:
+      typeof row.target_warehouse === 'string' && row.target_warehouse
+        ? row.target_warehouse
+        : undefined,
+    warehouse:
+      typeof row.warehouse === 'string' && row.warehouse
+        ? row.warehouse
+        : undefined,
+  };
 }

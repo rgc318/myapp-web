@@ -220,6 +220,11 @@ export default [
         component: './Inventory/Adjustments',
       },
       {
+        path: '/inventory/transfers',
+        name: 'transfers',
+        component: './Inventory/Transfers',
+      },
+      {
         path: '/inventory/stock/:itemCode',
         name: 'stock-detail',
         component: './Inventory/Stock/Detail',

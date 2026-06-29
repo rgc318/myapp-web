@@ -240,6 +240,18 @@ const InventoryAlertsPage: React.FC = () => {
         <Button key="stock" onClick={() => history.push('/inventory/stock')}>
           商品库存
         </Button>,
+        <Button
+          key="transfers"
+          onClick={() => history.push('/inventory/transfers')}
+        >
+          库存转仓
+        </Button>,
+        <Button
+          key="adjustments"
+          onClick={() => history.push('/inventory/adjustments')}
+        >
+          库存调整
+        </Button>,
         <Button key="refresh" onClick={() => actionRef.current?.reload()}>
           刷新
         </Button>,

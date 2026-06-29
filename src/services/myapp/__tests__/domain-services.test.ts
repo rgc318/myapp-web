@@ -2,6 +2,7 @@ import { callGatewayMethod } from '../api-client';
 import {
   adjustInventoryStock,
   listInventoryStockSummary,
+  transferInventoryStock,
 } from '../inventory';
 import { listBusinessDocuments } from '../documents';
 import {
@@ -897,9 +898,18 @@ describe('myapp domain services', () => {
     );
   });
 
-  it('runs inventory stock adjustment through product stock gateway', async () => {
+  it('runs inventory stock adjustment through inventory reconciliation gateway', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
-      data: { item_code: 'SKU-1', item_name: '测试商品' },
+      data: {
+        conversion_factor: 6,
+        input_qty: 2,
+        input_uom: 'Box',
+        item_code: 'SKU-1',
+        item_name: '测试商品',
+        stock_entry: 'MAT-STE-0001',
+        stock_uom: 'Nos',
+        target_stock_qty: 12,
+      },
       meta: {},
       raw: {},
     });
@@ -908,6 +918,7 @@ describe('myapp domain services', () => {
       company: 'rgc (Demo)',
       itemCode: 'SKU-1',
       postingDate: '2026-06-15',
+      remarks: 'cycle count',
       targetQty: 12,
       uom: 'Box',
       valuationRate: 8.5,
@@ -915,15 +926,58 @@ describe('myapp domain services', () => {
     });
 
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
-      'update_product_v2',
+      'reconcile_inventory_stock_v1',
       {
-        company: 'rgc (Demo)',
         item_code: 'SKU-1',
         posting_date: '2026-06-15',
+        remarks: 'cycle count',
+        target_qty: 12,
+        uom: 'Box',
         valuation_rate: 8.5,
         warehouse: 'Stores - RD',
-        warehouse_stock_qty: 12,
-        warehouse_stock_uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs inventory transfer through inventory transfer gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        conversion_factor: 6,
+        input_qty: 1,
+        input_uom: 'Box',
+        item_code: 'SKU-1',
+        item_name: '测试商品',
+        source_warehouse: 'Stores - RD',
+        stock_entry: 'MAT-STE-0002',
+        stock_qty: 6,
+        stock_uom: 'Nos',
+        target_warehouse: 'Transit - RD',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await transferInventoryStock({
+      itemCode: 'SKU-1',
+      postingDate: '2026-06-16',
+      qty: 1,
+      remarks: 'move to transit',
+      sourceWarehouse: 'Stores - RD',
+      targetWarehouse: 'Transit - RD',
+      uom: 'Box',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'transfer_inventory_stock_v1',
+      {
+        item_code: 'SKU-1',
+        posting_date: '2026-06-16',
+        qty: 1,
+        remarks: 'move to transit',
+        source_warehouse: 'Stores - RD',
+        target_warehouse: 'Transit - RD',
+        uom: 'Box',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
