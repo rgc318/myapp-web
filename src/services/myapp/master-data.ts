@@ -116,6 +116,8 @@ export type SaveProductPayload = {
   wholesaleRate?: number | null;
 };
 
+export type UpdateProductPayload = Partial<SaveProductPayload>;
+
 export type PartySummary = {
   defaultCurrency: string | null;
   disabled: boolean;
@@ -551,11 +553,22 @@ export async function getProductDetail(
   return result.data ? mapProduct(readObject(result.data)) : null;
 }
 
-function productSavePayload(payload: SaveProductPayload) {
+function productSavePayload(
+  payload: UpdateProductPayload,
+  options: { includeEmptyFields?: boolean } = {},
+) {
   type PricePayloadEntry = {
     currency: string | undefined;
     price_list: string;
     rate: number;
+  };
+  const hasOwn = (key: keyof SaveProductPayload) =>
+    Object.prototype.hasOwnProperty.call(payload, key);
+  const optionalTextField = (key: keyof SaveProductPayload) => {
+    if (!options.includeEmptyFields && !hasOwn(key)) {
+      return undefined;
+    }
+    return payload[key] ?? '';
   };
 
   const sellingPrices = [
@@ -594,15 +607,18 @@ function productSavePayload(payload: SaveProductPayload) {
   const stockUom = toOptionalText(payload.stockUom);
 
   return definedPayload({
-    barcode: payload.barcode ?? '',
-    brand: payload.brand ?? '',
-    currency: payload.currency ?? '',
-    description: payload.description ?? '',
+    barcode: optionalTextField('barcode'),
+    brand: optionalTextField('brand'),
+    currency: optionalTextField('currency'),
+    description: optionalTextField('description'),
     disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
     image: payload.image === undefined ? undefined : payload.image,
-    item_group: payload.itemGroup ?? '',
+    item_group: optionalTextField('itemGroup'),
     item_name: payload.itemName,
-    retail_default_uom: payload.retailDefaultUom ?? stockUom ?? '',
+    retail_default_uom:
+      options.includeEmptyFields || hasOwn('retailDefaultUom')
+        ? payload.retailDefaultUom ?? stockUom ?? ''
+        : undefined,
     selling_prices: sellingPrices.length ? sellingPrices : undefined,
     standard_rate: payload.standardSellingRate ?? undefined,
     stock_uom: stockUom,
@@ -610,7 +626,10 @@ function productSavePayload(payload: SaveProductPayload) {
       ? [{ conversion_factor: 1, uom: stockUom }]
       : undefined,
     valuation_rate: payload.valuationRate ?? undefined,
-    wholesale_default_uom: payload.wholesaleDefaultUom ?? stockUom ?? '',
+    wholesale_default_uom:
+      options.includeEmptyFields || hasOwn('wholesaleDefaultUom')
+        ? payload.wholesaleDefaultUom ?? stockUom ?? ''
+        : undefined,
     buying_prices: buyingPrices,
   });
 }
@@ -618,7 +637,7 @@ function productSavePayload(payload: SaveProductPayload) {
 export async function createProduct(payload: SaveProductPayload) {
   return runGatewayMutation<ProductSummary>('create_product_v2', {
     payload: definedPayload({
-      ...productSavePayload(payload),
+      ...productSavePayload(payload, { includeEmptyFields: true }),
       item_code: payload.itemCode ?? undefined,
     }),
     successMessage: '商品已创建',
@@ -628,7 +647,7 @@ export async function createProduct(payload: SaveProductPayload) {
 
 export async function updateProduct(
   itemCode: string,
-  payload: SaveProductPayload,
+  payload: UpdateProductPayload,
 ) {
   return runGatewayMutation<ProductSummary>('update_product_v2', {
     payload: definedPayload({
@@ -646,6 +665,30 @@ export async function setProductDisabled(itemCode: string, disabled: boolean) {
     successMessage: disabled ? '商品已停用' : '商品已启用',
     transform: (raw) => mapProduct(readObject(raw)),
   });
+}
+
+export async function bulkSetProductsDisabled(
+  itemCodes: string[],
+  disabled: boolean,
+) {
+  const results: ProductSummary[] = [];
+  for (const itemCode of itemCodes) {
+    const result = await setProductDisabled(itemCode, disabled);
+    results.push(result.data);
+  }
+  return results;
+}
+
+export async function bulkUpdateProducts(
+  itemCodes: string[],
+  payload: UpdateProductPayload,
+) {
+  const results: ProductSummary[] = [];
+  for (const itemCode of itemCodes) {
+    const result = await updateProduct(itemCode, payload);
+    results.push(result.data);
+  }
+  return results;
 }
 
 export async function listCustomers(options: ListOptions = {}) {

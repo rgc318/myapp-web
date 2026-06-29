@@ -5,6 +5,8 @@ import {
 } from '../inventory';
 import { listBusinessDocuments } from '../documents';
 import {
+  bulkSetProductsDisabled,
+  bulkUpdateProducts,
   createCustomer,
   createProduct,
   createSupplier,
@@ -1699,6 +1701,61 @@ describe('myapp domain services', () => {
       3,
       'disable_product_v2',
       { disabled: 1, item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('updates products with partial payloads', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
+    });
+
+    await updateProduct('ITEM-001', {
+      brand: 'Brand B',
+      itemGroup: 'Products',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'update_product_v2',
+      {
+        brand: 'Brand B',
+        item_code: 'ITEM-001',
+        item_group: 'Products',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs bulk product updates through existing gateway methods', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
+    });
+
+    await bulkUpdateProducts(['ITEM-001', 'ITEM-002'], { brand: 'Brand B' });
+    await bulkSetProductsDisabled(['ITEM-001', 'ITEM-002'], true);
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'update_product_v2',
+      { brand: 'Brand B', item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'update_product_v2',
+      { brand: 'Brand B', item_code: 'ITEM-002' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'disable_product_v2',
+      { disabled: 1, item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
+      'disable_product_v2',
+      { disabled: 1, item_code: 'ITEM-002' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });
