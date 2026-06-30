@@ -55,16 +55,24 @@ const WarehousesPage: React.FC = () => {
   const openEditModal = (record: WarehouseSummary) => {
     setEditingWarehouse(record);
     form.setFieldsValue({
+      account: record.account,
       addressLine1: record.addressLine1,
       addressLine2: record.addressLine2,
       city: record.city,
       company: record.company,
+      customer: record.customer,
+      defaultInTransitWarehouse: record.defaultInTransitWarehouse,
       disabled: record.disabled,
+      emailId: record.emailId,
       isGroup: record.isGroup,
+      isRejectedWarehouse: record.isRejectedWarehouse,
+      mobileNo: record.mobileNo,
       parentWarehouse: record.parentWarehouse,
+      phoneNo: record.phoneNo,
       pin: record.pin,
       state: record.state,
       warehouseName: record.warehouseName,
+      warehouseType: record.warehouseType,
     });
     setModalOpen(true);
   };
@@ -188,6 +196,40 @@ const WarehousesPage: React.FC = () => {
       width: 100,
       render: (_, record) =>
         record.isGroup ? <Tag color="blue">分组</Tag> : <Tag>可用</Tag>,
+    },
+    {
+      title: '仓库类型',
+      dataIndex: 'warehouseType',
+      search: false,
+      width: 120,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '会计科目',
+      dataIndex: 'account',
+      search: false,
+      ellipsis: true,
+      width: 180,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '联系信息',
+      dataIndex: 'phoneNo',
+      search: false,
+      ellipsis: true,
+      width: 180,
+      render: (_, record) =>
+        [record.phoneNo, record.mobileNo, record.emailId]
+          .filter(Boolean)
+          .join(' / ') || '-',
+    },
+    {
+      title: '标记',
+      dataIndex: 'isRejectedWarehouse',
+      search: false,
+      width: 120,
+      render: (_, record) =>
+        record.isRejectedWarehouse ? <Tag color="red">拒收仓</Tag> : '-',
     },
     {
       title: '状态',
@@ -331,14 +373,55 @@ const WarehousesPage: React.FC = () => {
               placeholder="搜索分组仓库"
             />
           </Form.Item>
+          <Form.Item label="仓库类型" name="warehouseType">
+            <RemoteLinkSelect
+              doctype="Warehouse Type"
+              placeholder="搜索仓库类型"
+            />
+          </Form.Item>
+          <Form.Item label="会计科目" name="account">
+            <RemoteLinkSelect
+              doctype="Account"
+              filters={{ company: formCompany, is_group: 0 }}
+              placeholder="搜索库存会计科目"
+            />
+          </Form.Item>
+          <Form.Item label="默认在途仓库" name="defaultInTransitWarehouse">
+            <RemoteLinkSelect
+              doctype="Warehouse"
+              filters={{ company: formCompany, disabled: 0, is_group: 0 }}
+              placeholder="搜索在途仓库"
+            />
+          </Form.Item>
+          <Form.Item label="客户归属" name="customer">
+            <RemoteLinkSelect doctype="Customer" placeholder="搜索客户" />
+          </Form.Item>
           <Space size={32}>
             <Form.Item label="分组仓库" name="isGroup" valuePropName="checked">
+              <Switch />
+            </Form.Item>
+            <Form.Item
+              label="拒收仓"
+              name="isRejectedWarehouse"
+              valuePropName="checked"
+            >
               <Switch />
             </Form.Item>
             <Form.Item label="停用" name="disabled" valuePropName="checked">
               <Switch />
             </Form.Item>
           </Space>
+          <Space size={16} style={{ width: '100%' }}>
+            <Form.Item label="电话" name="phoneNo" style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+            <Form.Item label="手机" name="mobileNo" style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+          </Space>
+          <Form.Item label="邮箱" name="emailId">
+            <Input />
+          </Form.Item>
           <Form.Item label="地址 1" name="addressLine1">
             <Input placeholder="仓库地址" />
           </Form.Item>

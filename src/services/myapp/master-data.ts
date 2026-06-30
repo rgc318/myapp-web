@@ -161,18 +161,26 @@ export type UomSummary = {
 };
 
 export type WarehouseSummary = {
+  account: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
   company: string;
+  customer: string | null;
+  defaultInTransitWarehouse: string | null;
   disabled: boolean;
+  emailId: string | null;
   isGroup: boolean;
+  isRejectedWarehouse: boolean;
   modified: string | null;
+  mobileNo: string | null;
   name: string;
   parentWarehouse: string | null;
+  phoneNo: string | null;
   pin: string | null;
   state: string | null;
   warehouseName: string;
+  warehouseType: string | null;
 };
 
 export type SaveUomPayload = {
@@ -184,16 +192,24 @@ export type SaveUomPayload = {
 };
 
 export type SaveWarehousePayload = {
+  account?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
   city?: string | null;
   company: string;
+  customer?: string | null;
+  defaultInTransitWarehouse?: string | null;
   disabled?: boolean;
+  emailId?: string | null;
   isGroup?: boolean;
+  isRejectedWarehouse?: boolean;
+  mobileNo?: string | null;
   parentWarehouse?: string | null;
+  phoneNo?: string | null;
   pin?: string | null;
   state?: string | null;
   warehouseName: string;
+  warehouseType?: string | null;
 };
 
 export type LinkOption = {
@@ -546,6 +562,10 @@ function mapUom(row: Record<string, any>): UomSummary {
 
 function mapWarehouse(row: Record<string, any>): WarehouseSummary {
   return {
+    account:
+      typeof row.account === 'string' && row.account.trim()
+        ? row.account
+        : null,
     addressLine1:
       typeof row.address_line_1 === 'string' && row.address_line_1.trim()
         ? row.address_line_1
@@ -556,17 +576,43 @@ function mapWarehouse(row: Record<string, any>): WarehouseSummary {
         : null,
     city: typeof row.city === 'string' && row.city.trim() ? row.city : null,
     company: String(row.company ?? ''),
+    customer:
+      typeof row.customer === 'string' && row.customer.trim()
+        ? row.customer
+        : null,
+    defaultInTransitWarehouse:
+      typeof row.default_in_transit_warehouse === 'string' &&
+      row.default_in_transit_warehouse.trim()
+        ? row.default_in_transit_warehouse
+        : null,
     disabled: Boolean(toOptionalNumber(row.disabled)),
+    emailId:
+      typeof row.email_id === 'string' && row.email_id.trim()
+        ? row.email_id
+        : null,
     isGroup: Boolean(toOptionalNumber(row.is_group)),
+    isRejectedWarehouse: Boolean(toOptionalNumber(row.is_rejected_warehouse)),
     modified: typeof row.modified === 'string' ? row.modified : null,
+    mobileNo:
+      typeof row.mobile_no === 'string' && row.mobile_no.trim()
+        ? row.mobile_no
+        : null,
     name: String(row.name ?? ''),
     parentWarehouse:
       typeof row.parent_warehouse === 'string' && row.parent_warehouse.trim()
         ? row.parent_warehouse
         : null,
     pin: typeof row.pin === 'string' && row.pin.trim() ? row.pin : null,
+    phoneNo:
+      typeof row.phone_no === 'string' && row.phone_no.trim()
+        ? row.phone_no
+        : null,
     state: typeof row.state === 'string' && row.state.trim() ? row.state : null,
     warehouseName: String(row.warehouse_name ?? row.name ?? ''),
+    warehouseType:
+      typeof row.warehouse_type === 'string' && row.warehouse_type.trim()
+        ? row.warehouse_type
+        : null,
   };
 }
 
@@ -1053,16 +1099,26 @@ export async function listWarehouses(
 export async function createWarehouse(payload: SaveWarehousePayload) {
   return runGatewayMutation<WarehouseSummary>('create_warehouse_v2', {
     payload: compactPayload({
+      account: toOptionalText(payload.account),
       address_line_1: toOptionalText(payload.addressLine1),
       address_line_2: toOptionalText(payload.addressLine2),
       city: toOptionalText(payload.city),
       company: payload.company,
+      customer: toOptionalText(payload.customer),
+      default_in_transit_warehouse: toOptionalText(
+        payload.defaultInTransitWarehouse,
+      ),
       disabled: payload.disabled ? 1 : 0,
+      email_id: toOptionalText(payload.emailId),
       is_group: payload.isGroup ? 1 : 0,
+      is_rejected_warehouse: payload.isRejectedWarehouse ? 1 : 0,
+      mobile_no: toOptionalText(payload.mobileNo),
       parent_warehouse: toOptionalText(payload.parentWarehouse),
+      phone_no: toOptionalText(payload.phoneNo),
       pin: toOptionalText(payload.pin),
       state: toOptionalText(payload.state),
       warehouse_name: payload.warehouseName,
+      warehouse_type: toOptionalText(payload.warehouseType),
     }),
     successMessage: '仓库已创建',
     transform: mapMutationWarehouse,
@@ -1074,6 +1130,9 @@ export async function updateWarehouse(
   payload: Partial<SaveWarehousePayload>,
 ) {
   const updatePayload: Record<string, unknown> = { warehouse };
+  if (payload.account !== undefined) {
+    updatePayload.account = payload.account ?? '';
+  }
   if (payload.addressLine1 !== undefined) {
     updatePayload.address_line_1 = payload.addressLine1 ?? '';
   }
@@ -1086,14 +1145,33 @@ export async function updateWarehouse(
   if (payload.company !== undefined) {
     updatePayload.company = payload.company;
   }
+  if (payload.customer !== undefined) {
+    updatePayload.customer = payload.customer ?? '';
+  }
+  if (payload.defaultInTransitWarehouse !== undefined) {
+    updatePayload.default_in_transit_warehouse =
+      payload.defaultInTransitWarehouse ?? '';
+  }
   if (payload.disabled !== undefined) {
     updatePayload.disabled = payload.disabled ? 1 : 0;
+  }
+  if (payload.emailId !== undefined) {
+    updatePayload.email_id = payload.emailId ?? '';
   }
   if (payload.isGroup !== undefined) {
     updatePayload.is_group = payload.isGroup ? 1 : 0;
   }
+  if (payload.isRejectedWarehouse !== undefined) {
+    updatePayload.is_rejected_warehouse = payload.isRejectedWarehouse ? 1 : 0;
+  }
+  if (payload.mobileNo !== undefined) {
+    updatePayload.mobile_no = payload.mobileNo ?? '';
+  }
   if (payload.parentWarehouse !== undefined) {
     updatePayload.parent_warehouse = payload.parentWarehouse ?? '';
+  }
+  if (payload.phoneNo !== undefined) {
+    updatePayload.phone_no = payload.phoneNo ?? '';
   }
   if (payload.pin !== undefined) {
     updatePayload.pin = payload.pin ?? '';
@@ -1103,6 +1181,9 @@ export async function updateWarehouse(
   }
   if (payload.warehouseName !== undefined) {
     updatePayload.warehouse_name = payload.warehouseName;
+  }
+  if (payload.warehouseType !== undefined) {
+    updatePayload.warehouse_type = payload.warehouseType ?? '';
   }
 
   return runGatewayMutation<WarehouseSummary>('update_warehouse_v2', {
