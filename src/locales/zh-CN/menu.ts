@@ -11,6 +11,7 @@ export default {
   'menu.dashboard.analysis': '分析页',
   'menu.dashboard.monitor': '监控页',
   'menu.dashboard.workplace': '工作台',
+  'menu.pending-confirmations': '待处理确认',
   'menu.sales': '销售查询',
   'menu.sales.orders': '销售订单',
   'menu.sales.order-new': '新建销售订单',

@@ -7,6 +7,7 @@ export * as inventory from './inventory';
 export * as masterData from './master-data';
 export * as media from './media';
 export * as mutation from './mutation';
+export * as pendingConfirmations from './pending-confirmations';
 export * as purchase from './purchase';
 export * as printing from './printing';
 export * as reports from './reports';

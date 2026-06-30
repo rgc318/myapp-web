@@ -863,7 +863,22 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 日期
 - 关联单据
 
-### 6.7 库存查询
+### 6.7 待处理确认
+
+路由：
+
+```text
+/pending-confirmations
+```
+
+当前页面：
+
+- `/pending-confirmations` 已接入待处理确认工作台，聚合销售发货单、销售发票、采购收货单和采购发票的草稿单据。
+- 页面通过 `documents.ts` 调用 `list_business_documents_v1`，按 `docstatus=draft` 查询候选单据，不直接访问 ERPNext resource API。
+- 确认动作通过 `pending-confirmations.ts` 调用 `confirm_pending_document`，写操作统一走 `runGatewayMutation` 和 `Idempotency-Key`。
+- 页面支持关键词、公司、单据类型筛选，可跳转单据详情，并在提交前二次确认。
+
+### 6.8 库存查询
 
 路由：
 
@@ -912,7 +927,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 库存价值变化
 - 日期
 
-### 6.8 财务查询
+### 6.9 财务查询
 
 路由：
 
@@ -944,7 +959,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 状态
 - 日期
 
-### 6.9 商品与主数据辅助
+### 6.10 商品与主数据辅助
 
 可供筛选、详情和后续管理页使用：
 

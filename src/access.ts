@@ -27,6 +27,15 @@ export default function access(
           'Stock Manager',
         ),
     ),
+    canViewPendingConfirmations: Boolean(
+      isAdmin ||
+        hasRole(
+          'Accounts Manager',
+          'Purchase Manager',
+          'Sales Manager',
+          'Stock Manager',
+        ),
+    ),
     canViewPurchase: Boolean(
       isAdmin || hasRole('Purchase Manager', 'Purchase User'),
     ),

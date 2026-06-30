@@ -29,6 +29,13 @@ export default [
     component: './Dashboard',
   },
   {
+    path: '/pending-confirmations',
+    name: 'pending-confirmations',
+    icon: 'checkCircle',
+    access: 'canViewPendingConfirmations',
+    component: './PendingConfirmations',
+  },
+  {
     path: '/sales',
     name: 'sales',
     icon: 'shoppingCart',

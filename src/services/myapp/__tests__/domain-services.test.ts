@@ -6,6 +6,10 @@ import {
 } from '../inventory';
 import { listBusinessDocuments } from '../documents';
 import {
+  confirmPendingDocument,
+  listPendingConfirmations,
+} from '../pending-confirmations';
+import {
   addProductBarcode,
   bulkSetProductsDisabled,
   bulkUpdateProducts,
@@ -165,6 +169,93 @@ describe('myapp domain services', () => {
         sort_by: 'latest',
         start: 0,
       },
+    );
+  });
+
+  it('lists pending confirmations from draft business documents', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            amount: 88,
+            business_status: 'Draft',
+            company: 'rgc (Demo)',
+            detail_path: '/sales/invoices',
+            docstatus: 0,
+            doctype: 'Sales Invoice',
+            document_status: 'Draft',
+            modified: '2026-06-02 10:00:00',
+            name: 'SI-DRAFT-1',
+            party: 'CUST-0001',
+            party_name: '客户 A',
+            posting_date: '2026-06-02',
+          },
+        ],
+        pagination: { total_count: 1 },
+        summary: { visible_count: 1 },
+      },
+    });
+
+    const result = await listPendingConfirmations({
+      company: 'rgc (Demo)',
+      doctype: 'Sales Invoice',
+      limit: 20,
+      searchKey: 'DRAFT',
+    });
+
+    expect(result.items[0]).toMatchObject({
+      detailPath: '/sales/invoices/SI-DRAFT-1',
+      docstatus: 0,
+      doctype: 'Sales Invoice',
+      name: 'SI-DRAFT-1',
+    });
+    expect(result.total).toBe(1);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_business_documents_v1',
+      {
+        company: 'rgc (Demo)',
+        docstatus: 'draft',
+        doctype: 'Sales Invoice',
+        limit: 20,
+        search_key: 'DRAFT',
+        sort_by: 'latest',
+        start: 0,
+      },
+    );
+  });
+
+  it('confirms pending document through gateway mutation', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        docname: 'SI-DRAFT-1',
+        docstatus: 1,
+        doctype: 'Sales Invoice',
+        message: 'ok',
+        workflow_state: 'Submitted',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await confirmPendingDocument({
+      docname: 'SI-DRAFT-1',
+      doctype: 'Sales Invoice',
+    });
+
+    expect(result.data).toMatchObject({
+      docname: 'SI-DRAFT-1',
+      docstatus: 1,
+      doctype: 'Sales Invoice',
+      workflowState: 'Submitted',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'confirm_pending_document',
+      {
+        docname: 'SI-DRAFT-1',
+        doctype: 'Sales Invoice',
+        submit_on_confirm: 1,
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });
 
