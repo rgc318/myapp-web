@@ -980,6 +980,10 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `myapp.api.gateway.create_uom_v2`
 - `myapp.api.gateway.update_uom_v2`
 - `myapp.api.gateway.disable_uom_v2`
+- `myapp.api.gateway.list_warehouses_v2`
+- `myapp.api.gateway.create_warehouse_v2`
+- `myapp.api.gateway.update_warehouse_v2`
+- `myapp.api.gateway.disable_warehouse_v2`
 
 第一阶段主数据仍以查询辅助和轻量维护为主；商品、客户、供应商和计量单位已先补轻量维护，用于解决开单前的常用基础资料维护问题。
 
@@ -989,13 +993,14 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/master-data/customers` 已接入客户列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
 - `/master-data/suppliers` 已接入供应商列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
 - `/master-data/uoms` 已接入计量单位列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
+- `/master-data/warehouses` 已接入仓库列表，支持关键词、公司、状态、仓库类型筛选，支持新增、编辑、启用和停用；当前覆盖仓库名称、公司、父仓库、是否分组、地址等基础治理字段。
 - 商品轻量维护当前覆盖基础字段、图片、库存单位、批发 / 零售默认单位和标准价格；库存目标数量调整已在 `/inventory/adjustments` 接入，库存转仓已在 `/inventory/transfers` 接入；完整批量盘点单仍归后续库存写操作模块。
 
 当前缺口：
 
 - 客户管理当前是轻量主数据维护，不是完整 CRM；尚未接入客户详情页、联系人 / 地址多条维护、信用额度、账期、税务信息、客户交易历史聚合、应收钻取、客户标签 / 区域 / 业务员归属、导入导出和审计记录。
 - 供应商管理当前与客户类似，仍是轻量主数据维护；尚未接入供应商详情、联系人 / 地址多条维护、付款条款、采购历史聚合、应付钻取和供应商治理字段。
-- 仓库当前仅作为公司、库存、开单、转仓、盘点调整和用户工作偏好的 Link 维度使用；尚未接入独立仓库管理模块。后续应优先补 `/master-data/warehouses` 或 `/inventory/warehouses`，支持仓库列表、新增、编辑、启用 / 停用、公司过滤、仓库层级 / 父仓库、是否分组、默认成本中心和基础治理字段。
+- 仓库管理当前已接入第一版基础维护；库位 / 容量、负责人、默认成本中心、仓库权限和更细粒度治理字段仍归后续模块。
 - 库存完整批量盘点单、盘点确认 / 作废生命周期应在仓库管理模块稳定后继续补。
 
 ## 7. Ant Design Pro 模板清理要求

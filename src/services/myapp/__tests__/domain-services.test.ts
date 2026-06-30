@@ -21,6 +21,7 @@ import {
   getProductDetail,
   listProducts,
   listUoms,
+  listWarehouses,
   searchProducts,
   searchLinkOptions,
   setPrimaryProductBarcode,
@@ -32,6 +33,9 @@ import {
   updateProduct,
   updateSupplier,
   updateUom,
+  createWarehouse,
+  setWarehouseDisabled,
+  updateWarehouse,
 } from '../master-data';
 import {
   deleteItemImage,
@@ -1645,6 +1649,115 @@ describe('myapp domain services', () => {
       3,
       'disable_uom_v2',
       { disabled: 1, uom: 'Box' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('maps warehouse list rows and runs warehouse mutations through gateway', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: [
+          {
+            address_line_1: 'A1',
+            city: 'Shanghai',
+            company: 'rgc (Demo)',
+            disabled: 0,
+            is_group: 0,
+            modified: '2026-06-30 10:00:00',
+            name: 'Stores - RD',
+            parent_warehouse: 'All Warehouses - RD',
+            warehouse_name: 'Stores',
+          },
+        ],
+        meta: { total_count: 1 },
+      })
+      .mockResolvedValue({
+        data: {
+          company: 'rgc (Demo)',
+          disabled: 0,
+          is_group: 0,
+          name: 'Stores - RD',
+          warehouse_name: 'Stores',
+        },
+      });
+
+    const result = await listWarehouses({
+      company: 'rgc (Demo)',
+      disabled: 0,
+      isGroup: 0,
+      limit: 20,
+      searchKey: 'Stores',
+      start: 0,
+    });
+    await createWarehouse({
+      addressLine1: 'A1',
+      city: 'Shanghai',
+      company: 'rgc (Demo)',
+      disabled: false,
+      isGroup: false,
+      parentWarehouse: 'All Warehouses - RD',
+      warehouseName: 'Stores',
+    });
+    await updateWarehouse('Stores - RD', {
+      addressLine1: '',
+      disabled: false,
+      parentWarehouse: '',
+      warehouseName: 'Main Stores',
+    });
+    await setWarehouseDisabled('Stores - RD', true);
+
+    expect(result.items[0]).toMatchObject({
+      addressLine1: 'A1',
+      city: 'Shanghai',
+      company: 'rgc (Demo)',
+      disabled: false,
+      isGroup: false,
+      name: 'Stores - RD',
+      parentWarehouse: 'All Warehouses - RD',
+      warehouseName: 'Stores',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'list_warehouses_v2',
+      {
+        company: 'rgc (Demo)',
+        disabled: 0,
+        is_group: 0,
+        limit: 20,
+        search_key: 'Stores',
+        start: 0,
+      },
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'create_warehouse_v2',
+      {
+        address_line_1: 'A1',
+        city: 'Shanghai',
+        company: 'rgc (Demo)',
+        disabled: 0,
+        is_group: 0,
+        parent_warehouse: 'All Warehouses - RD',
+        warehouse_name: 'Stores',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'update_warehouse_v2',
+      {
+        address_line_1: '',
+        disabled: 0,
+        parent_warehouse: '',
+        warehouse: 'Stores - RD',
+        warehouse_name: 'Main Stores',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
+      'disable_warehouse_v2',
+      { disabled: 1, warehouse: 'Stores - RD' },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

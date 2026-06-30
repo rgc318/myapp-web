@@ -160,12 +160,40 @@ export type UomSummary = {
   uomName: string;
 };
 
+export type WarehouseSummary = {
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  company: string;
+  disabled: boolean;
+  isGroup: boolean;
+  modified: string | null;
+  name: string;
+  parentWarehouse: string | null;
+  pin: string | null;
+  state: string | null;
+  warehouseName: string;
+};
+
 export type SaveUomPayload = {
   description?: string | null;
   enabled?: boolean;
   mustBeWholeNumber?: boolean;
   symbol?: string | null;
   uomName: string;
+};
+
+export type SaveWarehousePayload = {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  city?: string | null;
+  company: string;
+  disabled?: boolean;
+  isGroup?: boolean;
+  parentWarehouse?: string | null;
+  pin?: string | null;
+  state?: string | null;
+  warehouseName: string;
 };
 
 export type LinkOption = {
@@ -513,6 +541,32 @@ function mapUom(row: Record<string, any>): UomSummary {
     symbol:
       typeof row.symbol === 'string' && row.symbol.trim() ? row.symbol : null,
     uomName,
+  };
+}
+
+function mapWarehouse(row: Record<string, any>): WarehouseSummary {
+  return {
+    addressLine1:
+      typeof row.address_line_1 === 'string' && row.address_line_1.trim()
+        ? row.address_line_1
+        : null,
+    addressLine2:
+      typeof row.address_line_2 === 'string' && row.address_line_2.trim()
+        ? row.address_line_2
+        : null,
+    city: typeof row.city === 'string' && row.city.trim() ? row.city : null,
+    company: String(row.company ?? ''),
+    disabled: Boolean(toOptionalNumber(row.disabled)),
+    isGroup: Boolean(toOptionalNumber(row.is_group)),
+    modified: typeof row.modified === 'string' ? row.modified : null,
+    name: String(row.name ?? ''),
+    parentWarehouse:
+      typeof row.parent_warehouse === 'string' && row.parent_warehouse.trim()
+        ? row.parent_warehouse
+        : null,
+    pin: typeof row.pin === 'string' && row.pin.trim() ? row.pin : null,
+    state: typeof row.state === 'string' && row.state.trim() ? row.state : null,
+    warehouseName: String(row.warehouse_name ?? row.name ?? ''),
   };
 }
 
@@ -972,6 +1026,100 @@ export async function setUomDisabled(uom: string, disabled: boolean) {
     payload: { disabled: disabled ? 1 : 0, uom },
     successMessage: disabled ? '单位已停用' : '单位已启用',
     transform: mapMutationUom,
+  });
+}
+
+function mapMutationWarehouse(raw: unknown) {
+  return mapWarehouse(readObject(raw));
+}
+
+export async function listWarehouses(
+  options: ListOptions & { company?: string; isGroup?: boolean | 0 | 1 | 'all' } = {},
+) {
+  const result = await callGatewayMethod<unknown>(
+    'list_warehouses_v2',
+    compactPayload({
+      company: toOptionalText(options.company),
+      disabled: options.disabled,
+      is_group: options.isGroup === 'all' ? undefined : options.isGroup,
+      limit: options.limit ?? 80,
+      search_key: toOptionalText(options.searchKey),
+      start: options.start ?? 0,
+    }),
+  );
+  return pageResult(result.data, mapWarehouse);
+}
+
+export async function createWarehouse(payload: SaveWarehousePayload) {
+  return runGatewayMutation<WarehouseSummary>('create_warehouse_v2', {
+    payload: compactPayload({
+      address_line_1: toOptionalText(payload.addressLine1),
+      address_line_2: toOptionalText(payload.addressLine2),
+      city: toOptionalText(payload.city),
+      company: payload.company,
+      disabled: payload.disabled ? 1 : 0,
+      is_group: payload.isGroup ? 1 : 0,
+      parent_warehouse: toOptionalText(payload.parentWarehouse),
+      pin: toOptionalText(payload.pin),
+      state: toOptionalText(payload.state),
+      warehouse_name: payload.warehouseName,
+    }),
+    successMessage: '仓库已创建',
+    transform: mapMutationWarehouse,
+  });
+}
+
+export async function updateWarehouse(
+  warehouse: string,
+  payload: Partial<SaveWarehousePayload>,
+) {
+  const updatePayload: Record<string, unknown> = { warehouse };
+  if (payload.addressLine1 !== undefined) {
+    updatePayload.address_line_1 = payload.addressLine1 ?? '';
+  }
+  if (payload.addressLine2 !== undefined) {
+    updatePayload.address_line_2 = payload.addressLine2 ?? '';
+  }
+  if (payload.city !== undefined) {
+    updatePayload.city = payload.city ?? '';
+  }
+  if (payload.company !== undefined) {
+    updatePayload.company = payload.company;
+  }
+  if (payload.disabled !== undefined) {
+    updatePayload.disabled = payload.disabled ? 1 : 0;
+  }
+  if (payload.isGroup !== undefined) {
+    updatePayload.is_group = payload.isGroup ? 1 : 0;
+  }
+  if (payload.parentWarehouse !== undefined) {
+    updatePayload.parent_warehouse = payload.parentWarehouse ?? '';
+  }
+  if (payload.pin !== undefined) {
+    updatePayload.pin = payload.pin ?? '';
+  }
+  if (payload.state !== undefined) {
+    updatePayload.state = payload.state ?? '';
+  }
+  if (payload.warehouseName !== undefined) {
+    updatePayload.warehouse_name = payload.warehouseName;
+  }
+
+  return runGatewayMutation<WarehouseSummary>('update_warehouse_v2', {
+    payload: updatePayload,
+    successMessage: '仓库已更新',
+    transform: mapMutationWarehouse,
+  });
+}
+
+export async function setWarehouseDisabled(
+  warehouse: string,
+  disabled: boolean,
+) {
+  return runGatewayMutation<WarehouseSummary>('disable_warehouse_v2', {
+    payload: { disabled: disabled ? 1 : 0, warehouse },
+    successMessage: disabled ? '仓库已停用' : '仓库已启用',
+    transform: mapMutationWarehouse,
   });
 }
 

@@ -50,6 +50,7 @@ export default {
   'menu.master-data.customers': '客户',
   'menu.master-data.suppliers': '供应商',
   'menu.master-data.uoms': '计量单位',
+  'menu.master-data.warehouses': '仓库',
   'menu.exception.403': '403',
   'menu.exception.404': '404',
   'menu.exception.500': '500',

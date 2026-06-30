@@ -282,6 +282,11 @@ export default [
         name: 'uoms',
         component: './MasterData/Uoms',
       },
+      {
+        path: '/master-data/warehouses',
+        name: 'warehouses',
+        component: './MasterData/Warehouses',
+      },
     ],
   },
   {
