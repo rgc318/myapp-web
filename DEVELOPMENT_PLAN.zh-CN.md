@@ -37,7 +37,7 @@
 - 已完成 `auth-storage`、`auth`、`api-client`、`gateway`、`media-url` 基础文件。
 - 已接入 JWT 登录、当前用户恢复、登出和业务请求 Bearer Token。
 - 已移除模板请求拦截器中的 `?token=123` 行为。
-- 已配置 dev proxy 指向本地 Frappe 的 `/api/method/`。
+- 已配置 dev proxy 指向本地 Frappe 的 `/api/method/` 和 `/files/`。
 - 已新增 `.env.example`，本地 `.env.local` 用于开发账号自动填充，不提交。
 - 已修复一次登录页停在 `正在加载资源` 的问题：认证接口不再依赖 Umi request，避免启动期循环依赖；必要时清理 `src/.umi` 和 `node_modules/.cache` 后重启 dev server。
 - 已补充本地端口排障：固定 `8001` 时应使用 `npm run start:dev -- --port 8001`，并以启动日志 `App listening at` 为准。
@@ -174,6 +174,9 @@ UI 规范：
 - 已新增 `/sales/orders/:name/edit` 销售订单编辑页，复用商品选择、Link 选择和销售订单行编辑组件，接入 `update_order_v2` 和 `update_order_items_v2`。
 - 已新增 `/sales/returns/new` 销售退货页，支持基于销售发货单或销售发票读取可退明细并提交独立退货单。
 - 已新增 `/sales/orders/:name` 销售订单详情。
+- 销售订单新建页已补聚合校验，保存时会一次性提示客户、公司、日期和商品明细等缺失项。
+- 销售发票详情已在 service 层过滤异常收款表头行，避免收款历史表格重复显示表头。
+- 销售发货单详情“前往开票”继续通过来源订单 `?action=invoice` 打开开票流程，并已优化提示文案。
 - 已新增 `src/services/myapp/sales.ts`，对 `search_sales_orders_v2`、`get_customer_sales_context`、`create_order_v2`、`quick_create_order_v2`、`update_order_v2`、`update_order_items_v2`、`get_return_source_context_v2`、`process_sales_return`、`get_sales_order_detail`、`get_delivery_note_detail_v2` 和 `get_sales_invoice_detail_v2` 做页面侧字段规范化。
 - 已新增 `src/components/RemoteLinkSelect.tsx`、`src/components/ProductSelect.tsx` 和 `src/components/SalesOrderLinesTable.tsx`，供销售、采购、退货、编辑等页面复用。
 - 已新增 `src/utils/sales-order-editor.ts`，沉淀销售订单行、批发 / 零售单位和价格、单位换算和金额合计逻辑。
@@ -378,7 +381,7 @@ UI 规范：
 
 - 已新增 `src/services/myapp/master-data.ts`。
 - 已覆盖商品、客户、供应商和 UOM 的列表/详情查询模型，可支撑后续商品查询页和筛选选择器。
-- 已新增 `/master-data/products` 商品列表，并接入关键词 / 公司 / 仓库 / 状态 / 分类 / 品牌 / 仅有库存筛选、新增、编辑、启用、停用、批量启停、批量修改分类 / 品牌、当前筛选结果 CSV 导出、图片上传、图片替换和图片删除；商品详情页已支持多条码列表、新增条码、删除条码和设置主条码。
+- 已新增 `/master-data/products` 商品列表，并接入关键词 / 公司 / 仓库 / 状态 / 分类 / 品牌 / 仅有库存筛选、新增、编辑、启用、停用、批量启停、批量修改分类 / 品牌、当前筛选结果 CSV 导出、图片上传、图片替换和图片删除；商品详情页已支持多条码列表、新增条码、删除条码和设置主条码。商品图片显示已补 `/files/` dev proxy 和 URL 版本参数，避免后端已返回图片但前端不显示或继续读取旧缓存。
 - 已新增 `/master-data/customers` 客户治理第一版，并接入关键词 / 状态 / 分组筛选、新增、编辑、启用、停用、详情抽屉、主联系人 / 主地址维护、最近使用地址展示、默认价格表、付款条款、税号、税务类别、当前筛选结果 CSV 导出和 CSV 批量导入。
 - 已新增 `/master-data/suppliers` 供应商治理第一版，并接入关键词 / 状态 / 分组筛选、新增、编辑、启用、停用、详情抽屉、主联系人 / 主地址维护、最近使用地址展示、默认价格表、付款条款、税号、税务类别、当前筛选结果 CSV 导出和 CSV 批量导入。
 - 已新增 `/master-data/uoms` 计量单位列表，并接入关键词 / 状态筛选、新增、编辑、启用和停用。

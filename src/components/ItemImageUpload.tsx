@@ -41,6 +41,10 @@ export const ItemImageUpload: React.FC<{
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  React.useEffect(() => {
+    setPreviewUrl(value ?? '');
+  }, [value]);
+
   const uploadProps: UploadProps = {
     accept: 'image/*',
     beforeUpload: async (file) => {
@@ -113,7 +117,7 @@ export const ItemImageUpload: React.FC<{
           无图片
         </div>
       )}
-      <Space direction="vertical">
+      <Space orientation="vertical">
         <Upload {...uploadProps}>
           <Button
             disabled={disabled || deleting}

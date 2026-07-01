@@ -707,7 +707,7 @@ const WarehousesPage: React.FC = () => {
       search: false,
       width: 220,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <span>{record.name}</span>
           {record.warehouseName && record.warehouseName !== record.name ? (
             <span style={{ color: '#8c8c8c' }}>{record.warehouseName}</span>
@@ -907,7 +907,7 @@ const WarehousesPage: React.FC = () => {
         title="批量导入仓库"
         width={1040}
       >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Alert
             message="CSV 导入按行执行；导入动作为 create 时创建仓库，为 update 时按仓库编码更新仓库。"
             showIcon

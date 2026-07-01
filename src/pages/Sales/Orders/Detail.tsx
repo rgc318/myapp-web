@@ -1056,7 +1056,7 @@ const SalesOrderDetailPage: React.FC = () => {
     }
     Modal.info({
       content: (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           {returnSourceOptions.map((source) => (
             <Button
               block
@@ -1085,7 +1085,7 @@ const SalesOrderDetailPage: React.FC = () => {
     }
     Modal.info({
       content: (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           {returnInvoiceNames.map((name) => (
             <Button
               block
@@ -1335,7 +1335,7 @@ const SalesOrderDetailPage: React.FC = () => {
                           return {
                             color: timelineColor(event),
                             children: (
-                              <Space direction="vertical" size={4}>
+                              <Space orientation="vertical" size={4}>
                                 <Space wrap>
                                   <Typography.Text strong>
                                     {event.title || event.type}

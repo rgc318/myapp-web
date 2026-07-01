@@ -251,7 +251,7 @@ const PurchaseOrderEditPage: React.FC = () => {
       ]}
       title={`编辑采购订单 ${orderName}`}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="保存会先更新订单日期、交货日期、供应商单号和备注，再替换商品明细；已收货或已开票订单可能被后端拒绝编辑。"
           showIcon

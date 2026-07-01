@@ -234,7 +234,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
               : data.cancelSalesInvoiceHint ||
                 '作废后，这张发票将从订单结算链路中移除。如需重新开票，请回到来源订单或发货链路继续处理。'
           }
-          message="作废销售发票会影响结算链路"
+          title="作废销售发票会影响结算链路"
           showIcon
           type="warning"
         />
@@ -339,7 +339,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
@@ -350,7 +350,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
             description={
               error instanceof Error ? error.message : '请稍后重试。'
             }
-            message="销售发票详情加载失败"
+            title="销售发票详情加载失败"
             showIcon
             type="error"
           />
@@ -429,7 +429,11 @@ const SalesInvoiceDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProTable<SalesInvoicePaymentEntry>
                     columns={paymentEntryColumns}
                     dataSource={data.paymentEntries}
@@ -489,7 +493,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                         ) : null
                       }
                       description={paymentStatusHint(data)}
-                      message={cancelled ? '这是一张历史发票' : '当前结算状态'}
+                      title={cancelled ? '这是一张历史发票' : '当前结算状态'}
                       showIcon
                       type={
                         cancelled
@@ -504,7 +508,11 @@ const SalesInvoiceDetailPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="基本信息">
                     <ProDescriptions column={1} dataSource={data}>
                       <ProDescriptions.Item label="公司" dataIndex="company" />
@@ -637,7 +645,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                             : data.cancelSalesInvoiceHint ||
                               '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
                         }
-                        message="发票回退前请确认收款状态"
+                        title="发票回退前请确认收款状态"
                         showIcon
                         type="warning"
                       />

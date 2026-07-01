@@ -73,7 +73,7 @@ export function SalesOrderLinesTable({
               无图
             </div>
           )}
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">
               {record.itemCode}
@@ -190,7 +190,7 @@ export function SalesOrderLinesTable({
           record.stockUomDisplay,
         );
         return (
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text>
               {formatQty(record.stockQty)} {stockUomDisplay}
             </Typography.Text>

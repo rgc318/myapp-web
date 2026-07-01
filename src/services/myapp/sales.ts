@@ -505,8 +505,12 @@ function normalizeSalesInvoicePaymentEntries(value: unknown) {
     ? value
         .map((entry) => {
           const row = readObject(entry);
-          const paymentEntry = String(row.payment_entry ?? '');
-          if (!paymentEntry) {
+          const paymentEntry = String(row.payment_entry ?? '').trim();
+          if (
+            !paymentEntry ||
+            paymentEntry === '收款单' ||
+            paymentEntry === 'Payment Entry'
+          ) {
             return null;
           }
           return {

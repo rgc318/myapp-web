@@ -31,6 +31,12 @@ export type UploadItemImagePayload = {
 function mapUploadedItemImage(value: unknown): UploadedItemImage {
   const data = readObject(value);
   const fileUrl = typeof data.file_url === 'string' ? data.file_url : '';
+  const mediaVersion =
+    typeof data.file_id === 'string'
+      ? data.file_id
+      : typeof data.modified === 'string'
+        ? data.modified
+        : null;
   return {
     attachedToDoctype:
       typeof data.attached_to_doctype === 'string'
@@ -41,7 +47,7 @@ function mapUploadedItemImage(value: unknown): UploadedItemImage {
     fileId: typeof data.file_id === 'string' ? data.file_id : null,
     fileName: typeof data.file_name === 'string' ? data.file_name : null,
     fileUrl,
-    previewUrl: resolveMediaUrl(fileUrl),
+    previewUrl: resolveMediaUrl(fileUrl, { version: mediaVersion }),
     isPrivate: Boolean(data.is_private),
     storageProvider:
       typeof data.storage_provider === 'string' ? data.storage_provider : null,

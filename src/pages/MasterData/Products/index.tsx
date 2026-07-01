@@ -1188,7 +1188,7 @@ const ProductsPage: React.FC = () => {
         title="批量导入商品"
         width={1040}
       >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Alert
             message="CSV 导入按行执行；导入动作为 create 时创建商品，为 update 时按商品编码更新商品。"
             showIcon

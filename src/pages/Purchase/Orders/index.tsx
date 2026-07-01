@@ -182,7 +182,7 @@ const PurchaseOrdersPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <ProCard split="vertical">
           <ProCard>
             <Statistic title="未完成" value={summary?.unfinishedCount ?? 0} />

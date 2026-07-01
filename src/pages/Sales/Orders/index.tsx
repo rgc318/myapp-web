@@ -344,7 +344,7 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
           ) : null,
         ].filter(Boolean);
         return riskTags.length ? (
-          <Space direction="vertical" size={2}>
+          <Space orientation="vertical" size={2}>
             {riskTags}
           </Space>
         ) : (
@@ -676,7 +676,7 @@ const SalesOrdersPage: React.FC = () => {
       ]}
     >
       {contextHolder}
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Card
           styles={{
             body: {
@@ -775,7 +775,7 @@ const SalesOrdersPage: React.FC = () => {
             emptyText: (
               <Empty
                 description={
-                  <Space direction="vertical" size={4}>
+                  <Space orientation="vertical" size={4}>
                     <Typography.Text>当前筛选条件下暂无订单</Typography.Text>
                     <Typography.Text type="secondary">
                       可以切换到全部状态并清空筛选

@@ -215,7 +215,7 @@ const SalesReturnNewPage: React.FC = () => {
       title: '商品',
       width: 240,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{record.itemName}</Typography.Text>
           <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
           {record.specification ? (
@@ -298,7 +298,7 @@ const SalesReturnNewPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="退货会基于销售发货单或销售发票创建独立退货单；来源发票已收款时，退货后需继续核对客户退款。"
           showIcon
@@ -407,7 +407,11 @@ const SalesReturnNewPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProTable<ReturnLine>
                     columns={columns}
                     dataSource={lines}
@@ -509,7 +513,11 @@ const SalesReturnNewPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="来源信息">
                     <ProDescriptions column={1} dataSource={context}>
                       <ProDescriptions.Item label="来源单据">
@@ -557,7 +565,7 @@ const SalesReturnNewPage: React.FC = () => {
 
                   <ProCard title="提交退货">
                     <Space
-                      direction="vertical"
+                      orientation="vertical"
                       size={12}
                       style={{ width: '100%' }}
                     >

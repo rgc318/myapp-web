@@ -169,7 +169,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
@@ -180,7 +180,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
             description={
               error instanceof Error ? error.message : '请稍后重试。'
             }
-            message="销售发货单详情加载失败"
+            title="销售发货单详情加载失败"
             showIcon
             type="error"
           />
@@ -217,7 +217,11 @@ const DeliveryNoteDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProTable<SalesOrderDetailItem>
                     columns={itemColumns}
                     dataSource={data.items}
@@ -234,7 +238,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
                     {cancelled ? (
                       <Alert
                         description="当前发货单已经作废，库存和订单履约状态通常已经回退。建议返回来源订单查看最新状态；如需继续开票或发货，应基于仍然有效的订单链路重新处理。"
-                        message="这是一张历史发货单"
+                        title="这是一张历史发货单"
                         showIcon
                         type="warning"
                       />
@@ -250,7 +254,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
                           </Button>
                         }
                         description="这张发货单已经关联销售发票，后续收款、发票作废或退款核对建议从发票详情继续处理。"
-                        message="发货已进入开票链路"
+                        title="发货已进入开票链路"
                         showIcon
                         type="success"
                       />
@@ -267,15 +271,15 @@ const DeliveryNoteDetailPage: React.FC = () => {
                             </Link>
                           </Button>
                         }
-                        description="当前发货单还没有关联销售发票。Web 端仍以销售订单作为开票来源，可回到订单详情并直接打开创建销售发票流程。"
-                        message="下一步建议创建销售发票"
+                        description="当前发货单还没有关联销售发票。点击后会进入来源订单并直接打开创建销售发票流程。"
+                        title="下一步建议创建销售发票"
                         showIcon
                         type="info"
                       />
                     ) : (
                       <Alert
                         description="当前发货单没有返回订单或发票的关联信息，请先核对单据来源。"
-                        message="缺少上游关联"
+                        title="缺少上游关联"
                         showIcon
                         type="warning"
                       />
@@ -285,7 +289,11 @@ const DeliveryNoteDetailPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="基本信息">
                     <ProDescriptions column={1} dataSource={data}>
                       <ProDescriptions.Item label="公司" dataIndex="company" />
@@ -361,7 +369,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
                           data.cancelDeliveryNoteHint ||
                           '如需回退这张发货单，系统会恢复库存并把订单履约状态退回到待发货。若已经开票，请先处理下游销售发票。'
                         }
-                        message="发货单作废会影响库存和订单履约状态"
+                        title="发货单作废会影响库存和订单履约状态"
                         showIcon
                         type="warning"
                       />

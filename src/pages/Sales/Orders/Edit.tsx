@@ -330,7 +330,7 @@ const SalesOrderEditPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="保存会先更新订单日期、交付日期、销售模式和收货信息，再替换商品明细；已发货或已开票订单可能被后端拒绝编辑。"
           showIcon

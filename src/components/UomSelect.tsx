@@ -55,7 +55,7 @@ export function UomSelect({
       filterOption={false}
       loading={fetching}
       onChange={(nextValue) => onChange?.(nextValue)}
-      onDropdownVisibleChange={(open) => {
+      onOpenChange={(open) => {
         if (open && !options.length) {
           void loadOptions();
         }

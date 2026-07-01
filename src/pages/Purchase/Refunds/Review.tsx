@@ -125,7 +125,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <InputNumber
             addonBefore="退款金额"
             defaultValue={refundAmount}
@@ -225,7 +225,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="本页用于核对采购退货后的供应商退款，可基于采购退货发票登记退款，也可在需要时回退原付款。"
           showIcon
@@ -360,7 +360,11 @@ const PurchaseRefundReviewPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="退款核对">
                     <ProDescriptions column={2} dataSource={data}>
                       <ProDescriptions.Item label="采购发票" dataIndex="name" />
@@ -452,7 +456,11 @@ const PurchaseRefundReviewPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="处理建议">
                     <Typography.Paragraph style={{ marginBottom: 0 }}>
                       供应商退款应以采购退货发票为依据登记。若只是原付款登记错误，优先回退付款；若供应商实际退回资金，则登记供应商退款并保留对应凭证。
@@ -523,7 +531,7 @@ const PurchaseRefundReviewPage: React.FC = () => {
                   </ProCard>
 
                   <ProCard title="回退动作">
-                    <Space direction="vertical" style={{ width: '100%' }}>
+                    <Space orientation="vertical" style={{ width: '100%' }}>
                       <Button
                         block
                         disabled={!refundContext?.actions.canCreateRefund}

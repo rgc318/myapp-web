@@ -85,7 +85,7 @@ function buildColumns(
       dataIndex: 'name',
       width: 180,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Link to={record.detailPath}>{record.name}</Link>
           <Typography.Text type="secondary">
             {record.postingDate || '-'}
@@ -106,7 +106,7 @@ function buildColumns(
       search: false,
       ellipsis: true,
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text>
             {record.partyName || record.party || '-'}
           </Typography.Text>

@@ -197,7 +197,7 @@ const PurchaseReturnNewPage: React.FC = () => {
     {
       dataIndex: 'itemName',
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{record.itemName}</Typography.Text>
           <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
           {record.specification ? (
@@ -282,7 +282,7 @@ const PurchaseReturnNewPage: React.FC = () => {
       ]}
       title="采购退货"
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="退货会基于采购收货单或采购发票创建独立退货单；来源发票已付款时，退货后需继续核对供应商退款或应付回退。"
           showIcon

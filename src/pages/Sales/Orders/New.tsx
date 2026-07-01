@@ -40,6 +40,12 @@ import {
 } from '@/utils/sales-order-editor';
 
 const today = dayjs();
+const requiredFieldLabels: Record<string, string> = {
+  company: '公司',
+  customer: '客户',
+  deliveryDate: '交货日期',
+  transactionDate: '订单日期',
+};
 
 type FormValues = {
   company: string;
@@ -130,9 +136,24 @@ const SalesOrderNewPage: React.FC = () => {
   };
 
   const submitOrder = async (quick: boolean) => {
-    const values = await form.validateFields();
+    let values: FormValues | undefined;
+    const missingItems = new Set<string>();
+    try {
+      values = await form.validateFields();
+    } catch (error) {
+      const errorFields =
+        (error as { errorFields?: { name: (string | number)[] }[] })
+          .errorFields ?? [];
+      errorFields.forEach((field) => {
+        const fieldName = String(field.name[0] ?? '');
+        missingItems.add(requiredFieldLabels[fieldName] ?? fieldName);
+      });
+    }
     if (!lines.length) {
-      message.warning('请先选择商品');
+      missingItems.add('商品明细');
+    }
+    if (!values || missingItems.size) {
+      message.error(`请先补充：${Array.from(missingItems).join('、')}`);
       return;
     }
 
@@ -186,9 +207,9 @@ const SalesOrderNewPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="当前已接入销售订单 v2 创建接口；快捷下单会同时创建发货单和销售发票。"
+          title="当前已接入销售订单 v2 创建接口；快捷下单会同时创建发货单和销售发票。"
           showIcon
           type="info"
         />

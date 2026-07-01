@@ -100,7 +100,7 @@ export function PurchaseOrderLinesTable({
     {
       dataIndex: 'itemName',
       render: (_, record) => (
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text strong>{record.itemName}</Typography.Text>
           <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
           {record.specification ? (
@@ -201,7 +201,7 @@ export function PurchaseOrderLinesTable({
             ? currentWarehouseStock + (stockQty ?? 0)
             : null;
         return (
-          <Space direction="vertical" size={0}>
+          <Space orientation="vertical" size={0}>
             <Typography.Text>
               当前仓 {formatQty(currentWarehouseStock)} {stockUomDisplay}
             </Typography.Text>
@@ -260,7 +260,7 @@ export function PurchaseOrderLinesTable({
   }
 
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
       {groupedLines.map((group, index) => {
         const leadRow = group.rows[0];
         const stockUomDisplay = resolveUomDisplay(
@@ -304,7 +304,7 @@ export function PurchaseOrderLinesTable({
                 padding: '12px 16px',
               }}
             >
-              <Space direction="vertical" size={2}>
+              <Space orientation="vertical" size={2}>
                 <Space wrap>
                   <Typography.Text strong>
                     {group.itemName || group.itemCode}

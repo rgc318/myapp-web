@@ -73,7 +73,7 @@ export function WorkspacePreferenceButton() {
           layout="vertical"
           onFinish={submit}
         >
-          <Space direction="vertical" size={0} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={0} style={{ width: '100%' }}>
             <Form.Item label="默认公司" name="defaultCompany">
               <RemoteLinkSelect doctype="Company" placeholder="搜索公司" />
             </Form.Item>

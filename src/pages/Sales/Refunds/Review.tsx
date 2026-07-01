@@ -373,7 +373,7 @@ const SalesRefundReviewPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="本页用于退货后核对来源发票收款状态，并基于已提交的退货发票登记正式客户退款。取消最近收款仅用于需要回退原收款凭证的场景。"
           showIcon
@@ -541,7 +541,11 @@ const SalesRefundReviewPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard
                     extra={
                       returnInvoiceName ? (
@@ -565,7 +569,7 @@ const SalesRefundReviewPage: React.FC = () => {
                         layout="vertical"
                       >
                         <Space
-                          direction="vertical"
+                          orientation="vertical"
                           size={16}
                           style={{ width: '100%' }}
                         >
@@ -798,7 +802,11 @@ const SalesRefundReviewPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="处理建议">
                     <Alert
                       description={refundReviewTone(data).description}
@@ -866,7 +874,7 @@ const SalesRefundReviewPage: React.FC = () => {
 
                   <ProCard title="回退处理">
                     <Space
-                      direction="vertical"
+                      orientation="vertical"
                       size={12}
                       style={{ width: '100%' }}
                     >

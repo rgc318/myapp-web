@@ -197,7 +197,7 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <ProCard>
           <Statistic title="匹配单据" value={totalCount} />
         </ProCard>

@@ -59,7 +59,7 @@ export function PaymentModeSelect({
         setSelectedValue(normalizedValue);
         onChange(normalizedValue);
       }}
-      onDropdownVisibleChange={(open) => {
+      onOpenChange={(open) => {
         if (open && !options.length) {
           void loadOptions();
         }

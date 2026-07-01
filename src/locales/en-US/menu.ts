@@ -44,6 +44,7 @@ export default {
   'menu.inventory.adjustments': 'Stock Adjustment',
   'menu.inventory.counts': 'Stock Counts',
   'menu.inventory.ledger': 'Stock Ledger',
+  'menu.inventory.transfers': 'Stock Transfers',
   'menu.inventory-ledger': 'Stock Ledger',
   'menu.master-data': 'Master Data',
   'menu.master-data.products': 'Products',

@@ -171,7 +171,7 @@ const PurchaseOrderNewPage: React.FC = () => {
       ]}
       title="新建采购订单"
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
           message="当前已接入采购订单创建接口；快捷采购会同时创建采购收货和采购发票。"
           showIcon

@@ -285,6 +285,7 @@ function mapProduct(row: Record<string, any>): ProductSummary {
         : typeof row.image_url === 'string'
           ? row.image_url
           : '',
+      { version: typeof row.modified === 'string' ? row.modified : null },
     ),
     isPurchaseItem:
       row.is_purchase_item === undefined || row.is_purchase_item === null

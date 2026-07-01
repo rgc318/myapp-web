@@ -201,7 +201,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <InputNumber
             autoFocus
             controls={false}
@@ -305,7 +305,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
@@ -375,7 +375,11 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProTable<PurchaseDocumentItem>
                     columns={itemColumns}
                     dataSource={data.items}
@@ -437,7 +441,11 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
               </ProCard>
 
               <ProCard colSpan="35%">
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={16}
+                  style={{ width: '100%' }}
+                >
                   <ProCard title="基本信息">
                     <ProDescriptions column={1} dataSource={data}>
                       <ProDescriptions.Item

@@ -617,7 +617,7 @@ const ProductDetailPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error ? (
           <Alert
             action={
@@ -693,7 +693,7 @@ const ProductDetailPage: React.FC = () => {
                 const score = qualityScore(issues);
                 return (
                   <Space
-                    direction="vertical"
+                    orientation="vertical"
                     size={12}
                     style={{ width: '100%' }}
                   >
@@ -728,7 +728,7 @@ const ProductDetailPage: React.FC = () => {
                     </Space>
                     {issues.length ? (
                       <Space
-                        direction="vertical"
+                        orientation="vertical"
                         size={8}
                         style={{ width: '100%' }}
                       >
@@ -823,7 +823,7 @@ const ProductDetailPage: React.FC = () => {
             </ProCard>
 
             <ProCard extra={<Tag>{data.barcodes.length} 条</Tag>} title="条码">
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={12} style={{ width: '100%' }}>
                 <Form<BarcodeFormValues>
                   form={barcodeForm}
                   layout="inline"
@@ -857,7 +857,11 @@ const ProductDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard title="价格">
-                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                <Space
+                  orientation="vertical"
+                  size={12}
+                  style={{ width: '100%' }}
+                >
                   <ProDescriptions column={2}>
                     <ProDescriptions.Item label="当前价格表">
                       {data.priceSummary?.currentPriceList || '-'}

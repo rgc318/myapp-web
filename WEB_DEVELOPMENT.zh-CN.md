@@ -66,10 +66,12 @@
 
 - `[React Intl] Missing message: "menu.xxx"`：不会阻止渲染，但应补齐 `src/locales/zh-CN/menu.ts` 和 `src/locales/en-US/menu.ts`，避免菜单和页面标题 fallback。
 - Ant Design / ProComponents `deprecated` 告警：短期不影响功能，但新开发代码应使用新版 API。例如 `Dropdown` 使用 `classNames.root`，`Space` 使用 `orientation`，`Statistic` 样式使用 `styles.content`，不要继续新增旧属性。
+- 当前已完成第一批控制台噪音清理：库存转仓菜单国际化已补齐，`Select onDropdownVisibleChange` 已替换为 `onOpenChange`，AntD `Space direction` 已统一迁移为 `orientation`，销售联调涉及页面的 `Alert message` 已迁移为 `title`。
 
 开发环境建议：
 
 - 固定端口优先使用 `npm run start:dev -- --port 8001`。
+- Frappe 文件服务返回的 `/files/...` 需要通过 dev proxy 转发到后端；`config/proxy.ts` 已为 `dev/test/pre` 配置 `/files/`。修改 proxy 后必须重启 dev server。
 - 不要同时启动多个 Umi dev server 指向同一个工作区；并发 dev/build 容易造成 `.umi`、chunk manifest 和浏览器缓存不一致。
 - 如果出现旧 chunk 或 `.umi/exports` 解析问题，先停止多余 dev server，再执行：
 
@@ -487,11 +489,13 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - 后端返回完整 `https://...` 时直接使用
 - 后端返回 `/files/...` 或 `/private/files/...` 时拼接 API base URL
+- 开发环境同域 `/files/...` 依赖 `config/proxy.ts` 的 `/files/` 代理到 Frappe；如果图片接口成功但页面不显示，先确认 dev server 已重启并命中该代理。
 - 不在页面中假设存储一定是 ERPNext 本地文件
 - 不在页面中直接拼 OSS/S3/MinIO 地址
+- 商品详情图片 URL 使用商品 `modified` 作为 `resolveMediaUrl(..., { version })` 参数；图片上传 / 替换返回的预览 URL 使用 `file_id` 作为版本参数，避免替换同一路径图片后浏览器继续读取旧缓存。
 - 以后接入云存储时，应由后端 `media_service` 保持字段兼容
 
-建议提供 `resolveMediaUrl(value, { version })` 工具，参考 `frontend/myapp-mobile/lib/media-url.ts`。
+当前 Web 已提供 `resolveMediaUrl(value, { version })` 工具，参考 `frontend/myapp-mobile/lib/media-url.ts`。
 
 ## 6. 页面与接口映射
 
@@ -642,6 +646,9 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - `/sales/delivery-notes/:name` 已接入销售发货单详情、金额 / 数量汇总、收货信息、关联销售订单 / 销售发票和商品明细，并支持取消发货单；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示商品明细和后续处理，右侧展示单据属性、关联单据、收货信息和回退动作；详情页需要展示“后续处理 / 历史单据说明”，已开票时引导查看销售发票，未开票且有关联订单时引导返回订单详情并通过 `?action=invoice` 进入开票动作。
 - `/sales/invoices` 已接入销售发票列表，支持关键词、公司、日期、单据状态、排序和分页。
 - `/sales/invoices/:name` 已接入销售发票详情、金额 / 收款汇总、收款历史、收款信息、关联销售订单 / 发货单和商品明细，并支持取消销售发票和取消最近收款；详情页应沿用销售订单详情的 Ant Design Pro 风格：顶部 KPI，中间主区域展示收款历史和商品明细，右侧展示单据属性、关联单据、结算信息和回退动作；详情页需要展示“流程承接 / 历史单据说明”，有未收金额时引导返回订单详情并通过 `?action=payment` 进入收款动作，已结清时引导查看发货单或打印留档。收款历史来自 `get_sales_invoice_detail_v2.payment.entries[]`，应展示每笔收款的收款单号、日期、付款方式、核销金额、实收金额、差额核销、多收保留和参考号，收款单号应链接到 `/payments/<收付款单号>`。
+- `/sales/orders/new` 保存时应聚合表单必填项和商品明细校验；客户、公司、日期和商品明细等缺失项应一次性提示，不要让用户逐项试错。
+- `/sales/invoices/:name` 收款历史在 service 层会过滤误混入的表头行，例如 `payment_entry = 收款单 / Payment Entry`，避免后端异常数据导致表格表头重复显示。
+- `/sales/delivery-notes/:name` 未开票且有关联订单时，“前往开票”仍跳转来源订单 `?action=invoice` 并直接打开创建销售发票流程；页面文案应明确该动作会进入来源订单开票。
 - 销售订单、销售发货单和销售发票详情页已接入打印预览和 PDF 下载。
 - `/sales/returns/new` 已接入销售退货，支持基于销售发货单或销售发票读取可退明细、填写本次退货数量、提交独立退货单，并在来源发票退货后提示核对客户退款；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退货明细和提交结果，右侧展示来源信息、后续处理和提交动作。
 - `/sales/refunds/review` 已接入销售退款核对和客户退款登记，支持读取来源销售发票收款状态、收款历史、查看退货发票，并通过 `get_customer_refund_context_v1` 读取可退金额、已退金额、退款历史和动作权限，再基于已提交的退货发票调用 `create_customer_refund` 创建正式退款 `Payment Entry`；页面结构沿用销售详情页的 Ant Design Pro 风格：顶部 KPI，中间主区域展示退款登记、客户退款历史和来源发票收款历史，右侧展示处理建议、退货 / 来源发票关系、来源发票核对和回退动作；取消最近收款仅用于需要回退原收款凭证的场景。
@@ -989,7 +996,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 当前页面：
 
-- `/master-data/products` 已接入商品列表，支持关键词、公司、仓库、状态、分类、品牌和仅有库存筛选，支持库存 / 价格摘要展示、新增、编辑、启用、停用、批量启停、批量修改分类 / 品牌、当前筛选结果 CSV 导出、图片上传、图片替换和图片删除；商品详情页已支持多条码列表、新增条码、删除条码和设置主条码。
+- `/master-data/products` 已接入商品列表，支持关键词、公司、仓库、状态、分类、品牌和仅有库存筛选，支持库存 / 价格摘要展示、新增、编辑、启用、停用、批量启停、批量修改分类 / 品牌、当前筛选结果 CSV 导出、图片上传、图片替换和图片删除；商品详情页已支持多条码列表、新增条码、删除条码和设置主条码。商品图片显示必须通过 `resolveMediaUrl`，并使用版本参数规避浏览器缓存。
 - `/master-data/customers` 已接入客户治理第一版，支持关键词 / 状态 / 分组筛选、分页查询、新增、编辑、启用、停用、详情抽屉、主联系人 / 主地址维护、最近使用地址展示、默认价格表、付款条款、税号、税务类别、当前筛选结果 CSV 导出和 CSV 批量导入。
 - `/master-data/suppliers` 已接入供应商治理第一版，支持关键词 / 状态 / 分组筛选、分页查询、新增、编辑、启用、停用、详情抽屉、主联系人 / 主地址维护、最近使用地址展示、默认价格表、付款条款、税号、税务类别、当前筛选结果 CSV 导出和 CSV 批量导入。
 - `/master-data/uoms` 已接入计量单位列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。

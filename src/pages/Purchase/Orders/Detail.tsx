@@ -306,7 +306,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <DatePicker
             defaultValue={dayjs(postingDate)}
             onChange={(value) => {
@@ -377,7 +377,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Input.TextArea
             autoSize={{ minRows: 2, maxRows: 4 }}
             onChange={(event) => {
@@ -494,7 +494,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <span>
             系统会按顺序回退供应商付款、采购发票和采购收货单。若当前订单存在多张发票、收货单或多笔付款，后端会拒绝快捷回退。
           </span>
@@ -518,7 +518,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
             .join('、');
           Modal.success({
             content: (
-              <Space direction="vertical" size={4}>
+              <Space orientation="vertical" size={4}>
                 <span>
                   {completedSteps
                     ? `已回退：${completedSteps}`
@@ -548,7 +548,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
           message.error(errorMessage);
           Modal.warning({
             content: (
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={12} style={{ width: '100%' }}>
                 <span>{errorMessage}</span>
                 <PurchaseRollbackGuide
                   purchaseInvoices={data.purchaseInvoices}
@@ -591,7 +591,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
     }
     Modal.info({
       content: (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           {returnSourceOptions.map((source) => (
             <Button
               block
@@ -625,7 +625,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
     }
     Modal.info({
       content: (
-        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={8} style={{ width: '100%' }}>
           {invoiceNames.map((name) => (
             <Button
               block
@@ -675,7 +675,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
         />,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={

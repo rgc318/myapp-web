@@ -308,7 +308,7 @@ const InventoryStockPage: React.FC = () => {
         key={defaultCompany}
         expandable={{
           expandedRowRender: (record) => (
-            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={12} style={{ width: '100%' }}>
               <strong>仓库库存</strong>
               {warehouseStockTable(
                 record.itemCode,

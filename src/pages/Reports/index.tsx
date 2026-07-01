@@ -217,7 +217,7 @@ const ReportsPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <ProCard>
           <ProForm<ReportFilters>
             initialValues={filters}
@@ -259,7 +259,7 @@ const ReportsPage: React.FC = () => {
         {report ? (
           <>
             <ProCard>
-              <Space direction="vertical" size={4}>
+              <Space orientation="vertical" size={4}>
                 <Typography.Text type="secondary">统计范围</Typography.Text>
                 <Typography.Title level={4} style={{ margin: 0 }}>
                   {companyLabel}

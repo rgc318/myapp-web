@@ -45,6 +45,7 @@ export default {
   'menu.inventory.adjustments': '库存调整',
   'menu.inventory.counts': '批量盘点',
   'menu.inventory.ledger': '库存流水',
+  'menu.inventory.transfers': '库存转仓',
   'menu.inventory-ledger': '库存流水',
   'menu.master-data': '主数据',
   'menu.master-data.products': '商品',

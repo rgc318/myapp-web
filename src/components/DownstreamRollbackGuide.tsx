@@ -28,7 +28,7 @@ export const SalesRollbackGuide: React.FC<{
   deliveryNotes: string[];
   salesInvoices: string[];
 }> = ({ deliveryNotes, salesInvoices }) => (
-  <Space direction="vertical" size={10} style={{ width: '100%' }}>
+  <Space orientation="vertical" size={10} style={{ width: '100%' }}>
     <Alert
       message="多单据场景请按顺序分步回退：先处理发票详情中的最近收款，再取消销售发票，最后取消销售发货单。"
       showIcon
@@ -60,7 +60,7 @@ export const PurchaseRollbackGuide: React.FC<{
   purchaseInvoices: string[];
   purchaseReceipts: string[];
 }> = ({ purchaseInvoices, purchaseReceipts }) => (
-  <Space direction="vertical" size={10} style={{ width: '100%' }}>
+  <Space orientation="vertical" size={10} style={{ width: '100%' }}>
     <Alert
       message="多单据场景请按顺序分步回退：先处理发票详情中的最近付款，再取消采购发票，最后取消采购收货单。"
       showIcon

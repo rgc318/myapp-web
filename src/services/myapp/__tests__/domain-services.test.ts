@@ -84,6 +84,7 @@ import {
   getCustomerRefundContext,
   getSalesReturnSourceContext,
   getCustomerSalesContext,
+  getSalesInvoiceDetail,
   getSalesOrderDetail,
   quickCancelSalesOrderV2,
   quickCreateSalesOrderV2,
@@ -757,6 +758,45 @@ describe('myapp domain services', () => {
     expect(detail.actions.canCancel).toBe(true);
   });
 
+  it('filters accidental sales invoice payment header rows', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        invoice: {
+          currency: 'CNY',
+          customer: 'CUST-0001',
+          docstatus: 1,
+          document_status: 'submitted',
+          grand_total: 120,
+          name: 'SI-0001',
+          outstanding_amount: 0,
+        },
+        payment: {
+          entries: [
+            {
+              allocated_amount: '核销金额',
+              mode_of_payment: '付款方式',
+              payment_entry: '收款单',
+              posting_date: '收款日期',
+            },
+            {
+              actual_paid_amount: 120,
+              allocated_amount: 120,
+              mode_of_payment: 'Bank',
+              payment_entry: 'PE-0001',
+              posting_date: '2026-06-01',
+            },
+          ],
+        },
+        references: {},
+      },
+    });
+
+    const detail = await getSalesInvoiceDetail('SI-0001');
+
+    expect(detail?.paymentEntries).toHaveLength(1);
+    expect(detail?.paymentEntries[0].paymentEntry).toBe('PE-0001');
+  });
+
   it('maps product list media and totals', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {
@@ -1277,9 +1317,12 @@ describe('myapp domain services', () => {
     expect(uploaded).toMatchObject({
       fileId: 'FILE-001',
       fileUrl: '/files/item.png',
-      previewUrl: 'http://api.example.test/files/item.png',
+      previewUrl: 'http://api.example.test/files/item.png?v=FILE-001',
     });
     expect(replaced.attachedToName).toBe('ITEM-001');
+    expect(replaced.previewUrl).toBe(
+      'http://api.example.test/files/item-new.png?v=FILE-002',
+    );
     expect(deleted.deleted).toBe(true);
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,

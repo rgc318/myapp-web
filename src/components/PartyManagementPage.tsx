@@ -924,7 +924,7 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
         title={`批量导入${partyLabel}`}
         width={1040}
       >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Alert
             message={`CSV 导入按行执行；导入动作为 create 时创建${partyLabel}，为 update 时按${partyLabel}编码更新。`}
             showIcon
@@ -1225,7 +1225,7 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
                 label: '联系人与地址',
                 children: (
                   <Space
-                    direction="vertical"
+                    orientation="vertical"
                     size={16}
                     style={{ width: '100%' }}
                   >

@@ -129,7 +129,7 @@ export function ProductSelect({
                 无图
               </div>
             )}
-            <Space direction="vertical" size={0}>
+            <Space orientation="vertical" size={0}>
               <Typography.Text strong>{productLabel(record)}</Typography.Text>
               {record.nickname && record.itemName !== record.nickname ? (
                 <Typography.Text type="secondary">
@@ -205,7 +205,7 @@ export function ProductSelect({
             warehouse,
           );
           return (
-            <Space direction="vertical" size={0}>
+            <Space orientation="vertical" size={0}>
               <Typography.Text>
                 总库存 {formatQty(totalQty)} {stockUomDisplay}
               </Typography.Text>

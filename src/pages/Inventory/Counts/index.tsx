@@ -414,7 +414,7 @@ const InventoryCountsPage: React.FC = () => {
                 dataIndex: 'itemCode',
                 width: 180,
                 render: (_, record) => (
-                  <Space direction="vertical" size={0}>
+                  <Space orientation="vertical" size={0}>
                     <Typography.Text>{record.itemCode}</Typography.Text>
                     <Typography.Text type="secondary">
                       {record.itemName}

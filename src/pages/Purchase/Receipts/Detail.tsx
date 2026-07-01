@@ -132,7 +132,7 @@ const PurchaseReceiptDetailPage: React.FC = () => {
     Modal.confirm({
       cancelText: '取消',
       content: (
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <DatePicker
             defaultValue={dayjs(dueDate)}
             onChange={(value) => {
@@ -226,7 +226,7 @@ const PurchaseReceiptDetailPage: React.FC = () => {
         </Button>,
       ]}
     >
-      <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         {error && (
           <Alert
             action={
