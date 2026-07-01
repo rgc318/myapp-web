@@ -1845,6 +1845,11 @@ describe('myapp domain services', () => {
         customer_type: 'Company',
         contact_email: 'buyer@example.test',
         contact_phone: '13800000000',
+        default_contact: {
+          display_name: 'ACME',
+          email: 'buyer@example.test',
+          phone: '13800000000',
+        },
         default_currency: 'CNY',
         disabled: 0,
         remarks: '重点客户',
@@ -1861,6 +1866,9 @@ describe('myapp domain services', () => {
         customer_type: 'Company',
         contact_email: '',
         contact_phone: '',
+        default_contact: {
+          display_name: 'ACME Trading',
+        },
         default_currency: '',
         disabled: 0,
         remarks: '',
@@ -1909,6 +1917,11 @@ describe('myapp domain services', () => {
         disabled: 0,
         contact_email: 'seller@example.test',
         contact_phone: '13900000000',
+        default_contact: {
+          display_name: 'Best Supply',
+          email: 'seller@example.test',
+          phone: '13900000000',
+        },
         email_id: 'seller@example.test',
         mobile_no: '13900000000',
         remarks: '常用供应商',
@@ -1926,6 +1939,9 @@ describe('myapp domain services', () => {
         disabled: 0,
         contact_email: '',
         contact_phone: '',
+        default_contact: {
+          display_name: 'Best Supply Ltd',
+        },
         email_id: '',
         mobile_no: '',
         remarks: '',

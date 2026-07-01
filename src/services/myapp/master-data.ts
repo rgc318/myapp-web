@@ -14,6 +14,7 @@ import {
 export type ListOptions = {
   disabled?: 0 | 1 | boolean;
   enabled?: 0 | 1 | boolean;
+  group?: string;
   limit?: number;
   searchKey?: string;
   start?: number;
@@ -127,25 +128,63 @@ export type SaveProductPayload = {
 export type UpdateProductPayload = Partial<SaveProductPayload>;
 
 export type PartySummary = {
+  creation: string | null;
+  defaultAddress: PartyAddressSummary | null;
+  defaultContact: PartyContactSummary | null;
   defaultCurrency: string | null;
   disabled: boolean;
   displayName: string;
   email: string | null;
   group: string | null;
   mobileNo: string | null;
+  modified: string | null;
   name: string;
+  recentAddresses: PartyRecentAddress[];
   remarks: string | null;
   type: string | null;
 };
 
+export type PartyContactSummary = {
+  displayName: string | null;
+  email: string | null;
+  name: string | null;
+  phone: string | null;
+};
+
+export type PartyAddressSummary = {
+  addressDisplay: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  country: string | null;
+  county: string | null;
+  name: string | null;
+  pincode: string | null;
+  state: string | null;
+};
+
+export type PartyRecentAddress = {
+  addressDisplay: string | null;
+  name: string | null;
+};
+
 export type SavePartyPayload = {
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  addressType?: string | null;
+  city?: string | null;
+  contactName?: string | null;
+  country?: string | null;
+  county?: string | null;
   defaultCurrency?: string | null;
   disabled?: boolean;
   email?: string | null;
   group?: string | null;
   mobileNo?: string | null;
   name: string;
+  pincode?: string | null;
   remarks?: string | null;
+  state?: string | null;
   type?: string | null;
 };
 
@@ -504,33 +543,95 @@ function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
     );
 }
 
-function mapCustomer(row: Record<string, any>): PartySummary {
+function optionalString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function mapPartyContact(raw: unknown): PartyContactSummary | null {
+  const row = readObject(raw);
+  if (!Object.keys(row).length) {
+    return null;
+  }
   return {
-    defaultCurrency:
-      typeof row.default_currency === 'string' ? row.default_currency : null,
-    disabled: Boolean(row.disabled),
+    displayName: optionalString(row.display_name),
+    email: optionalString(row.email),
+    name: optionalString(row.name),
+    phone: optionalString(row.phone),
+  };
+}
+
+function mapPartyAddress(raw: unknown): PartyAddressSummary | null {
+  const row = readObject(raw);
+  if (!Object.keys(row).length) {
+    return null;
+  }
+  return {
+    addressDisplay: optionalString(row.address_display),
+    addressLine1: optionalString(row.address_line1),
+    addressLine2: optionalString(row.address_line2),
+    city: optionalString(row.city),
+    country: optionalString(row.country),
+    county: optionalString(row.county),
+    name: optionalString(row.name),
+    pincode: optionalString(row.pincode),
+    state: optionalString(row.state),
+  };
+}
+
+function mapRecentAddresses(value: unknown): PartyRecentAddress[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      const row = readObject(entry);
+      return {
+        addressDisplay: optionalString(row.address_display),
+        name: optionalString(row.name),
+      };
+    })
+    .filter((entry) => entry.name || entry.addressDisplay);
+}
+
+function mapCustomer(row: Record<string, any>): PartySummary {
+  const defaultContact = mapPartyContact(row.default_contact);
+  const defaultAddress = mapPartyAddress(row.default_address);
+  return {
+    creation: optionalString(row.creation),
+    defaultAddress,
+    defaultContact,
+    defaultCurrency: optionalString(row.default_currency),
+    disabled: Boolean(toOptionalNumber(row.disabled)),
     displayName: String(row.customer_name ?? row.display_name ?? row.name ?? ''),
-    email: typeof row.email_id === 'string' ? row.email_id : null,
-    group: typeof row.customer_group === 'string' ? row.customer_group : null,
-    mobileNo: typeof row.mobile_no === 'string' ? row.mobile_no : null,
+    email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
+    group: optionalString(row.customer_group),
+    mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
+    modified: optionalString(row.modified),
     name: String(row.customer ?? row.name ?? ''),
-    remarks: typeof row.remarks === 'string' ? row.remarks : null,
-    type: typeof row.customer_type === 'string' ? row.customer_type : null,
+    recentAddresses: mapRecentAddresses(row.recent_addresses),
+    remarks: optionalString(row.remarks),
+    type: optionalString(row.customer_type),
   };
 }
 
 function mapSupplier(row: Record<string, any>): PartySummary {
+  const defaultContact = mapPartyContact(row.default_contact);
+  const defaultAddress = mapPartyAddress(row.default_address);
   return {
-    defaultCurrency:
-      typeof row.default_currency === 'string' ? row.default_currency : null,
-    disabled: Boolean(row.disabled),
+    creation: optionalString(row.creation),
+    defaultAddress,
+    defaultContact,
+    defaultCurrency: optionalString(row.default_currency),
+    disabled: Boolean(toOptionalNumber(row.disabled)),
     displayName: String(row.supplier_name ?? row.display_name ?? row.name ?? ''),
-    email: typeof row.email_id === 'string' ? row.email_id : null,
-    group: typeof row.supplier_group === 'string' ? row.supplier_group : null,
-    mobileNo: typeof row.mobile_no === 'string' ? row.mobile_no : null,
+    email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
+    group: optionalString(row.supplier_group),
+    mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
+    modified: optionalString(row.modified),
     name: String(row.supplier ?? row.name ?? ''),
-    remarks: typeof row.remarks === 'string' ? row.remarks : null,
-    type: typeof row.supplier_type === 'string' ? row.supplier_type : null,
+    recentAddresses: mapRecentAddresses(row.recent_addresses),
+    remarks: optionalString(row.remarks),
+    type: optionalString(row.supplier_type),
   };
 }
 
@@ -630,6 +731,29 @@ function definedPayload<T extends Record<string, unknown>>(payload: T) {
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined && value !== null),
   ) as Partial<T>;
+}
+
+function buildPartyContactPayload(payload: SavePartyPayload) {
+  const contactPayload = compactPayload({
+    display_name: toOptionalText(payload.contactName) ?? toOptionalText(payload.name),
+    email: toOptionalText(payload.email),
+    phone: toOptionalText(payload.mobileNo),
+  });
+  return Object.keys(contactPayload).length ? contactPayload : undefined;
+}
+
+function buildPartyAddressPayload(payload: SavePartyPayload) {
+  const addressPayload = compactPayload({
+    address_line1: toOptionalText(payload.addressLine1),
+    address_line2: toOptionalText(payload.addressLine2),
+    address_type: toOptionalText(payload.addressType),
+    city: toOptionalText(payload.city),
+    country: toOptionalText(payload.country),
+    county: toOptionalText(payload.county),
+    pincode: toOptionalText(payload.pincode),
+    state: toOptionalText(payload.state),
+  });
+  return Object.keys(addressPayload).length ? addressPayload : undefined;
 }
 
 export async function listProducts(options: ProductListOptions = {}) {
@@ -872,6 +996,7 @@ export async function listCustomers(options: ListOptions = {}) {
     'list_customers_v2',
     compactPayload({
       disabled: options.disabled,
+      customer_group: toOptionalText(options.group),
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
       start: options.start ?? 0,
@@ -896,6 +1021,8 @@ export async function createCustomer(payload: SavePartyPayload) {
       customer_type: toOptionalText(payload.type) ?? 'Company',
       contact_email: toOptionalText(payload.email),
       contact_phone: toOptionalText(payload.mobileNo),
+      default_address: buildPartyAddressPayload(payload),
+      default_contact: buildPartyContactPayload(payload),
       default_currency: toOptionalText(payload.defaultCurrency),
       disabled: payload.disabled ? 1 : 0,
       remarks: payload.remarks ?? '',
@@ -917,6 +1044,8 @@ export async function updateCustomer(
       customer_type: payload.type ?? '',
       contact_email: payload.email ?? '',
       contact_phone: payload.mobileNo ?? '',
+      default_address: buildPartyAddressPayload(payload as SavePartyPayload),
+      default_contact: buildPartyContactPayload(payload as SavePartyPayload),
       default_currency: payload.defaultCurrency ?? '',
       disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
       remarks: payload.remarks ?? '',
@@ -941,6 +1070,7 @@ export async function listSuppliers(options: ListOptions = {}) {
       disabled: options.disabled,
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
+      supplier_group: toOptionalText(options.group),
       start: options.start ?? 0,
     }),
   );
@@ -962,6 +1092,8 @@ export async function createSupplier(payload: SavePartyPayload) {
       disabled: payload.disabled ? 1 : 0,
       contact_email: toOptionalText(payload.email),
       contact_phone: toOptionalText(payload.mobileNo),
+      default_address: buildPartyAddressPayload(payload),
+      default_contact: buildPartyContactPayload(payload),
       email_id: toOptionalText(payload.email),
       mobile_no: toOptionalText(payload.mobileNo),
       remarks: payload.remarks ?? '',
@@ -984,6 +1116,8 @@ export async function updateSupplier(
       disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
       contact_email: payload.email ?? '',
       contact_phone: payload.mobileNo ?? '',
+      default_address: buildPartyAddressPayload(payload as SavePartyPayload),
+      default_contact: buildPartyContactPayload(payload as SavePartyPayload),
       email_id: payload.email ?? '',
       mobile_no: payload.mobileNo ?? '',
       remarks: payload.remarks ?? '',

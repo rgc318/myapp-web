@@ -2,6 +2,7 @@ import React from 'react';
 import PartyManagementPage from '@/components/PartyManagementPage';
 import {
   createSupplier,
+  getSupplierDetail,
   listSuppliers,
   setSupplierDisabled,
   updateSupplier,
@@ -11,6 +12,7 @@ const SuppliersPage: React.FC = () => (
   <PartyManagementPage
     createParty={createSupplier}
     defaultGroup="All Supplier Groups"
+    getPartyDetail={getSupplierDetail}
     listParties={listSuppliers}
     partyLabel="供应商"
     searchPlaceholder="供应商编码 / 名称 / 手机 / 邮箱"
