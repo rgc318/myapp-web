@@ -65,7 +65,7 @@ function refundReviewTone(data: {
   if (isCancelled(data.documentStatus)) {
     return {
       description:
-        '来源发票已经作废，通常不再从这里继续回退收款。请回到来源订单或财务流水核对实际状态。',
+        '来源发票已经作废，通常不再从这里取消原客户收款。请回到来源订单或财务流水核对实际状态。',
       message: '来源发票已作废',
       type: 'warning' as const,
     };
@@ -73,8 +73,8 @@ function refundReviewTone(data: {
   if (!data.latestPaymentEntry && (data.paidAmount ?? 0) <= 0) {
     return {
       description:
-        '来源发票没有可回退的最近收款，退货后通常不需要在本页处理客户退款。',
-      message: '暂无可回退收款',
+        '来源发票没有可取消的原客户收款，退货后通常只需要按退货发票登记客户退款。',
+      message: '暂无可取消的原收款',
       type: 'info' as const,
     };
   }
@@ -82,7 +82,7 @@ function refundReviewTone(data: {
     if ((data.latestUnallocatedAmount ?? 0) > 0) {
       return {
         description:
-          '来源发票最近收款存在多收保留金额。退货后请优先核对该未分配金额是否应退回客户，或按财务流程转抵其他应收。',
+          '来源发票最近客户收款存在多收保留金额。退货后请优先核对该未分配金额是否应退回客户，或按财务流程转抵其他应收。',
         message: '存在多收保留金额',
         type: 'warning' as const,
       };
@@ -90,14 +90,14 @@ function refundReviewTone(data: {
     if ((data.totalWriteoffAmount ?? 0) > 0) {
       return {
         description:
-          '来源发票包含差额核销。退货后请同时核对原收款和核销原因，避免重复退款或遗漏核销回退。',
+          '来源发票包含差额核销。退货后请同时核对原客户收款和核销原因，避免重复退款或遗漏核销处理。',
         message: '存在核销结清金额',
         type: 'warning' as const,
       };
     }
     return {
       description:
-        '来源发票存在最近收款。若本次退货需要回退原客户收款，可在确认财务凭证后取消最近收款；若已经线下退款，请保留实际退款凭证并按财务流程登记。',
+        '来源发票存在客户收款。退货后通常应基于退货发票登记客户退款；只有需要撤销原收款凭证时，才取消原客户收款。',
       message: '需要核对客户退款',
       type: 'warning' as const,
     };
@@ -112,7 +112,7 @@ function refundReviewTone(data: {
   }
   return {
     description:
-      '当前未发现可直接回退的最近收款。请结合退货单、来源发票和财务凭证完成线下核对。',
+      '当前未发现可直接取消的原客户收款。请结合退货单、来源发票和财务凭证完成线下核对。',
     message: '请完成财务核对',
     type: 'info' as const,
   };
@@ -337,15 +337,15 @@ const SalesRefundReviewPage: React.FC = () => {
 
   const confirmCancelPayment = () => {
     if (!data?.latestPaymentEntry) {
-      message.warning('当前发票没有可回退的最近收款');
+      message.warning('当前发票没有可取消的原客户收款');
       return;
     }
 
     Modal.confirm({
       cancelText: '取消',
       content:
-        '这会作废当前发票最近一笔收款记录，用于退货后需要回退客户收款的场景。若只需线下退款登记，请先按财务规范处理实际退款凭证。',
-      okText: '取消最近收款',
+        '这会作废来源发票最近一笔原客户收款凭证。若本次已经按退货发票登记客户退款，通常不需要再取消原收款。',
+      okText: '取消原客户收款',
       okType: 'danger',
       onOk: async () => {
         setCancelLoading(true);
@@ -359,7 +359,7 @@ const SalesRefundReviewPage: React.FC = () => {
           setCancelLoading(false);
         }
       },
-      title: `取消收款 ${data.latestPaymentEntry}？`,
+      title: `取消原客户收款 ${data.latestPaymentEntry}？`,
       width: 620,
     });
   };
@@ -375,7 +375,7 @@ const SalesRefundReviewPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="本页用于退货后核对来源发票收款状态，并基于已提交的退货发票登记正式客户退款。取消最近收款仅用于需要回退原收款凭证的场景。"
+          message="本页用于退货后核对来源发票收款状态，并基于已提交的退货发票登记客户退款。取消原客户收款仅用于需要撤销原收款凭证的场景。"
           showIcon
           type="info"
         />
@@ -858,7 +858,7 @@ const SalesRefundReviewPage: React.FC = () => {
                         <StatusTag value={data.paymentStatus} />
                       </ProDescriptions.Item>
                       <ProDescriptions.Item
-                        label="最近收款"
+                        label="最近客户收款"
                         dataIndex="latestPaymentEntry"
                       />
                       <ProDescriptions.Item
@@ -872,25 +872,26 @@ const SalesRefundReviewPage: React.FC = () => {
                     </ProDescriptions>
                   </ProCard>
 
-                  <ProCard title="回退处理">
+                  <ProCard title="原收款处理">
                     <Space
                       orientation="vertical"
                       size={12}
                       style={{ width: '100%' }}
                     >
                       <Typography.Text type="secondary">
-                        如退货后需要回退原收款凭证，可取消最近收款；正式客户退款请优先基于退货发票登记。
+                        已登记客户退款后，通常不再取消原收款。只有需要撤销来源发票的原收款凭证时，才使用下面的操作。
                       </Typography.Text>
                       <Button
                         danger
                         disabled={
                           !data.latestPaymentEntry ||
-                          isCancelled(data.documentStatus)
+                          isCancelled(data.documentStatus) ||
+                          isRefundCompleted
                         }
                         loading={cancelLoading}
                         onClick={confirmCancelPayment}
                       >
-                        取消最近收款
+                        取消原客户收款
                       </Button>
                     </Space>
                   </ProCard>

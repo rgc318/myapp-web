@@ -139,7 +139,7 @@ describe('SalesOrderDetailPage', () => {
       React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
     );
 
-    expect(await screen.findByText('记录收款暂不可用')).toBeTruthy();
-    expect(screen.getByText('请先创建销售发票后再记录收款')).toBeTruthy();
+    expect(await screen.findByText('登记客户收款暂不可用')).toBeTruthy();
+    expect(screen.getByText('请先创建销售发票后再登记客户收款')).toBeTruthy();
   });
 });

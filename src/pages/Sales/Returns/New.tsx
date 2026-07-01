@@ -548,14 +548,14 @@ const SalesReturnNewPage: React.FC = () => {
                     ) : context.sourceDoctype === 'Sales Invoice' &&
                       (context.outstandingAmount ?? 0) <= 0 ? (
                       <Alert
-                        description="来源销售发票看起来已经结清。退货单创建后，需要继续核对客户退款或回退原收款。"
+                        description="来源销售发票看起来已经结清。退货单创建后，需要继续核对客户退款；只有需要撤销原收款凭证时，才取消原客户收款。"
                         message="退货后需要关注退款核对"
                         showIcon
                         type="warning"
                       />
                     ) : (
                       <Alert
-                        description="退货会创建独立退货单，原来源单据保留业务事实；退款、收款回退等财务动作在退货后单独核对。"
+                        description="退货会创建独立退货单，原来源单据保留业务事实；客户退款、取消原收款等财务动作在退货后单独核对。"
                         message="退货不会直接改写原销售订单"
                         showIcon
                         type="info"

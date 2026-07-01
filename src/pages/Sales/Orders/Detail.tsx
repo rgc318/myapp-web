@@ -233,7 +233,7 @@ function actionTargetLabel(actionTarget: string | null) {
     return '创建销售发票';
   }
   if (actionTarget === 'payment') {
-    return '记录收款';
+    return '登记客户收款';
   }
   return null;
 }
@@ -274,19 +274,23 @@ function invoiceDisabledReason(detail: SalesOrderDetail) {
 }
 
 function paymentDisabledReason(detail: SalesOrderDetail) {
-  if (detail.canRecordPayment && (detail.outstandingAmount ?? 0) > 0) {
+  if (
+    detail.documentStatus === 'submitted' &&
+    detail.salesInvoices.length &&
+    (detail.outstandingAmount ?? 0) > 0
+  ) {
     return '';
   }
   if (detail.documentStatus === 'cancelled') {
-    return '订单已作废，不能记录收款';
+    return '订单已作废，不能登记客户收款';
   }
   if (!detail.salesInvoices.length) {
-    return '请先创建销售发票后再记录收款';
+    return '请先创建销售发票后再登记客户收款';
   }
   if ((detail.outstandingAmount ?? 0) <= 0) {
-    return '当前订单没有未收金额';
+    return '当前订单已结清，没有可登记的客户收款';
   }
-  return '当前订单暂不满足收款条件';
+  return '当前订单暂不满足登记客户收款条件';
 }
 
 function actionUnavailableReason(
@@ -493,6 +497,12 @@ const SalesOrderDetailPage: React.FC = () => {
   const orderName = decodeURIComponent(String(params.name ?? ''));
   const actionPanelRef = useRef<HTMLDivElement | null>(null);
   const [actionLoading, setActionLoading] = useState<string>();
+  const [paymentDraft, setPaymentDraft] = useState<InvoicePaymentDraft>({
+    amount: 0,
+    modeOfPayment: '',
+    referenceName: '',
+  });
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const actionTarget = useMemo(() => {
     const value = new URLSearchParams(location.search).get('action');
     return ['delivery', 'invoice', 'payment'].includes(String(value))
@@ -764,7 +774,7 @@ const SalesOrderDetailPage: React.FC = () => {
             detailPath: '/sales/invoices',
             documentName: salesInvoiceName,
             documentText: '销售发票',
-            nextAction: '如需继续收款，可在订单详情刷新后记录收款。',
+            nextAction: '如需继续收款，可在订单详情刷新后登记客户收款。',
           });
         } catch (caught) {
           message.error(caught instanceof Error ? caught.message : '操作失败');
@@ -789,86 +799,62 @@ const SalesOrderDetailPage: React.FC = () => {
       return;
     }
 
-    let draft: InvoicePaymentDraft = {
+    setPaymentDraft({
       amount: 0,
       modeOfPayment: '',
       referenceName: invoiceNames[0],
-    };
-    Modal.confirm({
-      cancelText: '取消',
-      content: (
-        <InvoicePaymentForm
-          detailBasePath="/sales/invoices"
-          invoices={invoiceNames}
-          label="销售发票"
-          loadOutstandingAmount={async (invoiceName) => {
-            const invoice = await getSalesInvoiceDetail(invoiceName);
-            return invoice?.outstandingAmount ?? 0;
-          }}
-          onChange={(nextDraft) => {
-            draft = nextDraft;
-          }}
-          showReferenceFields
-          showSettlementMode
-        />
-      ),
-      okText: '确认收款',
-      onOk: async () => {
-        const paymentAmount = Number(draft.amount ?? 0);
-        if (paymentAmount <= 0) {
-          message.error('收款金额必须大于 0 且不能超过未收金额');
-          throw new Error('Invalid payment amount');
-        }
-        if (!draft.referenceName) {
-          message.error('请选择销售发票');
-          throw new Error('Missing payment reference');
-        }
-
-        setActionLoading('payment');
-        try {
-          const result = await recordSalesOrderPayment(
-            draft.referenceName,
-            paymentAmount,
-            {
-              modeOfPayment: draft.modeOfPayment,
-              referenceDate: draft.referenceDate,
-              referenceDoctype: 'Sales Invoice',
-              referenceNo: draft.referenceNo,
-              settlementMode:
-                draft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
-              writeoffReason:
-                draft.settlementMode === 'writeoff'
-                  ? 'Web 端差额核销结清'
-                  : undefined,
-            },
-          );
-          refresh();
-          const paymentEntryName = readMutationName(
-            result.data,
-            'payment_entry',
-          );
-          showActionResult({
-            actionText: '记录收款',
-            documentName: paymentEntryName,
-            documentText: '收款单',
-            nextAction: (
-              <span>
-                可在 <Link to="/payments">收付款流水</Link> 中核对本次收款记录。
-              </span>
-            ),
-          });
-        } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
-          throw caught;
-        } finally {
-          setActionLoading(undefined);
-        }
-      },
-      title:
-        invoiceNames.length > 1
-          ? `选择销售发票并记录收款 ${detail.name}`
-          : `记录收款 ${invoiceNames[0]}`,
     });
+    setPaymentModalOpen(true);
+  };
+
+  const submitRecordPayment = async () => {
+    const paymentAmount = Number(paymentDraft.amount ?? 0);
+    if (paymentAmount <= 0) {
+      message.error('收款金额必须大于 0 且不能超过未收金额');
+      throw new Error('Invalid payment amount');
+    }
+    if (!paymentDraft.referenceName) {
+      message.error('请选择销售发票');
+      throw new Error('Missing payment reference');
+    }
+
+    setActionLoading('payment');
+    try {
+      const result = await recordSalesOrderPayment(
+        paymentDraft.referenceName,
+        paymentAmount,
+        {
+          modeOfPayment: paymentDraft.modeOfPayment,
+          referenceDate: paymentDraft.referenceDate,
+          referenceDoctype: 'Sales Invoice',
+          referenceNo: paymentDraft.referenceNo,
+          settlementMode:
+            paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
+          writeoffReason:
+            paymentDraft.settlementMode === 'writeoff'
+              ? 'Web 端差额核销结清'
+              : undefined,
+        },
+      );
+      setPaymentModalOpen(false);
+      refresh();
+      const paymentEntryName = readMutationName(result.data, 'payment_entry');
+      showActionResult({
+        actionText: '登记客户收款',
+        documentName: paymentEntryName,
+        documentText: '收款单',
+        nextAction: (
+          <span>
+            可在 <Link to="/payments">收付款流水</Link> 中核对本次收款记录。
+          </span>
+        ),
+      });
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setActionLoading(undefined);
+    }
   };
 
   const confirmQuickCancelDownstream = () => {
@@ -881,7 +867,7 @@ const SalesOrderDetailPage: React.FC = () => {
       content: (
         <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <span>
-            系统会按顺序回退收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔收款，后端会拒绝快捷回退。
+            系统会按顺序取消客户收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝快捷回退。
           </span>
           <SalesRollbackGuide
             deliveryNotes={detail.deliveryNotes}
@@ -1136,415 +1122,461 @@ const SalesOrderDetailPage: React.FC = () => {
   const progress = detail ? salesOrderProgress(detail) : null;
 
   return (
-    <PageContainer
-      title={detail?.name || orderName || '销售订单详情'}
-      content={
-        detail ? (
-          <Descriptions column={2} items={pageDescriptionItems} size="small" />
-        ) : undefined
-      }
-      extra={[
-        <Button key="back">
-          <Link to="/sales/orders">返回列表</Link>
-        </Button>,
-        <Button key="refresh" loading={loading} onClick={refresh}>
-          刷新
-        </Button>,
-        <PrintDocumentButton
-          disabled={!orderName}
-          docname={orderName}
-          doctype="Sales Order"
-          key="print"
-        />,
-      ]}
-    >
-      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-        {error && (
-          <Alert
-            action={
-              <Button size="small" onClick={refresh}>
-                重试
-              </Button>
-            }
-            description={
-              error instanceof Error ? error.message : '请稍后重试。'
-            }
-            showIcon
-            title="销售订单详情加载失败"
-            type="error"
-          />
-        )}
+    <>
+      <PageContainer
+        title={detail?.name || orderName || '销售订单详情'}
+        content={
+          detail ? (
+            <Descriptions
+              column={2}
+              items={pageDescriptionItems}
+              size="small"
+            />
+          ) : undefined
+        }
+        extra={[
+          <Button key="back">
+            <Link to="/sales/orders">返回列表</Link>
+          </Button>,
+          <Button key="refresh" loading={loading} onClick={refresh}>
+            刷新
+          </Button>,
+          <PrintDocumentButton
+            disabled={!orderName}
+            docname={orderName}
+            doctype="Sales Order"
+            key="print"
+          />,
+        ]}
+      >
+        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+          {error && (
+            <Alert
+              action={
+                <Button size="small" onClick={refresh}>
+                  重试
+                </Button>
+              }
+              description={
+                error instanceof Error ? error.message : '请稍后重试。'
+              }
+              showIcon
+              title="销售订单详情加载失败"
+              type="error"
+            />
+          )}
 
-        {loading && !detail ? (
-          <Card variant="borderless">
-            <Skeleton active paragraph={{ rows: 8 }} />
-          </Card>
-        ) : null}
-
-        {!loading && !error && !detail ? (
-          <Card variant="borderless">
-            <Empty description="未找到销售订单" />
-          </Card>
-        ) : null}
-
-        {detail ? (
-          <>
-            {actionTarget && actionUnavailableReason(detail, actionTarget) ? (
-              <Alert
-                showIcon
-                description={actionUnavailableReason(detail, actionTarget)}
-                title={`${actionTargetText}暂不可用`}
-                type="warning"
-              />
-            ) : null}
-
-            <Card title="金额概览" variant="borderless">
-              <Row gutter={[24, 16]}>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{ content: { fontSize: 24, fontWeight: 600 } }}
-                    title="订单金额"
-                    value={formatCurrencyValue(detail.amount, detail.currency)}
-                  />
-                  <Typography.Text type="secondary">
-                    当前订单商品与税费合计
-                  </Typography.Text>
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{ content: { fontSize: 22, fontWeight: 600 } }}
-                    title="应收金额"
-                    value={formatCurrencyValue(
-                      detail.receivableAmount,
-                      detail.currency,
-                    )}
-                  />
-                  <Typography.Text type="secondary">
-                    按订单/发票口径汇总
-                  </Typography.Text>
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{
-                      content: {
-                        color: '#389e0d',
-                        fontSize: 22,
-                        fontWeight: 600,
-                      },
-                    }}
-                    title="已收金额"
-                    value={formatCurrencyValue(
-                      detail.paidAmount,
-                      detail.currency,
-                    )}
-                  />
-                  <Progress
-                    percent={toPercent(
-                      detail.paidAmount,
-                      detail.receivableAmount || detail.amount,
-                    )}
-                    size="small"
-                    status="success"
-                  />
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{
-                      content: {
-                        color:
-                          (detail.outstandingAmount ?? 0) > 0
-                            ? '#cf1322'
-                            : '#389e0d',
-                        fontSize: 24,
-                        fontWeight: 700,
-                      },
-                    }}
-                    title="未收金额"
-                    value={formatCurrencyValue(
-                      detail.outstandingAmount,
-                      detail.currency,
-                    )}
-                  />
-                  <Typography.Text
-                    type={
-                      (detail.outstandingAmount ?? 0) > 0
-                        ? 'danger'
-                        : 'secondary'
-                    }
-                  >
-                    {(detail.outstandingAmount ?? 0) > 0
-                      ? '仍需跟进收款'
-                      : '当前已结清'}
-                  </Typography.Text>
-                </Col>
-              </Row>
+          {loading && !detail ? (
+            <Card variant="borderless">
+              <Skeleton active paragraph={{ rows: 8 }} />
             </Card>
+          ) : null}
 
-            <Row gutter={[16, 16]}>
-              <Col lg={16} xs={24}>
-                <Space
-                  orientation="vertical"
-                  size={16}
-                  style={{ width: '100%' }}
-                >
-                  <Card title="订单进度" variant="borderless">
-                    <Steps
-                      current={progress?.current}
-                      items={[
-                        {
-                          title: '创建订单',
-                          content: detail.transactionDate,
-                        },
-                        {
-                          title: '提交订单',
-                          content: <StatusTag value={detail.documentStatus} />,
-                        },
-                        {
-                          title: '发货',
-                          content: (
-                            <StatusTag value={detail.fulfillmentStatus} />
-                          ),
-                        },
-                        {
-                          title: '开票',
-                          content: detail.salesInvoices.length
-                            ? `${detail.salesInvoices.length} 张销售发票`
-                            : '未开票',
-                        },
-                        {
-                          title: '收款完成',
-                          content: <StatusTag value={detail.paymentStatus} />,
-                        },
-                      ]}
-                      status={progress?.status}
+          {!loading && !error && !detail ? (
+            <Card variant="borderless">
+              <Empty description="未找到销售订单" />
+            </Card>
+          ) : null}
+
+          {detail ? (
+            <>
+              {actionTarget && actionUnavailableReason(detail, actionTarget) ? (
+                <Alert
+                  showIcon
+                  description={actionUnavailableReason(detail, actionTarget)}
+                  title={`${actionTargetText}暂不可用`}
+                  type="warning"
+                />
+              ) : null}
+
+              <Card title="金额概览" variant="borderless">
+                <Row gutter={[24, 16]}>
+                  <Col lg={6} sm={12} xs={24}>
+                    <Statistic
+                      styles={{ content: { fontSize: 24, fontWeight: 600 } }}
+                      title="订单金额"
+                      value={formatCurrencyValue(
+                        detail.amount,
+                        detail.currency,
+                      )}
                     />
-                  </Card>
+                    <Typography.Text type="secondary">
+                      当前订单商品与税费合计
+                    </Typography.Text>
+                  </Col>
+                  <Col lg={6} sm={12} xs={24}>
+                    <Statistic
+                      styles={{ content: { fontSize: 22, fontWeight: 600 } }}
+                      title="应收金额"
+                      value={formatCurrencyValue(
+                        detail.receivableAmount,
+                        detail.currency,
+                      )}
+                    />
+                    <Typography.Text type="secondary">
+                      按订单/发票口径汇总
+                    </Typography.Text>
+                  </Col>
+                  <Col lg={6} sm={12} xs={24}>
+                    <Statistic
+                      styles={{
+                        content: {
+                          color: '#389e0d',
+                          fontSize: 22,
+                          fontWeight: 600,
+                        },
+                      }}
+                      title="已收金额"
+                      value={formatCurrencyValue(
+                        detail.paidAmount,
+                        detail.currency,
+                      )}
+                    />
+                    <Progress
+                      percent={toPercent(
+                        detail.paidAmount,
+                        detail.receivableAmount || detail.amount,
+                      )}
+                      size="small"
+                      status="success"
+                    />
+                  </Col>
+                  <Col lg={6} sm={12} xs={24}>
+                    <Statistic
+                      styles={{
+                        content: {
+                          color:
+                            (detail.outstandingAmount ?? 0) > 0
+                              ? '#cf1322'
+                              : '#389e0d',
+                          fontSize: 24,
+                          fontWeight: 700,
+                        },
+                      }}
+                      title="未收金额"
+                      value={formatCurrencyValue(
+                        detail.outstandingAmount,
+                        detail.currency,
+                      )}
+                    />
+                    <Typography.Text
+                      type={
+                        (detail.outstandingAmount ?? 0) > 0
+                          ? 'danger'
+                          : 'secondary'
+                      }
+                    >
+                      {(detail.outstandingAmount ?? 0) > 0
+                        ? '仍需跟进收款'
+                        : '当前已结清'}
+                    </Typography.Text>
+                  </Col>
+                </Row>
+              </Card>
 
-                  <Card title="业务时间线" variant="borderless">
-                    {timelineEvents.length ? (
-                      <Timeline
-                        items={timelineEvents.map((event) => {
-                          const path = documentPath(
-                            event.doctype,
-                            event.docname,
-                          );
-                          const relatedPath = documentPath(
-                            event.relatedDoctype,
-                            event.relatedDocname,
-                          );
-                          return {
-                            color: timelineColor(event),
-                            children: (
-                              <Space orientation="vertical" size={4}>
-                                <Space wrap>
-                                  <Typography.Text strong>
-                                    {event.title || event.type}
-                                  </Typography.Text>
-                                  {path ? (
-                                    <Link to={path}>{event.docname}</Link>
-                                  ) : (
-                                    <Typography.Text>
-                                      {event.docname}
+              <Row gutter={[16, 16]}>
+                <Col lg={16} xs={24}>
+                  <Space
+                    orientation="vertical"
+                    size={16}
+                    style={{ width: '100%' }}
+                  >
+                    <Card title="订单进度" variant="borderless">
+                      <Steps
+                        current={progress?.current}
+                        items={[
+                          {
+                            title: '创建订单',
+                            content: detail.transactionDate,
+                          },
+                          {
+                            title: '提交订单',
+                            content: (
+                              <StatusTag value={detail.documentStatus} />
+                            ),
+                          },
+                          {
+                            title: '发货',
+                            content: (
+                              <StatusTag value={detail.fulfillmentStatus} />
+                            ),
+                          },
+                          {
+                            title: '开票',
+                            content: detail.salesInvoices.length
+                              ? `${detail.salesInvoices.length} 张销售发票`
+                              : '未开票',
+                          },
+                          {
+                            title: '收款完成',
+                            content: <StatusTag value={detail.paymentStatus} />,
+                          },
+                        ]}
+                        status={progress?.status}
+                      />
+                    </Card>
+
+                    <Card title="业务时间线" variant="borderless">
+                      {timelineEvents.length ? (
+                        <Timeline
+                          items={timelineEvents.map((event) => {
+                            const path = documentPath(
+                              event.doctype,
+                              event.docname,
+                            );
+                            const relatedPath = documentPath(
+                              event.relatedDoctype,
+                              event.relatedDocname,
+                            );
+                            return {
+                              color: timelineColor(event),
+                              children: (
+                                <Space orientation="vertical" size={4}>
+                                  <Space wrap>
+                                    <Typography.Text strong>
+                                      {event.title || event.type}
                                     </Typography.Text>
-                                  )}
-                                  {event.status ? (
-                                    <StatusTag value={event.status} />
-                                  ) : null}
-                                </Space>
-                                <Typography.Text type="secondary">
-                                  {timelineEventDescription(
-                                    event,
-                                    detail.currency,
-                                  )}
-                                </Typography.Text>
-                                {event.relatedDocname ? (
-                                  <Typography.Text type="secondary">
-                                    关联：
-                                    {relatedPath ? (
-                                      <Link to={relatedPath}>
-                                        {event.relatedDocname}
-                                      </Link>
+                                    {path ? (
+                                      <Link to={path}>{event.docname}</Link>
                                     ) : (
-                                      event.relatedDocname
+                                      <Typography.Text>
+                                        {event.docname}
+                                      </Typography.Text>
+                                    )}
+                                    {event.status ? (
+                                      <StatusTag value={event.status} />
+                                    ) : null}
+                                  </Space>
+                                  <Typography.Text type="secondary">
+                                    {timelineEventDescription(
+                                      event,
+                                      detail.currency,
                                     )}
                                   </Typography.Text>
-                                ) : null}
-                              </Space>
-                            ),
-                          };
-                        })}
-                      />
-                    ) : (
-                      <Empty description="暂无业务时间线" />
-                    )}
-                  </Card>
+                                  {event.relatedDocname ? (
+                                    <Typography.Text type="secondary">
+                                      关联：
+                                      {relatedPath ? (
+                                        <Link to={relatedPath}>
+                                          {event.relatedDocname}
+                                        </Link>
+                                      ) : (
+                                        event.relatedDocname
+                                      )}
+                                    </Typography.Text>
+                                  ) : null}
+                                </Space>
+                              ),
+                            };
+                          })}
+                        />
+                      ) : (
+                        <Empty description="暂无业务时间线" />
+                      )}
+                    </Card>
 
-                  <ProTable<SalesOrderDetailItem>
-                    columns={itemColumns}
-                    dataSource={detail.items}
-                    headerTitle="商品明细"
-                    pagination={false}
-                    rowKey={(record) =>
-                      `${record.itemCode}-${record.warehouse}`
-                    }
-                    search={false}
-                    toolBarRender={false}
-                  />
-                </Space>
-              </Col>
+                    <ProTable<SalesOrderDetailItem>
+                      columns={itemColumns}
+                      dataSource={detail.items}
+                      headerTitle="商品明细"
+                      pagination={false}
+                      rowKey={(record) =>
+                        `${record.itemCode}-${record.warehouse}`
+                      }
+                      search={false}
+                      toolBarRender={false}
+                    />
+                  </Space>
+                </Col>
 
-              <Col lg={8} xs={24}>
-                <Space
-                  orientation="vertical"
-                  size={16}
-                  style={{ width: '100%' }}
-                >
-                  <Card
-                    ref={actionPanelRef}
-                    title={
-                      actionTargetText
-                        ? `履约动作（当前入口：${actionTargetText}）`
-                        : '履约动作'
-                    }
-                    variant="borderless"
+                <Col lg={8} xs={24}>
+                  <Space
+                    orientation="vertical"
+                    size={16}
+                    style={{ width: '100%' }}
                   >
-                    <Space wrap>
-                      <Link
-                        to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
-                      >
-                        <Button>编辑订单</Button>
-                      </Link>
-                      <Tooltip title={deliveryDisabledReason(detail)}>
-                        <span>
-                          <Button
-                            disabled={!detail.canSubmitDelivery}
-                            loading={actionLoading === 'delivery'}
-                            onClick={confirmSubmitDelivery}
-                            type={
-                              actionTarget === 'delivery'
-                                ? 'primary'
-                                : 'default'
-                            }
-                          >
-                            创建发货单
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={invoiceDisabledReason(detail)}>
-                        <span>
-                          <Button
-                            disabled={!detail.canCreateSalesInvoice}
-                            loading={actionLoading === 'invoice'}
-                            onClick={confirmCreateInvoice}
-                            type={
-                              actionTarget === 'invoice' ? 'primary' : 'default'
-                            }
-                          >
-                            创建销售发票
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip title={paymentDisabledReason(detail)}>
-                        <span>
-                          <Button
-                            disabled={
-                              !detail.canRecordPayment ||
-                              (detail.outstandingAmount ?? 0) <= 0
-                            }
-                            loading={actionLoading === 'payment'}
-                            onClick={confirmRecordPayment}
-                            type={
-                              actionTarget === 'payment' ? 'primary' : 'default'
-                            }
-                          >
-                            记录收款
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          detail.salesInvoices.length ||
-                          detail.deliveryNotes.length
-                            ? ''
-                            : '需要先完成发货或开票后再发起退货'
-                        }
-                      >
-                        <span>
-                          <Button
-                            disabled={!returnSourceOptions.length}
-                            onClick={openReturnSource}
-                          >
-                            发起退货
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          returnInvoiceNames.length
-                            ? ''
-                            : '需要先创建退货发票后再核对退款'
-                        }
-                      >
-                        <span>
-                          <Button
-                            disabled={!returnInvoiceNames.length}
-                            onClick={openRefundReview}
-                          >
-                            退款核对
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Button
-                        danger
-                        disabled={
-                          !detail.deliveryNotes.length &&
-                          !detail.salesInvoices.length
-                        }
-                        loading={actionLoading === 'quick-cancel'}
-                        onClick={confirmQuickCancelDownstream}
-                      >
-                        快捷回退下游
-                      </Button>
-                      <Tooltip title={detail.cancelSalesOrderHint}>
-                        <span>
-                          <Button
-                            danger
-                            disabled={!detail.canCancelOrder}
-                            loading={actionLoading === 'cancel'}
-                            onClick={() =>
-                              runOrderAction(
-                                'cancel',
-                                `取消销售订单 ${detail.name}？`,
-                                () => cancelSalesOrder(detail.name),
-                                true,
-                              )
-                            }
-                          >
-                            取消销售订单
-                          </Button>
-                        </span>
-                      </Tooltip>
-                    </Space>
-                  </Card>
+                    <Card
+                      ref={actionPanelRef}
+                      title={
+                        actionTargetText
+                          ? `履约动作（当前入口：${actionTargetText}）`
+                          : '履约动作'
+                      }
+                      variant="borderless"
+                    >
+                      <Space wrap>
+                        <Link
+                          to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
+                        >
+                          <Button>编辑订单</Button>
+                        </Link>
+                        <Tooltip title={deliveryDisabledReason(detail)}>
+                          <span>
+                            <Button
+                              disabled={!detail.canSubmitDelivery}
+                              loading={actionLoading === 'delivery'}
+                              onClick={confirmSubmitDelivery}
+                              type={
+                                actionTarget === 'delivery'
+                                  ? 'primary'
+                                  : 'default'
+                              }
+                            >
+                              创建发货单
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={invoiceDisabledReason(detail)}>
+                          <span>
+                            <Button
+                              disabled={!detail.canCreateSalesInvoice}
+                              loading={actionLoading === 'invoice'}
+                              onClick={confirmCreateInvoice}
+                              type={
+                                actionTarget === 'invoice'
+                                  ? 'primary'
+                                  : 'default'
+                              }
+                            >
+                              创建销售发票
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title={paymentDisabledReason(detail)}>
+                          <span>
+                            <Button
+                              disabled={
+                                detail.documentStatus === 'cancelled' ||
+                                !detail.salesInvoices.length ||
+                                (detail.outstandingAmount ?? 0) <= 0
+                              }
+                              loading={actionLoading === 'payment'}
+                              onClick={confirmRecordPayment}
+                              type={
+                                actionTarget === 'payment'
+                                  ? 'primary'
+                                  : 'default'
+                              }
+                            >
+                              登记客户收款
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            detail.salesInvoices.length ||
+                            detail.deliveryNotes.length
+                              ? ''
+                              : '需要先完成发货或开票后再发起退货'
+                          }
+                        >
+                          <span>
+                            <Button
+                              disabled={!returnSourceOptions.length}
+                              onClick={openReturnSource}
+                            >
+                              发起退货
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Tooltip
+                          title={
+                            returnInvoiceNames.length
+                              ? ''
+                              : '需要先创建退货发票后再核对退款'
+                          }
+                        >
+                          <span>
+                            <Button
+                              disabled={!returnInvoiceNames.length}
+                              onClick={openRefundReview}
+                            >
+                              退款核对
+                            </Button>
+                          </span>
+                        </Tooltip>
+                        <Button
+                          danger
+                          disabled={
+                            !detail.deliveryNotes.length &&
+                            !detail.salesInvoices.length
+                          }
+                          loading={actionLoading === 'quick-cancel'}
+                          onClick={confirmQuickCancelDownstream}
+                        >
+                          快捷回退下游
+                        </Button>
+                        <Tooltip title={detail.cancelSalesOrderHint}>
+                          <span>
+                            <Button
+                              danger
+                              disabled={!detail.canCancelOrder}
+                              loading={actionLoading === 'cancel'}
+                              onClick={() =>
+                                runOrderAction(
+                                  'cancel',
+                                  `取消销售订单 ${detail.name}？`,
+                                  () => cancelSalesOrder(detail.name),
+                                  true,
+                                )
+                              }
+                            >
+                              取消销售订单
+                            </Button>
+                          </span>
+                        </Tooltip>
+                      </Space>
+                    </Card>
 
-                  <Card title="基本信息" variant="borderless">
-                    <Descriptions column={1} items={basicItems} />
-                  </Card>
+                    <Card title="基本信息" variant="borderless">
+                      <Descriptions column={1} items={basicItems} />
+                    </Card>
 
-                  <Card title="关联单据" variant="borderless">
-                    <Descriptions column={1} items={referenceItems} />
-                  </Card>
+                    <Card title="关联单据" variant="borderless">
+                      <Descriptions column={1} items={referenceItems} />
+                    </Card>
 
-                  <Card title="收货信息" variant="borderless">
-                    <Descriptions column={1} items={shippingItems} />
-                  </Card>
-                </Space>
-              </Col>
-            </Row>
-          </>
+                    <Card title="收货信息" variant="borderless">
+                      <Descriptions column={1} items={shippingItems} />
+                    </Card>
+                  </Space>
+                </Col>
+              </Row>
+            </>
+          ) : null}
+        </Space>
+      </PageContainer>
+      <Modal
+        cancelText="取消"
+        confirmLoading={actionLoading === 'payment'}
+        destroyOnHidden
+        okText="确认登记"
+        onCancel={() => setPaymentModalOpen(false)}
+        onOk={submitRecordPayment}
+        open={paymentModalOpen}
+        title={
+          (detail?.salesInvoices.length ?? 0) > 1
+            ? `选择销售发票并登记客户收款 ${detail?.name ?? ''}`
+            : `登记客户收款 ${paymentDraft.referenceName || detail?.salesInvoices[0] || ''}`
+        }
+        width={520}
+      >
+        {detail ? (
+          <InvoicePaymentForm
+            detailBasePath="/sales/invoices"
+            invoices={detail.salesInvoices}
+            label="销售发票"
+            loadOutstandingAmount={async (invoiceName) => {
+              const invoice = await getSalesInvoiceDetail(invoiceName);
+              return invoice?.outstandingAmount ?? 0;
+            }}
+            onChange={setPaymentDraft}
+            showReferenceFields
+            showSettlementMode
+          />
         ) : null}
-      </Space>
-    </PageContainer>
+      </Modal>
+    </>
   );
 };
 
