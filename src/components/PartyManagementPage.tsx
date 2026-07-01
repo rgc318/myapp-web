@@ -222,13 +222,29 @@ function buildImportRows(
     const country = readCsvField(row, ['country', '国家']);
     const county = readCsvField(row, ['county', '区县']);
     const defaultCurrency = readCsvField(row, ['defaultCurrency', '默认币种']);
+    const defaultPriceList = readCsvField(row, [
+      'defaultPriceList',
+      'default_price_list',
+      '默认价格表',
+    ]);
     const disabled = readCsvDisabled(row, ['disabled', '停用', '状态']);
     const email = readCsvField(row, ['email', '邮箱']);
     const group = readCsvField(row, ['group', '分组']);
     const mobileNo = readCsvField(row, ['mobileNo', '手机']);
+    const paymentTerms = readCsvField(row, [
+      'paymentTerms',
+      'payment_terms',
+      '付款条款',
+    ]);
     const pincode = readCsvField(row, ['pincode', '邮编']);
     const remarks = readCsvField(row, ['remarks', '备注']);
     const state = readCsvField(row, ['state', '省/州']);
+    const taxCategory = readCsvField(row, [
+      'taxCategory',
+      'tax_category',
+      '税务类别',
+    ]);
+    const taxId = readCsvField(row, ['taxId', 'tax_id', '税号']);
     const type = readCsvField(row, ['type', '类型']);
 
     if (action === 'update') {
@@ -240,13 +256,17 @@ function buildImportRows(
       setOptionalPayload(payload, 'country', country);
       setOptionalPayload(payload, 'county', county);
       setOptionalPayload(payload, 'defaultCurrency', defaultCurrency);
+      setOptionalPayload(payload, 'defaultPriceList', defaultPriceList);
       setOptionalPayload(payload, 'email', email);
       setOptionalPayload(payload, 'group', group);
       setOptionalPayload(payload, 'mobileNo', mobileNo);
       setOptionalPayload(payload, 'name', partyName || undefined);
+      setOptionalPayload(payload, 'paymentTerms', paymentTerms);
       setOptionalPayload(payload, 'pincode', pincode);
       setOptionalPayload(payload, 'remarks', remarks);
       setOptionalPayload(payload, 'state', state);
+      setOptionalPayload(payload, 'taxCategory', taxCategory);
+      setOptionalPayload(payload, 'taxId', taxId);
       setOptionalPayload(payload, 'type', type);
       if (disabled !== undefined) {
         payload.disabled = disabled;
@@ -275,14 +295,18 @@ function buildImportRows(
       country: country ?? null,
       county: county ?? null,
       defaultCurrency: defaultCurrency ?? null,
+      defaultPriceList: defaultPriceList ?? null,
       disabled: disabled ?? false,
       email: email ?? null,
       group: group ?? defaultGroup ?? null,
       mobileNo: mobileNo ?? null,
       name: partyName,
+      paymentTerms: paymentTerms ?? null,
       pincode: pincode ?? null,
       remarks: remarks ?? null,
       state: state ?? null,
+      taxCategory: taxCategory ?? null,
+      taxId: taxId ?? null,
       type: type ?? defaultType,
     };
     const error = !partyName
@@ -388,6 +412,8 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [togglingParty, setTogglingParty] = useState<string>();
   const validImportRows = importRows.filter((row) => !row.error);
+  const defaultPriceListExample =
+    partyLabel === '供应商' ? 'Standard Buying' : 'Standard Selling';
 
   const reload = () => actionRef.current?.reload();
 
@@ -400,14 +426,18 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
       country: record.defaultAddress?.country,
       county: record.defaultAddress?.county,
       defaultCurrency: record.defaultCurrency,
+      defaultPriceList: record.defaultPriceList,
       disabled: record.disabled,
       email: record.email,
       group: record.group,
       mobileNo: record.mobileNo,
       name: record.displayName || record.name,
+      paymentTerms: record.paymentTerms,
       pincode: record.defaultAddress?.pincode,
       remarks: record.remarks,
       state: record.defaultAddress?.state,
+      taxCategory: record.taxCategory,
+      taxId: record.taxId,
       type: record.type,
     });
   };
@@ -494,6 +524,10 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
           '分组',
           '状态',
           '默认币种',
+          '默认价格表',
+          '付款条款',
+          '税务类别',
+          '税号',
           '联系人',
           '手机',
           '邮箱',
@@ -512,6 +546,10 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
           party.group ?? '',
           party.disabled ? '停用' : '启用',
           party.defaultCurrency ?? '',
+          party.defaultPriceList ?? '',
+          party.paymentTerms ?? '',
+          party.taxCategory ?? '',
+          party.taxId ?? '',
           party.defaultContact?.displayName ?? '',
           party.mobileNo ?? '',
           party.email ?? '',
@@ -542,6 +580,10 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
         '分组',
         '停用',
         '默认币种',
+        '默认价格表',
+        '付款条款',
+        '税务类别',
+        '税号',
         '联系人',
         '手机',
         '邮箱',
@@ -561,6 +603,10 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
         defaultGroup ?? '',
         '0',
         'CNY',
+        defaultPriceListExample,
+        '',
+        '',
+        '',
         `示例${partyLabel}联系人`,
         '13800000000',
         'party@example.test',
@@ -576,6 +622,10 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
         'update',
         `${partyLabel}-0001`,
         `示例${partyLabel}-更新`,
+        '',
+        '',
+        '',
+        '',
         '',
         '',
         '',
@@ -709,6 +759,22 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
       renderText: (value) => value || '-',
     },
     {
+      title: '付款条款',
+      dataIndex: 'paymentTerms',
+      search: false,
+      ellipsis: true,
+      width: 150,
+      renderText: (value) => value || '-',
+    },
+    {
+      title: '税号',
+      dataIndex: 'taxId',
+      search: false,
+      ellipsis: true,
+      width: 160,
+      renderText: (value) => value || '-',
+    },
+    {
       title: '联系人',
       dataIndex: ['defaultContact', 'displayName'],
       search: false,
@@ -837,7 +903,7 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
           };
         }}
         rowKey="name"
-        scroll={{ x: 1360 }}
+        scroll={{ x: 1660 }}
         search={{
           defaultCollapsed: false,
           labelWidth: 88,
@@ -988,6 +1054,26 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
             </Form.Item>
           </Space>
           <Space size={16} style={{ width: '100%' }}>
+            <Form.Item
+              label="默认价格表"
+              name="defaultPriceList"
+              style={{ flex: 1 }}
+            >
+              <Input placeholder="价格表" />
+            </Form.Item>
+            <Form.Item label="付款条款" name="paymentTerms" style={{ flex: 1 }}>
+              <Input placeholder="付款条款模板" />
+            </Form.Item>
+          </Space>
+          <Space size={16} style={{ width: '100%' }}>
+            <Form.Item label="税务类别" name="taxCategory" style={{ flex: 1 }}>
+              <Input placeholder="税务类别" />
+            </Form.Item>
+            <Form.Item label="税号" name="taxId" style={{ flex: 1 }}>
+              <Input placeholder="税务登记号" />
+            </Form.Item>
+          </Space>
+          <Space size={16} style={{ width: '100%' }}>
             <Form.Item label="联系人" name="contactName" style={{ flex: 1 }}>
               <Input placeholder="主联系人" />
             </Form.Item>
@@ -1083,6 +1169,26 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
                       {
                         title: '默认币种',
                         dataIndex: 'defaultCurrency',
+                        renderText: (value) => value || '-',
+                      },
+                      {
+                        title: '默认价格表',
+                        dataIndex: 'defaultPriceList',
+                        renderText: (value) => value || '-',
+                      },
+                      {
+                        title: '付款条款',
+                        dataIndex: 'paymentTerms',
+                        renderText: (value) => value || '-',
+                      },
+                      {
+                        title: '税务类别',
+                        dataIndex: 'taxCategory',
+                        renderText: (value) => value || '-',
+                      },
+                      {
+                        title: '税号',
+                        dataIndex: 'taxId',
                         renderText: (value) => value || '-',
                       },
                       {

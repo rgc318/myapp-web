@@ -132,6 +132,7 @@ export type PartySummary = {
   defaultAddress: PartyAddressSummary | null;
   defaultContact: PartyContactSummary | null;
   defaultCurrency: string | null;
+  defaultPriceList: string | null;
   disabled: boolean;
   displayName: string;
   email: string | null;
@@ -139,8 +140,11 @@ export type PartySummary = {
   mobileNo: string | null;
   modified: string | null;
   name: string;
+  paymentTerms: string | null;
   recentAddresses: PartyRecentAddress[];
   remarks: string | null;
+  taxCategory: string | null;
+  taxId: string | null;
   type: string | null;
 };
 
@@ -177,14 +181,18 @@ export type SavePartyPayload = {
   country?: string | null;
   county?: string | null;
   defaultCurrency?: string | null;
+  defaultPriceList?: string | null;
   disabled?: boolean;
   email?: string | null;
   group?: string | null;
   mobileNo?: string | null;
   name: string;
+  paymentTerms?: string | null;
   pincode?: string | null;
   remarks?: string | null;
   state?: string | null;
+  taxCategory?: string | null;
+  taxId?: string | null;
   type?: string | null;
 };
 
@@ -601,6 +609,7 @@ function mapCustomer(row: Record<string, any>): PartySummary {
     defaultAddress,
     defaultContact,
     defaultCurrency: optionalString(row.default_currency),
+    defaultPriceList: optionalString(row.default_price_list),
     disabled: Boolean(toOptionalNumber(row.disabled)),
     displayName: String(row.customer_name ?? row.display_name ?? row.name ?? ''),
     email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
@@ -608,8 +617,11 @@ function mapCustomer(row: Record<string, any>): PartySummary {
     mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
     modified: optionalString(row.modified),
     name: String(row.customer ?? row.name ?? ''),
+    paymentTerms: optionalString(row.payment_terms),
     recentAddresses: mapRecentAddresses(row.recent_addresses),
     remarks: optionalString(row.remarks),
+    taxCategory: optionalString(row.tax_category),
+    taxId: optionalString(row.tax_id),
     type: optionalString(row.customer_type),
   };
 }
@@ -622,6 +634,7 @@ function mapSupplier(row: Record<string, any>): PartySummary {
     defaultAddress,
     defaultContact,
     defaultCurrency: optionalString(row.default_currency),
+    defaultPriceList: optionalString(row.default_price_list),
     disabled: Boolean(toOptionalNumber(row.disabled)),
     displayName: String(row.supplier_name ?? row.display_name ?? row.name ?? ''),
     email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
@@ -629,8 +642,11 @@ function mapSupplier(row: Record<string, any>): PartySummary {
     mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
     modified: optionalString(row.modified),
     name: String(row.supplier ?? row.name ?? ''),
+    paymentTerms: optionalString(row.payment_terms),
     recentAddresses: mapRecentAddresses(row.recent_addresses),
     remarks: optionalString(row.remarks),
+    taxCategory: optionalString(row.tax_category),
+    taxId: optionalString(row.tax_id),
     type: optionalString(row.supplier_type),
   };
 }
@@ -1024,8 +1040,12 @@ export async function createCustomer(payload: SavePartyPayload) {
       default_address: buildPartyAddressPayload(payload),
       default_contact: buildPartyContactPayload(payload),
       default_currency: toOptionalText(payload.defaultCurrency),
+      default_price_list: toOptionalText(payload.defaultPriceList),
       disabled: payload.disabled ? 1 : 0,
+      payment_terms: toOptionalText(payload.paymentTerms),
       remarks: payload.remarks ?? '',
+      tax_category: toOptionalText(payload.taxCategory),
+      tax_id: toOptionalText(payload.taxId),
     }),
     successMessage: '客户已创建',
     transform: (raw) => mapCustomer(readObject(raw)),
@@ -1047,8 +1067,12 @@ export async function updateCustomer(
       default_address: buildPartyAddressPayload(payload as SavePartyPayload),
       default_contact: buildPartyContactPayload(payload as SavePartyPayload),
       default_currency: payload.defaultCurrency ?? '',
+      default_price_list: payload.defaultPriceList ?? '',
       disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+      payment_terms: payload.paymentTerms ?? '',
       remarks: payload.remarks ?? '',
+      tax_category: payload.taxCategory ?? '',
+      tax_id: payload.taxId ?? '',
     }),
     successMessage: '客户已更新',
     transform: (raw) => mapCustomer(readObject(raw)),
@@ -1094,12 +1118,16 @@ export async function createSupplier(payload: SavePartyPayload) {
       contact_phone: toOptionalText(payload.mobileNo),
       default_address: buildPartyAddressPayload(payload),
       default_contact: buildPartyContactPayload(payload),
+      default_price_list: toOptionalText(payload.defaultPriceList),
       email_id: toOptionalText(payload.email),
       mobile_no: toOptionalText(payload.mobileNo),
+      payment_terms: toOptionalText(payload.paymentTerms),
       remarks: payload.remarks ?? '',
       supplier_group: toOptionalText(payload.group),
       supplier_name: payload.name,
       supplier_type: toOptionalText(payload.type) ?? 'Company',
+      tax_category: toOptionalText(payload.taxCategory),
+      tax_id: toOptionalText(payload.taxId),
     }),
     successMessage: '供应商已创建',
     transform: (raw) => mapSupplier(readObject(raw)),
@@ -1118,13 +1146,17 @@ export async function updateSupplier(
       contact_phone: payload.mobileNo ?? '',
       default_address: buildPartyAddressPayload(payload as SavePartyPayload),
       default_contact: buildPartyContactPayload(payload as SavePartyPayload),
+      default_price_list: payload.defaultPriceList ?? '',
       email_id: payload.email ?? '',
       mobile_no: payload.mobileNo ?? '',
+      payment_terms: payload.paymentTerms ?? '',
       remarks: payload.remarks ?? '',
       supplier,
       supplier_group: payload.group ?? '',
       supplier_name: payload.name,
       supplier_type: payload.type ?? '',
+      tax_category: payload.taxCategory ?? '',
+      tax_id: payload.taxId ?? '',
     }),
     successMessage: '供应商已更新',
     transform: (raw) => mapSupplier(readObject(raw)),
