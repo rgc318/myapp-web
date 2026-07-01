@@ -43,6 +43,7 @@ export default {
   'menu.inventory.stock-detail': '商品库存详情',
   'menu.inventory.alerts': '库存预警',
   'menu.inventory.adjustments': '库存调整',
+  'menu.inventory.counts': '批量盘点',
   'menu.inventory.ledger': '库存流水',
   'menu.inventory-ledger': '库存流水',
   'menu.master-data': '主数据',

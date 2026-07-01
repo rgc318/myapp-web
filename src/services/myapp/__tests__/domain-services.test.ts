@@ -2,6 +2,7 @@ import { callGatewayMethod } from '../api-client';
 import {
   adjustInventoryStock,
   listInventoryStockSummary,
+  submitInventoryStockCount,
   transferInventoryStock,
 } from '../inventory';
 import { listBusinessDocuments } from '../documents';
@@ -1073,6 +1074,77 @@ describe('myapp domain services', () => {
         source_warehouse: 'Stores - RD',
         target_warehouse: 'Transit - RD',
         uom: 'Box',
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('runs inventory stock count through stock reconciliation gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        company: 'rgc (Demo)',
+        difference_count: 1,
+        posting_date: '2026-06-17',
+        rows: [
+          {
+            company: 'rgc (Demo)',
+            conversion_factor: 6,
+            counted_stock_qty: 12,
+            current_stock_qty: 3,
+            has_difference: 1,
+            input_qty: 2,
+            input_uom: 'Box',
+            item_code: 'SKU-1',
+            item_name: '测试商品',
+            qty_delta: 9,
+            stock_uom: 'Nos',
+            valuation_rate: 8.5,
+            warehouse: 'Stores - RD',
+          },
+        ],
+        stock_reconciliation: 'STK-REC-0001',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await submitInventoryStockCount({
+      company: 'rgc (Demo)',
+      items: [
+        {
+          countedQty: 2,
+          itemCode: 'SKU-1',
+          uom: 'Box',
+          valuationRate: 8.5,
+          warehouse: 'Stores - RD',
+        },
+      ],
+      postingDate: '2026-06-17',
+      remarks: 'monthly count',
+    });
+
+    expect(result.data.stockReconciliation).toBe('STK-REC-0001');
+    expect(result.data.rows[0]).toMatchObject({
+      countedStockQty: 12,
+      currentStockQty: 3,
+      hasDifference: true,
+      qtyDelta: 9,
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'submit_inventory_stock_count_v1',
+      {
+        company: 'rgc (Demo)',
+        items: [
+          {
+            counted_qty: 2,
+            item_code: 'SKU-1',
+            uom: 'Box',
+            valuation_rate: 8.5,
+            warehouse: 'Stores - RD',
+          },
+        ],
+        posting_date: '2026-06-17',
+        remarks: 'monthly count',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );

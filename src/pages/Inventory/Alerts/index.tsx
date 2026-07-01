@@ -252,6 +252,9 @@ const InventoryAlertsPage: React.FC = () => {
         >
           库存调整
         </Button>,
+        <Button key="counts" onClick={() => history.push('/inventory/counts')}>
+          批量盘点
+        </Button>,
         <Button key="refresh" onClick={() => actionRef.current?.reload()}>
           刷新
         </Button>,

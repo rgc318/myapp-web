@@ -104,6 +104,45 @@ export type InventoryStockTransferPayload = {
   uom?: string;
 };
 
+export type InventoryStockCountItemPayload = {
+  countedQty: number;
+  itemCode: string;
+  uom?: string;
+  valuationRate?: number | null;
+  warehouse: string;
+};
+
+export type InventoryStockCountPayload = {
+  company?: string;
+  items: InventoryStockCountItemPayload[];
+  postingDate?: string;
+  remarks?: string;
+};
+
+export type InventoryStockCountRow = {
+  company: string;
+  conversionFactor: number;
+  countedStockQty: number;
+  currentStockQty: number;
+  hasDifference: boolean;
+  inputQty: number;
+  inputUom: string;
+  itemCode: string;
+  itemName: string;
+  qtyDelta: number;
+  stockUom: string;
+  valuationRate: number;
+  warehouse: string;
+};
+
+export type InventoryStockCountResult = {
+  company?: string;
+  differenceCount: number;
+  postingDate: string | null;
+  rows: InventoryStockCountRow[];
+  stockReconciliation: string | null;
+};
+
 export type InventoryStockMutationResult = {
   company?: string;
   conversionFactor: number;
@@ -287,6 +326,32 @@ export async function transferInventoryStock(
   );
 }
 
+export async function submitInventoryStockCount(
+  payload: InventoryStockCountPayload,
+) {
+  return runGatewayMutation<InventoryStockCountResult>(
+    'submit_inventory_stock_count_v1',
+    {
+      payload: compactPayload({
+        company: toOptionalText(payload.company),
+        items: payload.items.map((item) =>
+          compactPayload({
+            counted_qty: item.countedQty,
+            item_code: item.itemCode,
+            uom: toOptionalText(item.uom),
+            valuation_rate: item.valuationRate ?? undefined,
+            warehouse: item.warehouse,
+          }),
+        ),
+        posting_date: toOptionalText(payload.postingDate),
+        remarks: toOptionalText(payload.remarks),
+      }),
+      successMessage: '库存盘点已提交',
+      transform: (raw) => mapInventoryStockCountResult(readObject(raw)),
+    },
+  );
+}
+
 function mapInventoryStockMutationResult(
   row: Record<string, any>,
 ): InventoryStockMutationResult {
@@ -333,5 +398,45 @@ function mapInventoryStockMutationResult(
       typeof row.warehouse === 'string' && row.warehouse
         ? row.warehouse
         : undefined,
+  };
+}
+
+function mapInventoryStockCountRow(
+  row: Record<string, any>,
+): InventoryStockCountRow {
+  return {
+    company: String(row.company ?? ''),
+    conversionFactor: toNumber(row.conversion_factor),
+    countedStockQty: toNumber(row.counted_stock_qty),
+    currentStockQty: toNumber(row.current_stock_qty),
+    hasDifference: Boolean(row.has_difference),
+    inputQty: toNumber(row.input_qty),
+    inputUom: String(row.input_uom ?? ''),
+    itemCode: String(row.item_code ?? ''),
+    itemName: String(row.item_name ?? row.item_code ?? ''),
+    qtyDelta: toNumber(row.qty_delta),
+    stockUom: String(row.stock_uom ?? ''),
+    valuationRate: toNumber(row.valuation_rate),
+    warehouse: String(row.warehouse ?? ''),
+  };
+}
+
+function mapInventoryStockCountResult(
+  row: Record<string, any>,
+): InventoryStockCountResult {
+  const rows = Array.isArray(row.rows) ? row.rows : [];
+  return {
+    company:
+      typeof row.company === 'string' && row.company ? row.company : undefined,
+    differenceCount: toNumber(row.difference_count),
+    postingDate:
+      typeof row.posting_date === 'string' && row.posting_date
+        ? row.posting_date
+        : null,
+    rows: rows.map((entry) => mapInventoryStockCountRow(readObject(entry))),
+    stockReconciliation:
+      typeof row.stock_reconciliation === 'string' && row.stock_reconciliation
+        ? row.stock_reconciliation
+        : null,
   };
 }

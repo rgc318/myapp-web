@@ -151,6 +151,7 @@ function buildColumns(defaultCompany: string): ProColumns<StockLedgerEntry>[] {
         'Sales Order': { text: '销售订单' },
         'Purchase Order': { text: '采购订单' },
         'Stock Entry': { text: '库存调整' },
+        'Stock Reconciliation': { text: '库存盘点' },
       },
     },
     {
@@ -257,12 +258,20 @@ const InventoryLedgerPage: React.FC = () => {
   const query = new URLSearchParams(location.search);
   const initialItemCode = query.get('itemCode') ?? undefined;
   const initialWarehouse = query.get('warehouse') ?? undefined;
+  const initialVoucherType = query.get('voucherType') ?? undefined;
+  const initialVoucherNo = query.get('voucherNo') ?? undefined;
   const tableColumns = buildColumns(defaultCompany).map((column) => {
     if (column.dataIndex === 'itemCode') {
       return { ...column, initialValue: initialItemCode };
     }
     if (column.dataIndex === 'warehouse') {
       return { ...column, initialValue: initialWarehouse };
+    }
+    if (column.dataIndex === 'voucherType') {
+      return { ...column, initialValue: initialVoucherType };
+    }
+    if (column.dataIndex === 'voucherNo') {
+      return { ...column, initialValue: initialVoucherNo };
     }
     return column;
   });
@@ -279,7 +288,7 @@ const InventoryLedgerPage: React.FC = () => {
       <ProTable<StockLedgerEntry>
         actionRef={actionRef}
         columns={tableColumns}
-        key={`${defaultCompany}:${initialItemCode ?? ''}:${initialWarehouse ?? ''}`}
+        key={`${defaultCompany}:${initialItemCode ?? ''}:${initialWarehouse ?? ''}:${initialVoucherType ?? ''}:${initialVoucherNo ?? ''}`}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,

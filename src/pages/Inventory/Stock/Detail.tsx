@@ -174,6 +174,9 @@ const InventoryStockDetailPage: React.FC = () => {
         >
           库存调整
         </Button>,
+        <Button key="counts" onClick={() => history.push('/inventory/counts')}>
+          批量盘点
+        </Button>,
         <Button key="refresh" loading={loading} onClick={refresh}>
           刷新
         </Button>,

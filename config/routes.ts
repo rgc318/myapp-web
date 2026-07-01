@@ -227,6 +227,11 @@ export default [
         component: './Inventory/Adjustments',
       },
       {
+        path: '/inventory/counts',
+        name: 'counts',
+        component: './Inventory/Counts',
+      },
+      {
         path: '/inventory/transfers',
         name: 'transfers',
         component: './Inventory/Transfers',
