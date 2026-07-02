@@ -525,6 +525,7 @@ const SalesOrderDetailPage: React.FC = () => {
     referenceName: '',
   });
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [rollbackModalOpen, setRollbackModalOpen] = useState(false);
   const actionTarget = useMemo(() => {
     const value = new URLSearchParams(location.search).get('action');
     return ['delivery', 'invoice', 'payment'].includes(String(value))
@@ -888,82 +889,68 @@ const SalesOrderDetailPage: React.FC = () => {
       return;
     }
 
-    Modal.confirm({
-      cancelText: '取消',
-      content: (
-        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-          <span>
-            系统会按顺序取消客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝一键回退。
-          </span>
-          <SalesRollbackGuide
-            deliveryNotes={detail.deliveryNotes}
-            salesInvoices={detail.salesInvoices}
-          />
-        </Space>
-      ),
-      okText: '一键回退并修改',
-      okType: 'danger',
-      onOk: async () => {
-        setActionLoading('quick-cancel');
-        try {
-          const result = await quickCancelSalesOrderV2(
-            detail.name || orderName,
-            {
-              rollbackPayment: true,
-            },
-          );
-          refresh();
-          const completedSteps = result.data.completedSteps
-            .map(quickCancelStepLabel)
-            .join('、');
-          Modal.success({
-            content: (
-              <Space orientation="vertical" size={4}>
-                <span>
-                  {completedSteps
-                    ? `已回退：${completedSteps}`
-                    : '当前没有需要回退的发货、开票或收款记录。'}
-                </span>
-                {result.data.cancelledPaymentEntries.length ? (
-                  <span>
-                    收款单：{result.data.cancelledPaymentEntries.join('、')}
-                  </span>
-                ) : null}
-                {result.data.cancelledSalesInvoice ? (
-                  <span>销售发票：{result.data.cancelledSalesInvoice}</span>
-                ) : null}
-                {result.data.cancelledDeliveryNote ? (
-                  <span>销售发货单：{result.data.cancelledDeliveryNote}</span>
-                ) : null}
-              </Space>
-            ),
-            title: '回退并修改订单完成',
-          });
-        } catch (caught) {
-          const errorMessage =
-            caught instanceof Error ? caught.message : '操作失败';
-          message.error(errorMessage);
-          Modal.warning({
-            content: (
-              <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-                <span>{errorMessage}</span>
-                <SalesRollbackGuide
-                  deliveryNotes={detail.deliveryNotes}
-                  salesInvoices={detail.salesInvoices}
-                />
-              </Space>
-            ),
-            title: '请分步回退后再修改',
-            width: 680,
-          });
-          throw caught;
-        } finally {
-          setActionLoading(undefined);
-        }
-      },
-      title: `回退并修改销售订单 ${detail.name || orderName}？`,
-      width: 620,
-    });
+    setRollbackModalOpen(true);
+  };
+
+  const submitQuickCancelDownstream = async () => {
+    if (!detail) {
+      return;
+    }
+
+    setActionLoading('quick-cancel');
+    try {
+      const result = await quickCancelSalesOrderV2(detail.name || orderName, {
+        rollbackPayment: true,
+      });
+      setRollbackModalOpen(false);
+      refresh();
+      const completedSteps = result.data.completedSteps
+        .map(quickCancelStepLabel)
+        .join('、');
+      Modal.success({
+        content: (
+          <Space orientation="vertical" size={4}>
+            <span>
+              {completedSteps
+                ? `已回退：${completedSteps}`
+                : '当前没有需要回退的发货、开票或收款记录。'}
+            </span>
+            {result.data.cancelledPaymentEntries.length ? (
+              <span>
+                收款单：{result.data.cancelledPaymentEntries.join('、')}
+              </span>
+            ) : null}
+            {result.data.cancelledSalesInvoice ? (
+              <span>销售发票：{result.data.cancelledSalesInvoice}</span>
+            ) : null}
+            {result.data.cancelledDeliveryNote ? (
+              <span>销售发货单：{result.data.cancelledDeliveryNote}</span>
+            ) : null}
+          </Space>
+        ),
+        title: '回退并修改订单完成',
+      });
+    } catch (caught) {
+      const errorMessage =
+        caught instanceof Error ? caught.message : '操作失败';
+      message.error(errorMessage);
+      Modal.warning({
+        content: (
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <span>{errorMessage}</span>
+            <SalesRollbackGuide
+              deliveryNotes={detail.deliveryNotes}
+              salesInvoices={detail.salesInvoices}
+            />
+          </Space>
+        ),
+        title: '请分步回退后再修改',
+        width: 680,
+      });
+      throw caught;
+    } finally {
+      setActionLoading(undefined);
+    }
   };
 
   const pageDescriptionItems: DescriptionsProps['items'] = detail
@@ -1522,10 +1509,6 @@ const SalesOrderDetailPage: React.FC = () => {
                           <span>
                             <Button
                               danger
-                              disabled={
-                                !detail.deliveryNotes.length &&
-                                !detail.salesInvoices.length
-                              }
                               loading={actionLoading === 'quick-cancel'}
                               onClick={confirmQuickCancelDownstream}
                             >
@@ -1601,6 +1584,30 @@ const SalesOrderDetailPage: React.FC = () => {
             showReferenceFields
             showSettlementMode
           />
+        ) : null}
+      </Modal>
+      <Modal
+        cancelText="取消"
+        confirmLoading={actionLoading === 'quick-cancel'}
+        destroyOnHidden
+        okButtonProps={{ danger: true }}
+        okText="一键回退并修改"
+        onCancel={() => setRollbackModalOpen(false)}
+        onOk={submitQuickCancelDownstream}
+        open={rollbackModalOpen}
+        title={`回退并修改销售订单 ${detail?.name || orderName}？`}
+        width={620}
+      >
+        {detail ? (
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <span>
+              系统会按顺序取消客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝一键回退。
+            </span>
+            <SalesRollbackGuide
+              deliveryNotes={detail.deliveryNotes}
+              salesInvoices={detail.salesInvoices}
+            />
+          </Space>
         ) : null}
       </Modal>
     </>
