@@ -69,14 +69,19 @@ function toPercent(
 }
 
 function paymentStatusHint(data: {
+  canRecordPayment: boolean;
   documentStatus: string;
   latestPaymentEntry: string;
   latestUnallocatedAmount: number | null;
   outstandingAmount: number | null;
+  recordPaymentHint: string;
   totalWriteoffAmount: number | null;
 }) {
   if (isCancelled(data.documentStatus)) {
     return '当前发票已经作废，仅作为历史单据查看。后续业务处理应返回仍然有效的订单或发货单。';
+  }
+  if (!data.canRecordPayment && data.recordPaymentHint) {
+    return data.recordPaymentHint;
   }
   if ((data.outstandingAmount ?? 0) > 0) {
     return '当前发票仍有未收金额，可继续登记客户收款；如果需要回改单据，请先确认是否要同步取消原客户收款。';
@@ -234,6 +239,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const sourceOrder = data?.salesOrders[0] ?? '';
   const linkedDeliveryNote = data?.deliveryNotes[0] ?? '';
   const hasOutstanding = (data?.outstandingAmount ?? 0) > 0;
+  const canRecordPayment = Boolean(data?.canRecordPayment);
   const activePaymentEntries = data?.paymentEntries ?? [];
 
   const findPaymentEntry = (paymentEntry: string) =>
@@ -354,8 +360,10 @@ const SalesInvoiceDetailPage: React.FC = () => {
   ];
 
   const confirmRecordPayment = () => {
-    if (!data || cancelled || !hasOutstanding) {
-      message.warning('当前发票没有可登记的未收金额');
+    if (!data || cancelled || !hasOutstanding || !canRecordPayment) {
+      message.warning(
+        data?.recordPaymentHint || '当前发票没有可登记的未收金额',
+      );
       return;
     }
 
@@ -415,7 +423,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
             doctype="Sales Invoice"
             key="print"
           />,
-          hasOutstanding && !cancelled ? (
+          hasOutstanding && canRecordPayment && !cancelled ? (
             <Button
               key="payment"
               loading={paymentLoading}
@@ -585,6 +593,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                             ) : null
                           ) : hasOutstanding ? (
                             <Button
+                              disabled={!canRecordPayment}
                               loading={paymentLoading}
                               onClick={confirmRecordPayment}
                               size="small"
@@ -610,9 +619,11 @@ const SalesInvoiceDetailPage: React.FC = () => {
                         type={
                           cancelled
                             ? 'warning'
-                            : hasOutstanding
+                            : hasOutstanding && canRecordPayment
                               ? 'info'
-                              : 'success'
+                              : data.canRecordPayment
+                                ? 'success'
+                                : 'warning'
                         }
                       />
                     </ProCard>
@@ -651,6 +662,14 @@ const SalesInvoiceDetailPage: React.FC = () => {
                         <ProDescriptions.Item label="可取消">
                           {data.canCancelSalesInvoice ? '是' : '否'}
                         </ProDescriptions.Item>
+                        <ProDescriptions.Item label="可登记收款">
+                          {data.canRecordPayment ? '是' : '否'}
+                        </ProDescriptions.Item>
+                        {!data.canRecordPayment && data.recordPaymentHint ? (
+                          <ProDescriptions.Item label="收款限制">
+                            {data.recordPaymentHint}
+                          </ProDescriptions.Item>
+                        ) : null}
                       </ProDescriptions>
                     </ProCard>
 
@@ -664,6 +683,9 @@ const SalesInvoiceDetailPage: React.FC = () => {
                             data.deliveryNotes,
                             '/sales/delivery-notes',
                           )}
+                        </ProDescriptions.Item>
+                        <ProDescriptions.Item label="退货发票">
+                          {docLinks(data.returnInvoices, '/sales/invoices')}
                         </ProDescriptions.Item>
                       </ProDescriptions>
                     </ProCard>

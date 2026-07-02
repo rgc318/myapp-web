@@ -1578,7 +1578,10 @@ const SalesOrderDetailPage: React.FC = () => {
             label="销售发票"
             loadOutstandingAmount={async (invoiceName) => {
               const invoice = await getSalesInvoiceDetail(invoiceName);
-              return invoice?.outstandingAmount ?? 0;
+              if (!invoice?.canRecordPayment) {
+                return 0;
+              }
+              return invoice.outstandingAmount ?? 0;
             }}
             onChange={setPaymentDraft}
             showReferenceFields

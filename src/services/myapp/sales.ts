@@ -286,6 +286,7 @@ export type SalesInvoiceDetail = {
   addressDisplay: string;
   actualPaidAmount: number | null;
   canCancelSalesInvoice: boolean;
+  canRecordPayment: boolean;
   cancelSalesInvoiceHint: string;
   company: string;
   contactDisplay: string;
@@ -306,6 +307,8 @@ export type SalesInvoiceDetail = {
   postingDate: string;
   receivableAmount: number | null;
   remarks: string;
+  returnInvoices: string[];
+  recordPaymentHint: string;
   salesOrders: string[];
   totalWriteoffAmount: number | null;
 };
@@ -939,6 +942,7 @@ export async function getSalesInvoiceDetail(
   return {
     addressDisplay: String(shipping.shipping_address_text ?? ''),
     canCancelSalesInvoice: Boolean(actions.can_cancel_sales_invoice),
+    canRecordPayment: Boolean(actions.can_record_payment),
     cancelSalesInvoiceHint: String(actions.cancel_sales_invoice_hint ?? ''),
     company: String(meta.company ?? ''),
     contactDisplay: String(
@@ -964,6 +968,8 @@ export async function getSalesInvoiceDetail(
     postingDate: String(meta.posting_date ?? ''),
     receivableAmount: toNumber(amounts.receivable_amount),
     remarks: String(meta.remarks ?? ''),
+    returnInvoices: toStringList(references.return_invoices),
+    recordPaymentHint: String(actions.record_payment_hint ?? ''),
     salesOrders: toStringList(references.sales_orders),
     totalWriteoffAmount: toNumber(payment.total_writeoff_amount),
   };
