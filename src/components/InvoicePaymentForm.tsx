@@ -44,7 +44,6 @@ export const InvoicePaymentForm: React.FC<Props> = ({
 }) => {
   const [amount, setAmount] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [modeOfPayment, setModeOfPayment] = useState('');
   const [outstandingAmount, setOutstandingAmount] = useState<number | null>(
     null,
   );
@@ -58,6 +57,14 @@ export const InvoicePaymentForm: React.FC<Props> = ({
   const loadOutstandingAmountRef = useRef(loadOutstandingAmount);
   const modeOfPaymentRef = useRef('');
   const onChangeRef = useRef(onChange);
+  const draftRef = useRef<InvoicePaymentDraft>({
+    amount: 0,
+    modeOfPayment: '',
+    referenceDate,
+    referenceName,
+    referenceNo,
+    settlementMode,
+  });
 
   const options = useMemo(
     () => invoices.map((name) => ({ label: name, value: name })),
@@ -86,7 +93,7 @@ export const InvoicePaymentForm: React.FC<Props> = ({
         setOutstandingAmount(resolvedAmount);
         setAmount(resolvedAmount);
         setSettlementMode('partial');
-        onChangeRef.current({
+        updateDraft({
           amount: resolvedAmount,
           modeOfPayment: modeOfPaymentRef.current,
           referenceDate,
@@ -108,14 +115,10 @@ export const InvoicePaymentForm: React.FC<Props> = ({
 
   const updateDraft = (next: Partial<InvoicePaymentDraft>) => {
     const draft = {
-      amount,
-      modeOfPayment,
-      referenceDate,
-      referenceName,
-      referenceNo,
-      settlementMode,
+      ...draftRef.current,
       ...next,
     };
+    draftRef.current = draft;
     onChangeRef.current(draft);
   };
 
@@ -172,7 +175,6 @@ export const InvoicePaymentForm: React.FC<Props> = ({
       <PaymentModeSelect
         onChange={(value) => {
           modeOfPaymentRef.current = value;
-          setModeOfPayment(value);
           updateDraft({ modeOfPayment: value });
         }}
       />
