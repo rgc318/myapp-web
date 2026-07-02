@@ -20,7 +20,7 @@ import {
   Space,
   Typography,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import {
@@ -260,6 +260,21 @@ const SalesRefundReviewPage: React.FC = () => {
       refreshDeps: [returnInvoiceName],
     },
   );
+
+  useEffect(() => {
+    if (invoiceName) {
+      return;
+    }
+    const sourceInvoiceName =
+      refundContext?.sourceInvoice?.name ??
+      refundContext?.returnInvoice?.returnAgainst ??
+      '';
+    if (!sourceInvoiceName) {
+      return;
+    }
+    setInvoiceName(sourceInvoiceName);
+    form.setFieldValue('invoiceName', sourceInvoiceName);
+  }, [form, invoiceName, refundContext]);
 
   const loadInvoice = async () => {
     const values = await form.validateFields([
