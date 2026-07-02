@@ -240,6 +240,9 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const linkedDeliveryNote = data?.deliveryNotes[0] ?? '';
   const hasOutstanding = (data?.outstandingAmount ?? 0) > 0;
   const canRecordPayment = Boolean(data?.canRecordPayment);
+  const hasReturnInvoices = Boolean(data?.returnInvoices.length);
+  const shouldTreatPaymentsAsException =
+    Boolean(data) && !canRecordPayment && hasReturnInvoices;
   const activePaymentEntries = data?.paymentEntries ?? [];
 
   const findPaymentEntry = (paymentEntry: string) =>
@@ -324,7 +327,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
     try {
       await cancelSalesPaymentEntry(paymentToCancel.paymentEntry);
       message.success(
-        `已取消客户收款 ${paymentToCancel.paymentEntry}，金额 ${formatCurrencyValue(
+        `${shouldTreatPaymentsAsException ? '已清理异常客户收款' : '已取消客户收款'} ${paymentToCancel.paymentEntry}，金额 ${formatCurrencyValue(
           paymentToCancel.allocatedAmount ?? paymentToCancel.actualPaidAmount,
           data?.currency,
         )}`,
@@ -353,7 +356,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
           size="small"
           type="link"
         >
-          取消这笔收款
+          {shouldTreatPaymentsAsException ? '清理这笔异常收款' : '取消这笔收款'}
         </Button>
       ),
     },
@@ -456,7 +459,9 @@ const SalesInvoiceDetailPage: React.FC = () => {
             loading={paymentCancelLoading}
             onClick={() => openCancelPayment(latestPaymentEntryRecord)}
           >
-            取消最近客户收款
+            {shouldTreatPaymentsAsException
+              ? '清理最近异常收款'
+              : '取消最近客户收款'}
           </Button>,
         ]}
       >
@@ -753,7 +758,13 @@ const SalesInvoiceDetailPage: React.FC = () => {
                     (data.canCancelSalesInvoice ||
                       data.cancelSalesInvoiceHint ||
                       data.latestPaymentEntry) ? (
-                      <ProCard title="回退处理">
+                      <ProCard
+                        title={
+                          shouldTreatPaymentsAsException
+                            ? '异常收款清理'
+                            : '回退处理'
+                        }
+                      >
                         <Alert
                           action={
                             <Space>
@@ -766,7 +777,9 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                   }
                                   size="small"
                                 >
-                                  取消最近客户收款
+                                  {shouldTreatPaymentsAsException
+                                    ? '清理最近异常收款'
+                                    : '取消最近客户收款'}
                                 </Button>
                               ) : null}
                               {data.canCancelSalesInvoice ? (
@@ -784,12 +797,18 @@ const SalesInvoiceDetailPage: React.FC = () => {
                             </Space>
                           }
                           description={
-                            data.latestPaymentEntry
-                              ? `这张发票已经有关联客户收款。若只是某笔收款登记有误，请在收款历史中选择具体收款单取消；若订单金额或开票结果有问题，应先取消全部相关客户收款，再作废发票。当前共有 ${activePaymentEntries.length || 1} 笔客户收款。`
-                              : data.cancelSalesInvoiceHint ||
-                                '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
+                            shouldTreatPaymentsAsException
+                              ? `这张来源发票已被退货发票 ${data.returnInvoices.join('、')} 冲回，不能再登记客户收款或直接作废来源发票。当前仍有关联客户收款时，只能作为异常收款逐笔清理；清理后不会重新开放原发票收款入口。`
+                              : data.latestPaymentEntry
+                                ? `这张发票已经有关联客户收款。若只是某笔收款登记有误，请在收款历史中选择具体收款单取消；若订单金额或开票结果有问题，应先取消全部相关客户收款，再作废发票。当前共有 ${activePaymentEntries.length || 1} 笔客户收款。`
+                                : data.cancelSalesInvoiceHint ||
+                                  '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
                           }
-                          title="发票回退前请确认客户收款状态"
+                          title={
+                            shouldTreatPaymentsAsException
+                              ? '退货后的异常收款需要单独清理'
+                              : '发票回退前请确认客户收款状态'
+                          }
                           showIcon
                           type="warning"
                         />
@@ -827,18 +846,34 @@ const SalesInvoiceDetailPage: React.FC = () => {
         cancelText="保留收款"
         confirmLoading={paymentCancelLoading}
         destroyOnHidden
-        okText="确认取消这笔收款"
+        okText={
+          shouldTreatPaymentsAsException
+            ? '确认清理这笔异常收款'
+            : '确认取消这笔收款'
+        }
         okType="danger"
         onCancel={() => setPaymentToCancel(null)}
         onOk={submitCancelPayment}
         open={Boolean(paymentToCancel)}
-        title="取消客户收款凭证"
+        title={
+          shouldTreatPaymentsAsException
+            ? '清理异常客户收款'
+            : '取消客户收款凭证'
+        }
         width={620}
       >
         <Space orientation="vertical" size={16} style={{ width: '100%' }}>
           <Alert
-            description="该操作会作废下面这一个客户收款凭证，不会自动取消同一张发票上的其他收款，也不等同于退货后的客户退款。"
-            title="请确认要取消的具体收款"
+            description={
+              shouldTreatPaymentsAsException
+                ? '这张来源发票已经被退货发票冲回，不能再继续收款。该操作只用于作废下面这一个异常收款凭证，不会自动取消其他收款，也不会重新开放原发票收款入口。'
+                : '该操作会作废下面这一个客户收款凭证，不会自动取消同一张发票上的其他收款，也不等同于退货后的客户退款。'
+            }
+            title={
+              shouldTreatPaymentsAsException
+                ? '请确认要清理的异常收款'
+                : '请确认要取消的具体收款'
+            }
             showIcon
             type="warning"
           />
