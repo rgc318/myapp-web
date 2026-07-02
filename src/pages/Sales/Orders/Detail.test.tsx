@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { App } from 'antd';
 import React from 'react';
-import SalesOrderDetailPage from './Detail';
+import SalesOrderDetailPage, { buildSalesReturnSourceOptions } from './Detail';
 
 let mockLocationSearch = '';
 
@@ -68,56 +68,64 @@ jest.mock('@/services/myapp/sales', () => ({
 
 const { getSalesOrderDetail } = jest.requireMock('@/services/myapp/sales');
 
+const baseSalesOrderDetail = {
+  addressDisplay: '上海市浦东新区测试路 88 号 5 楼',
+  amount: 9999999,
+  canCancelOrder: true,
+  cancelSalesOrderHint: '',
+  canCreateSalesInvoice: true,
+  canRecordPayment: false,
+  canSubmitDelivery: true,
+  company: 'rgc (Demo)',
+  completionStatus: 'open',
+  contactDisplay: '张三',
+  contactPhone: '13800138000',
+  currency: 'CNY',
+  customer: 'Palmer Productions Ltd.',
+  defaultSalesMode: 'wholesale' as const,
+  deliveryDate: '2026-06-05',
+  deliveryNotes: [],
+  deliveryOverdueDays: 0,
+  documentStatus: 'submitted',
+  fulfillmentStatus: 'pending',
+  isDeliveryOverdue: false,
+  isPaymentOverdue: false,
+  items: [
+    {
+      amount: 9999999,
+      deliveredQty: 0,
+      imageUrl:
+        'https://images.pexels.com/photos/51383/photo-camera-subject-photographer-51383.jpeg',
+      itemCode: 'SKU010',
+      itemName: 'Camera',
+      qty: 1,
+      rate: 9999999,
+      salesMode: 'wholesale' as const,
+      salesOrderItem: '97kr48q50j',
+      specification: '',
+      uom: 'Nos',
+      uomDisplay: null,
+      warehouse: 'Stores - RD',
+    },
+  ],
+  name: 'SAL-ORD-2026-01204',
+  modified: '2026-06-05 12:00:00',
+  outstandingAmount: 0,
+  paidAmount: 0,
+  paymentOverdueDays: 0,
+  paymentStatus: 'unpaid',
+  receivableAmount: 0,
+  remarks: 'v2 HTTP test order',
+  salesInvoices: [],
+  timeline: [],
+  transactionDate: '2026-06-05',
+};
+
 describe('SalesOrderDetailPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLocationSearch = '';
-    getSalesOrderDetail.mockResolvedValue({
-      addressDisplay: '上海市浦东新区测试路 88 号 5 楼',
-      amount: 9999999,
-      canCancelOrder: true,
-      cancelSalesOrderHint: '',
-      canCreateSalesInvoice: true,
-      canRecordPayment: false,
-      canSubmitDelivery: true,
-      company: 'rgc (Demo)',
-      completionStatus: 'open',
-      contactDisplay: '张三',
-      contactPhone: '13800138000',
-      currency: 'CNY',
-      customer: 'Palmer Productions Ltd.',
-      defaultSalesMode: 'wholesale',
-      deliveryDate: '2026-06-05',
-      deliveryNotes: [],
-      documentStatus: 'submitted',
-      fulfillmentStatus: 'pending',
-      items: [
-        {
-          amount: 9999999,
-          deliveredQty: 0,
-          imageUrl:
-            'https://images.pexels.com/photos/51383/photo-camera-subject-photographer-51383.jpeg',
-          itemCode: 'SKU010',
-          itemName: 'Camera',
-          qty: 1,
-          rate: 9999999,
-          salesMode: 'wholesale',
-          salesOrderItem: '97kr48q50j',
-          specification: '',
-          uom: 'Nos',
-          uomDisplay: null,
-          warehouse: 'Stores - RD',
-        },
-      ],
-      name: 'SAL-ORD-2026-01204',
-      outstandingAmount: 0,
-      paidAmount: 0,
-      paymentStatus: 'unpaid',
-      receivableAmount: 0,
-      remarks: 'v2 HTTP test order',
-      salesInvoices: [],
-      transactionDate: '2026-06-05',
-    });
+    getSalesOrderDetail.mockResolvedValue({ ...baseSalesOrderDetail });
   });
 
   it('renders sales order details from gateway data', async () => {
@@ -141,5 +149,21 @@ describe('SalesOrderDetailPage', () => {
 
     expect(await screen.findByText('登记客户收款暂不可用')).toBeTruthy();
     expect(screen.getByText('请先创建销售发票后再登记客户收款')).toBeTruthy();
+  });
+
+  it('uses sales invoices instead of delivery notes for invoiced order returns', () => {
+    expect(
+      buildSalesReturnSourceOptions({
+        ...baseSalesOrderDetail,
+        deliveryNotes: ['MAT-DN-2026-00274'],
+        salesInvoices: ['ACC-SINV-2026-00695'],
+      }),
+    ).toEqual([
+      {
+        doctype: 'Sales Invoice',
+        label: '销售发票',
+        name: 'ACC-SINV-2026-00695',
+      },
+    ]);
   });
 });

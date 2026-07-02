@@ -116,6 +116,28 @@ type SalesReturnSourceOption = {
   name: string;
 };
 
+export function buildSalesReturnSourceOptions(
+  detail?: SalesOrderDetail | null,
+): SalesReturnSourceOption[] {
+  if (!detail) {
+    return [];
+  }
+
+  if (detail.salesInvoices.length) {
+    return detail.salesInvoices.map((name) => ({
+      doctype: 'Sales Invoice' as const,
+      label: '销售发票',
+      name,
+    }));
+  }
+
+  return detail.deliveryNotes.map((name) => ({
+    doctype: 'Delivery Note' as const,
+    label: '销售发货单',
+    name,
+  }));
+}
+
 function salesReturnSourcePath(source: SalesReturnSourceOption) {
   return `/sales/returns/new?sourceDoctype=${encodeURIComponent(source.doctype)}&sourceName=${encodeURIComponent(source.name)}`;
 }
@@ -1018,20 +1040,7 @@ const SalesOrderDetailPage: React.FC = () => {
   const returnInvoiceNames = timelineEvents
     .filter((event) => event.type === 'sales_return' && event.docname)
     .map((event) => event.docname);
-  const returnSourceOptions: SalesReturnSourceOption[] = detail
-    ? [
-        ...detail.salesInvoices.map((name) => ({
-          doctype: 'Sales Invoice' as const,
-          label: '销售发票',
-          name,
-        })),
-        ...detail.deliveryNotes.map((name) => ({
-          doctype: 'Delivery Note' as const,
-          label: '发货单',
-          name,
-        })),
-      ]
-    : [];
+  const returnSourceOptions = buildSalesReturnSourceOptions(detail);
   const openReturnSource = () => {
     if (!returnSourceOptions.length) {
       return;

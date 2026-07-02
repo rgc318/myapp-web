@@ -300,7 +300,7 @@ const SalesReturnNewPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="退货会基于销售发货单或销售发票创建独立退货单；来源发票已收款时，退货后需继续核对客户退款。"
+          message="已开票订单应基于销售发票退货；未开票但已发货的订单可基于销售发货单退货。退货不会作废原发票，来源发票已收款时需继续核对客户退款。"
           showIcon
           type="info"
         />
@@ -541,7 +541,7 @@ const SalesReturnNewPage: React.FC = () => {
                     {!context.canProcessReturn ? (
                       <Alert
                         message="当前来源单据暂不允许继续退货"
-                        description="请先回到来源单据确认状态，再重新读取来源单据。"
+                        description="若订单已经开票，请改选销售发票作为退货来源；作废发票只用于回改单据链，不是正常退货前置步骤。"
                         showIcon
                         type="warning"
                       />
