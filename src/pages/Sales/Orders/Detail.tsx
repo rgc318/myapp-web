@@ -889,7 +889,7 @@ const SalesOrderDetailPage: React.FC = () => {
       content: (
         <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <span>
-            系统会按顺序取消客户收款单、销售发票和销售发货单。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝快捷回退。
+            系统会按顺序取消客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝一键回退。
           </span>
           <SalesRollbackGuide
             deliveryNotes={detail.deliveryNotes}
@@ -897,7 +897,7 @@ const SalesOrderDetailPage: React.FC = () => {
           />
         </Space>
       ),
-      okText: '快捷回退',
+      okText: '一键回退并修改',
       okType: 'danger',
       onOk: async () => {
         setActionLoading('quick-cancel');
@@ -915,7 +915,7 @@ const SalesOrderDetailPage: React.FC = () => {
                 <span>
                   {completedSteps
                     ? `已回退：${completedSteps}`
-                    : '当前没有需要回退的下游单据。'}
+                    : '当前没有需要回退的发货、开票或收款记录。'}
                 </span>
                 {result.data.cancelledPaymentEntries.length ? (
                   <span>
@@ -930,7 +930,7 @@ const SalesOrderDetailPage: React.FC = () => {
                 ) : null}
               </Space>
             ),
-            title: '快捷回退完成',
+            title: '回退并修改订单完成',
           });
         } catch (caught) {
           const errorMessage =
@@ -946,7 +946,7 @@ const SalesOrderDetailPage: React.FC = () => {
                 />
               </Space>
             ),
-            title: '请改用分步回退',
+            title: '请分步回退后再修改',
             width: 680,
           });
           throw caught;
@@ -954,7 +954,7 @@ const SalesOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `快捷回退销售订单 ${detail.name} 的下游单据？`,
+      title: `回退并修改销售订单 ${detail.name}？`,
       width: 620,
     });
   };
@@ -1513,7 +1513,7 @@ const SalesOrderDetailPage: React.FC = () => {
                           loading={actionLoading === 'quick-cancel'}
                           onClick={confirmQuickCancelDownstream}
                         >
-                          快捷回退下游
+                          回退并修改订单
                         </Button>
                         <Tooltip title={detail.cancelSalesOrderHint}>
                           <span>
