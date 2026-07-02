@@ -9,6 +9,7 @@ import { Link, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
+  Descriptions,
   Empty,
   Modal,
   message,
@@ -220,6 +221,8 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
+  const [paymentToCancel, setPaymentToCancel] =
+    useState<SalesInvoicePaymentEntry | null>(null);
   const { data, error, loading, refresh } = useRequest(
     () => getSalesInvoiceDetail(invoiceName),
     {
@@ -231,9 +234,41 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const sourceOrder = data?.salesOrders[0] ?? '';
   const linkedDeliveryNote = data?.deliveryNotes[0] ?? '';
   const hasOutstanding = (data?.outstandingAmount ?? 0) > 0;
+  const activePaymentEntries = data?.paymentEntries ?? [];
+
+  const findPaymentEntry = (paymentEntry: string) =>
+    activePaymentEntries.find((entry) => entry.paymentEntry === paymentEntry);
+
+  const latestPaymentEntryRecord = data?.latestPaymentEntry
+    ? (findPaymentEntry(data.latestPaymentEntry) ?? {
+        actualPaidAmount: null,
+        allocatedAmount: null,
+        latestUnallocatedAmount: null,
+        modeOfPayment: '',
+        paymentEntry: data.latestPaymentEntry,
+        postingDate: '',
+        referenceDate: '',
+        referenceNo: '',
+        writeoffAmount: null,
+      })
+    : null;
+
+  const openCancelPayment = (entry: SalesInvoicePaymentEntry | null) => {
+    if (!entry?.paymentEntry) {
+      message.warning('当前发票没有可取消的客户收款');
+      return;
+    }
+    setPaymentToCancel(entry);
+  };
 
   const confirmCancel = () => {
     if (!data) {
+      return;
+    }
+    if (activePaymentEntries.length > 1) {
+      message.warning(
+        '当前发票存在多笔客户收款。请先在收款历史中逐笔取消，再作废销售发票。',
+      );
       return;
     }
     Modal.confirm({
@@ -242,7 +277,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
         <Alert
           description={
             data.latestPaymentEntry
-              ? `当前发票已关联客户收款单 ${data.latestPaymentEntry}。为避免出现发票已作废但原收款仍挂在结算链路中的状态，本次会先取消该原客户收款，再作废销售发票。`
+              ? `当前发票已关联客户收款单 ${data.latestPaymentEntry}。为避免出现发票已作废但原收款仍挂在结算链路中的状态，本次会先取消这笔客户收款，再作废销售发票。`
               : data.cancelSalesInvoiceHint ||
                 '作废后，这张发票将从订单结算链路中移除。如需重新开票，请回到来源订单或发货链路继续处理。'
           }
@@ -251,7 +286,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
           type="warning"
         />
       ),
-      okText: data.latestPaymentEntry ? '取消原收款并作废发票' : '确认作废',
+      okText: data.latestPaymentEntry ? '取消这笔收款并作废发票' : '确认作废',
       okType: 'danger',
       onOk: async () => {
         setCancelLoading(true);
@@ -269,35 +304,54 @@ const SalesInvoiceDetailPage: React.FC = () => {
         }
       },
       title: data.latestPaymentEntry
-        ? '先取消原客户收款，再作废销售发票？'
+        ? '先取消这笔客户收款，再作废销售发票？'
         : '作废销售发票？',
       width: 560,
     });
   };
 
-  const confirmCancelPayment = () => {
-    if (!data?.latestPaymentEntry) {
+  const submitCancelPayment = async () => {
+    if (!paymentToCancel?.paymentEntry) {
       return;
     }
-    Modal.confirm({
-      cancelText: '取消',
-      okText: '确认取消',
-      okType: 'danger',
-      onOk: async () => {
-        setPaymentCancelLoading(true);
-        try {
-          await cancelSalesPaymentEntry(data.latestPaymentEntry);
-          refresh();
-        } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
-          throw caught;
-        } finally {
-          setPaymentCancelLoading(false);
-        }
-      },
-      title: `取消原客户收款 ${data.latestPaymentEntry}？`,
-    });
+    setPaymentCancelLoading(true);
+    try {
+      await cancelSalesPaymentEntry(paymentToCancel.paymentEntry);
+      message.success(
+        `已取消客户收款 ${paymentToCancel.paymentEntry}，金额 ${formatCurrencyValue(
+          paymentToCancel.allocatedAmount ?? paymentToCancel.actualPaidAmount,
+          data?.currency,
+        )}`,
+      );
+      setPaymentToCancel(null);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setPaymentCancelLoading(false);
+    }
   };
+
+  const paymentColumns = [
+    ...paymentEntryColumns,
+    {
+      title: '操作',
+      valueType: 'option' as const,
+      width: 120,
+      render: (_: unknown, record: SalesInvoicePaymentEntry) => (
+        <Button
+          danger
+          disabled={cancelled || !record.paymentEntry}
+          onClick={() => openCancelPayment(record)}
+          size="small"
+          type="link"
+        >
+          取消这笔收款
+        </Button>
+      ),
+    },
+  ];
 
   const confirmRecordPayment = () => {
     if (!data || cancelled || !hasOutstanding) {
@@ -389,12 +443,12 @@ const SalesInvoiceDetailPage: React.FC = () => {
           </Button>,
           <Button
             danger
-            disabled={!data?.latestPaymentEntry}
+            disabled={!latestPaymentEntryRecord}
             key="cancel-payment"
             loading={paymentCancelLoading}
-            onClick={confirmCancelPayment}
+            onClick={() => openCancelPayment(latestPaymentEntryRecord)}
           >
-            取消原客户收款
+            取消最近客户收款
           </Button>,
         ]}
       >
@@ -494,12 +548,12 @@ const SalesInvoiceDetailPage: React.FC = () => {
                     style={{ width: '100%' }}
                   >
                     <ProTable<SalesInvoicePaymentEntry>
-                      columns={paymentEntryColumns}
+                      columns={paymentColumns}
                       dataSource={data.paymentEntries}
                       headerTitle="收款历史"
                       pagination={false}
                       rowKey="paymentEntry"
-                      scroll={{ x: 1050 }}
+                      scroll={{ x: 1170 }}
                       search={false}
                       toolBarRender={false}
                     />
@@ -685,10 +739,12 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                 <Button
                                   danger
                                   loading={paymentCancelLoading}
-                                  onClick={confirmCancelPayment}
+                                  onClick={() =>
+                                    openCancelPayment(latestPaymentEntryRecord)
+                                  }
                                   size="small"
                                 >
-                                  取消原客户收款
+                                  取消最近客户收款
                                 </Button>
                               ) : null}
                               {data.canCancelSalesInvoice ? (
@@ -699,7 +755,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                   size="small"
                                 >
                                   {data.latestPaymentEntry
-                                    ? '取消原收款并作废发票'
+                                    ? '取消这笔收款并作废发票'
                                     : '作废销售发票'}
                                 </Button>
                               ) : null}
@@ -707,7 +763,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                           }
                           description={
                             data.latestPaymentEntry
-                              ? '这张发票已经有关联客户收款。若只是收款登记有误，可单独取消原客户收款；若订单金额或开票结果有问题，应先取消原收款，再作废发票。'
+                              ? `这张发票已经有关联客户收款。若只是某笔收款登记有误，请在收款历史中选择具体收款单取消；若订单金额或开票结果有问题，应先取消全部相关客户收款，再作废发票。当前共有 ${activePaymentEntries.length || 1} 笔客户收款。`
                               : data.cancelSalesInvoiceHint ||
                                 '如需修改订单或重走开票流程，可以先作废当前销售发票，再回到发货或订单页面继续处理。'
                           }
@@ -744,6 +800,71 @@ const SalesInvoiceDetailPage: React.FC = () => {
           showReferenceFields
           showSettlementMode
         />
+      </Modal>
+      <Modal
+        cancelText="保留收款"
+        confirmLoading={paymentCancelLoading}
+        destroyOnHidden
+        okText="确认取消这笔收款"
+        okType="danger"
+        onCancel={() => setPaymentToCancel(null)}
+        onOk={submitCancelPayment}
+        open={Boolean(paymentToCancel)}
+        title="取消客户收款凭证"
+        width={620}
+      >
+        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+          <Alert
+            description="该操作会作废下面这一个客户收款凭证，不会自动取消同一张发票上的其他收款，也不等同于退货后的客户退款。"
+            title="请确认要取消的具体收款"
+            showIcon
+            type="warning"
+          />
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label="收款单">
+              {paymentToCancel?.paymentEntry ? (
+                <Link to={paymentEntryPath(paymentToCancel.paymentEntry)}>
+                  {paymentToCancel.paymentEntry}
+                </Link>
+              ) : (
+                '-'
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="收款日期">
+              {paymentToCancel?.postingDate || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="付款方式">
+              {paymentToCancel?.modeOfPayment || '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="核销金额">
+              {formatCurrencyValue(
+                paymentToCancel?.allocatedAmount,
+                data?.currency,
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="实收金额">
+              {formatCurrencyValue(
+                paymentToCancel?.actualPaidAmount,
+                data?.currency,
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="差额核销">
+              {formatCurrencyValue(
+                paymentToCancel?.writeoffAmount,
+                data?.currency,
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="多收保留">
+              {formatCurrencyValue(
+                paymentToCancel?.latestUnallocatedAmount,
+                data?.currency,
+              )}
+            </Descriptions.Item>
+            <Descriptions.Item label="参考号">
+              {paymentToCancel?.referenceNo || '-'}
+            </Descriptions.Item>
+          </Descriptions>
+        </Space>
       </Modal>
     </>
   );
