@@ -755,7 +755,7 @@ export async function getSalesOrderDetail(
 
   const summary = normalizeSummaryRow({
     ...data,
-    order_name: data.order_name,
+    order_name: data.order_name ?? orderName,
     customer: data.customer?.name,
     customer_name: data.customer?.display_name,
     company: data.meta?.company,

@@ -883,6 +883,10 @@ const SalesOrderDetailPage: React.FC = () => {
     if (!detail) {
       return;
     }
+    if (!detail.deliveryNotes.length && !detail.salesInvoices.length) {
+      message.warning('当前订单没有可回退的发货、开票或收款记录');
+      return;
+    }
 
     Modal.confirm({
       cancelText: '取消',
@@ -902,9 +906,12 @@ const SalesOrderDetailPage: React.FC = () => {
       onOk: async () => {
         setActionLoading('quick-cancel');
         try {
-          const result = await quickCancelSalesOrderV2(detail.name, {
-            rollbackPayment: true,
-          });
+          const result = await quickCancelSalesOrderV2(
+            detail.name || orderName,
+            {
+              rollbackPayment: true,
+            },
+          );
           refresh();
           const completedSteps = result.data.completedSteps
             .map(quickCancelStepLabel)
@@ -954,7 +961,7 @@ const SalesOrderDetailPage: React.FC = () => {
           setActionLoading(undefined);
         }
       },
-      title: `回退并修改销售订单 ${detail.name}？`,
+      title: `回退并修改销售订单 ${detail.name || orderName}？`,
       width: 620,
     });
   };
@@ -1504,17 +1511,28 @@ const SalesOrderDetailPage: React.FC = () => {
                             </Button>
                           </span>
                         </Tooltip>
-                        <Button
-                          danger
-                          disabled={
-                            !detail.deliveryNotes.length &&
-                            !detail.salesInvoices.length
+                        <Tooltip
+                          title={
+                            detail.deliveryNotes.length ||
+                            detail.salesInvoices.length
+                              ? ''
+                              : '当前订单没有可回退的发货、开票或收款记录'
                           }
-                          loading={actionLoading === 'quick-cancel'}
-                          onClick={confirmQuickCancelDownstream}
                         >
-                          回退并修改订单
-                        </Button>
+                          <span>
+                            <Button
+                              danger
+                              disabled={
+                                !detail.deliveryNotes.length &&
+                                !detail.salesInvoices.length
+                              }
+                              loading={actionLoading === 'quick-cancel'}
+                              onClick={confirmQuickCancelDownstream}
+                            >
+                              回退并修改订单
+                            </Button>
+                          </span>
+                        </Tooltip>
                         <Tooltip title={detail.cancelSalesOrderHint}>
                           <span>
                             <Button
