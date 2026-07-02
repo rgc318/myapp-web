@@ -88,6 +88,14 @@ function formatQty(value: number | null | undefined) {
     : numericValue.toFixed(2);
 }
 
+function buildReturnLines(context: SalesReturnSourceContext | null) {
+  return (context?.items ?? []).map((item) => ({
+    ...item,
+    returnQty:
+      item.defaultReturnQty ?? item.maxReturnableQty ?? item.sourceQty ?? 0,
+  }));
+}
+
 const SalesReturnNewPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
@@ -139,16 +147,7 @@ const SalesReturnNewPage: React.FC = () => {
         values.sourceName,
       );
       setContext(nextContext);
-      setLines(
-        (nextContext?.items ?? []).map((item) => ({
-          ...item,
-          returnQty:
-            item.defaultReturnQty ??
-            item.maxReturnableQty ??
-            item.sourceQty ??
-            0,
-        })),
-      );
+      setLines(buildReturnLines(nextContext));
       if (!nextContext) {
         message.warning('未找到退货来源单据');
       }
@@ -193,6 +192,32 @@ const SalesReturnNewPage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const latestContext = await getSalesReturnSourceContext(
+        values.sourceDoctype,
+        values.sourceName,
+      );
+      setContext(latestContext);
+      if (!latestContext?.canProcessReturn) {
+        setLines(buildReturnLines(latestContext));
+        message.warning('当前来源单据已没有可退数量，请刷新后核对退货记录');
+        return;
+      }
+      const latestLineMap = new Map(
+        latestContext.items.map((line) => [line.detailId, line]),
+      );
+      const latestInvalidLine = selectedLines.find((line) => {
+        const latestLine = latestLineMap.get(line.detailId);
+        if (!latestLine) {
+          return true;
+        }
+        const maxReturnableQty = latestLine.maxReturnableQty ?? 0;
+        return line.returnQty <= 0 || line.returnQty > maxReturnableQty;
+      });
+      if (latestInvalidLine) {
+        setLines(buildReturnLines(latestContext));
+        message.warning('当前可退数量已变化，请按最新可退数量重新提交');
+        return;
+      }
       const submitted = await submitSalesReturn({
         postingDate: values.postingDate.format('YYYY-MM-DD'),
         remarks: values.remarks,
