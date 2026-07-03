@@ -30,7 +30,7 @@ export const SalesRollbackGuide: React.FC<{
 }> = ({ deliveryNotes, salesInvoices }) => (
   <Space orientation="vertical" size={10} style={{ width: '100%' }}>
     <Alert
-      message="多单据场景请按顺序分步回退：先在发票详情取消原客户收款，再取消销售发票，最后取消销售发货单。"
+      message="多单据场景请按顺序分步回退：先处理客户退款和退货发票，再在发票详情取消原客户收款，然后取消销售发票，最后取消销售发货单。"
       showIcon
       type="warning"
     />
@@ -51,7 +51,7 @@ export const SalesRollbackGuide: React.FC<{
       />
     </div>
     <Typography.Text type="secondary">
-      如果某张发票存在多笔客户收款，请进入发票详情逐笔取消原客户收款，直到可以取消发票。
+      如果某张发票存在退货或多笔客户收款，请先完成退款核对或逐笔取消原客户收款，直到可以取消发票。
     </Typography.Text>
   </Space>
 );

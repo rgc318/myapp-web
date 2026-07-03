@@ -21,6 +21,8 @@ import {
   StatusTag,
 } from '@/utils/myapp-display';
 
+const SALES_RETURN_ENTRY_ENABLED = false;
+
 function docLinks(values: string[], basePath: string) {
   return values.length
     ? values.map((name, index) => (
@@ -151,12 +153,12 @@ const DeliveryNoteDetailPage: React.FC = () => {
             </Link>
           </Button>
         ) : null,
-        <Button key="return">
-          <Link
-            to={`/sales/returns/new?sourceDoctype=${encodeURIComponent('Delivery Note')}&sourceName=${encodeURIComponent(deliveryNoteName)}`}
-          >
-            创建退货
-          </Link>
+        <Button
+          disabled={!SALES_RETURN_ENTRY_ENABLED}
+          key="return"
+          title="Web 端已暂停直接发起销售退货；如需改错请取消发票和发货单"
+        >
+          创建退货
         </Button>,
         <Button
           danger

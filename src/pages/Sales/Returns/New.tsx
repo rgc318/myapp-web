@@ -48,6 +48,8 @@ type FormValues = {
   sourceName: string;
 };
 
+const SALES_RETURN_ENTRY_ENABLED = false;
+
 function getDocumentPath(doctype: SalesReturnSourceDoctype, name: string) {
   const encodedName = encodeURIComponent(name);
   return doctype === 'Sales Invoice'
@@ -96,7 +98,22 @@ function buildReturnLines(context: SalesReturnSourceContext | null) {
   }));
 }
 
-const SalesReturnNewPage: React.FC = () => {
+const SalesReturnDisabledPage: React.FC = () => (
+  <PageContainer title="销售退货">
+    <Result
+      extra={[
+        <Button key="orders" onClick={() => history.push('/sales/orders')}>
+          返回销售订单
+        </Button>,
+      ]}
+      status="info"
+      subTitle="Web 端已暂停直接发起销售退货。当前业务改错请从销售订单使用“回退并修改订单”，或进入销售发票/销售发货单详情按顺序作废相关单据。"
+      title="销售退货入口已暂停"
+    />
+  </PageContainer>
+);
+
+const SalesReturnFormPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const initialSourceDoctype =
@@ -619,5 +636,12 @@ const SalesReturnNewPage: React.FC = () => {
     </PageContainer>
   );
 };
+
+const SalesReturnNewPage: React.FC = () =>
+  SALES_RETURN_ENTRY_ENABLED ? (
+    <SalesReturnFormPage />
+  ) : (
+    <SalesReturnDisabledPage />
+  );
 
 export default SalesReturnNewPage;

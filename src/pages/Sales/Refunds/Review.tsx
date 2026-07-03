@@ -347,12 +347,19 @@ const SalesRefundReviewPage: React.FC = () => {
     returnAmount > 0
       ? Math.min(Math.round((refundedAmount / returnAmount) * 100), 100)
       : 0;
+  const hasCustomerRefund = refundedAmount > 0;
   const isRefundCompleted =
     refundContext?.refund.status === 'refunded' || refundableAmount <= 0;
 
   const confirmCancelPayment = () => {
     if (!data?.latestPaymentEntry) {
       message.warning('当前发票没有可取消的原客户收款');
+      return;
+    }
+    if (hasCustomerRefund) {
+      message.warning(
+        '当前退货发票已有客户退款，请先取消客户退款后再取消原客户收款',
+      );
       return;
     }
 
@@ -894,14 +901,14 @@ const SalesRefundReviewPage: React.FC = () => {
                       style={{ width: '100%' }}
                     >
                       <Typography.Text type="secondary">
-                        已登记客户退款后，通常不再取消原收款。只有需要撤销来源发票的原收款凭证时，才使用下面的操作。
+                        已登记客户退款后不能直接取消原收款；如需回退整条链路，请先取消客户退款，再取消原客户收款。
                       </Typography.Text>
                       <Button
                         danger
                         disabled={
                           !data.latestPaymentEntry ||
                           isCancelled(data.documentStatus) ||
-                          isRefundCompleted
+                          hasCustomerRefund
                         }
                         loading={cancelLoading}
                         onClick={confirmCancelPayment}

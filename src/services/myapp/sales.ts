@@ -146,6 +146,8 @@ export type SalesOrderActionItem = {
 export type QuickCancelSalesOrderResult = {
   cancelledDeliveryNote: string;
   cancelledPaymentEntries: string[];
+  cancelledRefundEntries: string[];
+  cancelledReturnInvoices: string[];
   cancelledSalesInvoice: string;
   completedSteps: string[];
   orderName: string;
@@ -1082,6 +1084,8 @@ export async function quickCancelSalesOrderV2(
               ? row.cancelled_delivery_note
               : '',
           cancelledPaymentEntries: toStringList(row.cancelled_payment_entries),
+          cancelledRefundEntries: toStringList(row.cancelled_refund_entries),
+          cancelledReturnInvoices: toStringList(row.cancelled_return_invoices),
           cancelledSalesInvoice:
             typeof row.cancelled_sales_invoice === 'string'
               ? row.cancelled_sales_invoice

@@ -116,6 +116,8 @@ type SalesReturnSourceOption = {
   name: string;
 };
 
+const SALES_RETURN_ENTRY_ENABLED = false;
+
 export function buildSalesReturnSourceOptions(
   detail?: SalesOrderDetail | null,
 ): SalesReturnSourceOption[] {
@@ -235,8 +237,14 @@ function toSalesActionItems(rows: LineQtyEditorRow[]) {
 }
 
 function quickCancelStepLabel(step: string) {
+  if (step === 'customer_refund') {
+    return '客户退款';
+  }
   if (step === 'payment_entry') {
     return '收款单';
+  }
+  if (step === 'sales_return') {
+    return '退货发票';
   }
   if (step === 'sales_invoice') {
     return '销售发票';
@@ -245,6 +253,24 @@ function quickCancelStepLabel(step: string) {
     return '销售发货单';
   }
   return step;
+}
+
+function hasRollbackableDownstream(detail: SalesOrderDetail) {
+  if (detail.deliveryNotes.length || detail.salesInvoices.length) {
+    return true;
+  }
+
+  return detail.timeline.some((event) => {
+    if (!event.docname) {
+      return false;
+    }
+    if (
+      !['customer_refund', 'payment_entry', 'sales_return'].includes(event.type)
+    ) {
+      return false;
+    }
+    return !['cancelled', 'canceled', '已作废'].includes(event.status);
+  });
 }
 
 function actionTargetLabel(actionTarget: string | null) {
@@ -296,11 +322,7 @@ function invoiceDisabledReason(detail: SalesOrderDetail) {
 }
 
 function paymentDisabledReason(detail: SalesOrderDetail) {
-  if (
-    detail.documentStatus === 'submitted' &&
-    detail.salesInvoices.length &&
-    (detail.outstandingAmount ?? 0) > 0
-  ) {
+  if (detail.canRecordPayment) {
     return '';
   }
   if (detail.documentStatus === 'cancelled') {
@@ -884,7 +906,7 @@ const SalesOrderDetailPage: React.FC = () => {
     if (!detail) {
       return;
     }
-    if (!detail.deliveryNotes.length && !detail.salesInvoices.length) {
+    if (!hasRollbackableDownstream(detail)) {
       message.warning('当前订单没有可回退的发货、开票或收款记录');
       return;
     }
@@ -918,6 +940,16 @@ const SalesOrderDetailPage: React.FC = () => {
             {result.data.cancelledPaymentEntries.length ? (
               <span>
                 收款单：{result.data.cancelledPaymentEntries.join('、')}
+              </span>
+            ) : null}
+            {result.data.cancelledRefundEntries.length ? (
+              <span>
+                客户退款单：{result.data.cancelledRefundEntries.join('、')}
+              </span>
+            ) : null}
+            {result.data.cancelledReturnInvoices.length ? (
+              <span>
+                退货发票：{result.data.cancelledReturnInvoices.join('、')}
               </span>
             ) : null}
             {result.data.cancelledSalesInvoice ? (
@@ -1031,6 +1063,9 @@ const SalesOrderDetailPage: React.FC = () => {
       ]
     : [];
   const timelineEvents = detail?.timeline ?? [];
+  const canQuickCancelDownstream = detail
+    ? hasRollbackableDownstream(detail)
+    : false;
   const returnInvoiceNames = timelineEvents
     .filter((event) => event.type === 'sales_return' && event.docname)
     .map((event) => event.docname);
@@ -1448,11 +1483,7 @@ const SalesOrderDetailPage: React.FC = () => {
                         <Tooltip title={paymentDisabledReason(detail)}>
                           <span>
                             <Button
-                              disabled={
-                                detail.documentStatus === 'cancelled' ||
-                                !detail.salesInvoices.length ||
-                                (detail.outstandingAmount ?? 0) <= 0
-                              }
+                              disabled={!detail.canRecordPayment}
                               loading={actionLoading === 'payment'}
                               onClick={confirmRecordPayment}
                               type={
@@ -1467,15 +1498,20 @@ const SalesOrderDetailPage: React.FC = () => {
                         </Tooltip>
                         <Tooltip
                           title={
-                            detail.salesInvoices.length ||
-                            detail.deliveryNotes.length
-                              ? ''
-                              : '需要先完成发货或开票后再发起退货'
+                            !SALES_RETURN_ENTRY_ENABLED
+                              ? 'Web 端已暂停直接发起销售退货；如需改错请使用回退并修改订单，按顺序取消发票和发货单'
+                              : detail.salesInvoices.length ||
+                                  detail.deliveryNotes.length
+                                ? ''
+                                : '需要先完成发货或开票后再发起退货'
                           }
                         >
                           <span>
                             <Button
-                              disabled={!returnSourceOptions.length}
+                              disabled={
+                                !SALES_RETURN_ENTRY_ENABLED ||
+                                !returnSourceOptions.length
+                              }
                               onClick={openReturnSource}
                             >
                               发起退货
@@ -1486,7 +1522,7 @@ const SalesOrderDetailPage: React.FC = () => {
                           title={
                             returnInvoiceNames.length
                               ? ''
-                              : '需要先创建退货发票后再核对退款'
+                              : '退款核对仅用于已有退货发票后的客户退款；普通收款回退请进入销售发票详情取消客户收款'
                           }
                         >
                           <span>
@@ -1500,8 +1536,7 @@ const SalesOrderDetailPage: React.FC = () => {
                         </Tooltip>
                         <Tooltip
                           title={
-                            detail.deliveryNotes.length ||
-                            detail.salesInvoices.length
+                            canQuickCancelDownstream
                               ? ''
                               : '当前订单没有可回退的发货、开票或收款记录'
                           }
@@ -1509,6 +1544,7 @@ const SalesOrderDetailPage: React.FC = () => {
                           <span>
                             <Button
                               danger
+                              disabled={!canQuickCancelDownstream}
                               loading={actionLoading === 'quick-cancel'}
                               onClick={confirmQuickCancelDownstream}
                             >
@@ -1604,7 +1640,7 @@ const SalesOrderDetailPage: React.FC = () => {
         {detail ? (
           <Space orientation="vertical" size={12} style={{ width: '100%' }}>
             <span>
-              系统会按顺序取消客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔客户收款，后端会拒绝一键回退。
+              系统会按顺序取消客户退款单、退货发票、客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔收款/退款，后端会拒绝一键回退。
             </span>
             <SalesRollbackGuide
               deliveryNotes={detail.deliveryNotes}
