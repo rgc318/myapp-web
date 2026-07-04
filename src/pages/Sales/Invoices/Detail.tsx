@@ -17,12 +17,13 @@ import {
   Skeleton,
   Space,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   type InvoicePaymentDraft,
   InvoicePaymentForm,
 } from '@/components/InvoicePaymentForm';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelSalesInvoice,
   cancelSalesPaymentEntry,
@@ -37,8 +38,6 @@ import {
   resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
-
-const SALES_RETURN_ENTRY_ENABLED = false;
 
 function docLinks(values: string[], basePath: string) {
   return values.length
@@ -228,8 +227,13 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
+  const [paymentSelectionOpen, setPaymentSelectionOpen] = useState(false);
   const [paymentToCancel, setPaymentToCancel] =
     useState<SalesInvoicePaymentEntry | null>(null);
+  const [voidInvoiceModalOpen, setVoidInvoiceModalOpen] = useState(false);
+  const [cancelledPaymentEntries, setCancelledPaymentEntries] = useState<
+    Set<string>
+  >(new Set());
   const { data, error, loading, refresh } = useRequest(
     () => getSalesInvoiceDetail(invoiceName),
     {
@@ -245,30 +249,21 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const hasReturnInvoices = Boolean(data?.returnInvoices.length);
   const shouldTreatPaymentsAsException =
     Boolean(data) && !canRecordPayment && hasReturnInvoices;
-  const activePaymentEntries = data?.paymentEntries ?? [];
+  const activePaymentEntries = (data?.paymentEntries ?? []).filter(
+    (entry) =>
+      entry.paymentEntry && !cancelledPaymentEntries.has(entry.paymentEntry),
+  );
 
-  const findPaymentEntry = (paymentEntry: string) =>
-    activePaymentEntries.find((entry) => entry.paymentEntry === paymentEntry);
-
-  const latestPaymentEntryRecord = data?.latestPaymentEntry
-    ? (findPaymentEntry(data.latestPaymentEntry) ?? {
-        actualPaidAmount: null,
-        allocatedAmount: null,
-        latestUnallocatedAmount: null,
-        modeOfPayment: '',
-        paymentEntry: data.latestPaymentEntry,
-        postingDate: '',
-        referenceDate: '',
-        referenceNo: '',
-        writeoffAmount: null,
-      })
-    : null;
+  useEffect(() => {
+    setCancelledPaymentEntries(new Set());
+  }, [invoiceName]);
 
   const openCancelPayment = (entry: SalesInvoicePaymentEntry | null) => {
     if (!entry?.paymentEntry) {
       message.warning('当前发票没有可取消的客户收款');
       return;
     }
+    setPaymentSelectionOpen(false);
     setPaymentToCancel(entry);
   };
 
@@ -276,49 +271,31 @@ const SalesInvoiceDetailPage: React.FC = () => {
     if (!data) {
       return;
     }
-    if (activePaymentEntries.length > 1) {
-      message.warning(
-        '当前发票存在多笔客户收款。请先在收款历史中逐笔取消，再作废销售发票。',
-      );
+    setVoidInvoiceModalOpen(true);
+  };
+
+  const submitVoidInvoice = async () => {
+    if (!data) {
       return;
     }
-    Modal.confirm({
-      cancelText: '取消',
-      content: (
-        <Alert
-          description={
-            data.latestPaymentEntry
-              ? `当前发票已关联客户收款单 ${data.latestPaymentEntry}。为避免出现发票已作废但原收款仍挂在结算链路中的状态，本次会先取消这笔客户收款，再作废销售发票。`
-              : data.cancelSalesInvoiceHint ||
-                '作废后，这张发票将从订单结算链路中移除。如需重新开票，请回到来源订单或发货链路继续处理。'
-          }
-          title="作废销售发票会影响结算链路"
-          showIcon
-          type="warning"
-        />
-      ),
-      okText: data.latestPaymentEntry ? '取消这笔收款并作废发票' : '确认作废',
-      okType: 'danger',
-      onOk: async () => {
-        setCancelLoading(true);
-        try {
-          if (data.latestPaymentEntry) {
-            await cancelSalesPaymentEntry(data.latestPaymentEntry);
-          }
-          await cancelSalesInvoice(invoiceName);
-          refresh();
-        } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
-          throw caught;
-        } finally {
-          setCancelLoading(false);
-        }
-      },
-      title: data.latestPaymentEntry
-        ? '先取消这笔客户收款，再作废销售发票？'
-        : '作废销售发票？',
-      width: 560,
-    });
+
+    if (activePaymentEntries.length) {
+      message.warning('请先取消客户收款，再作废销售发票');
+      return;
+    }
+
+    setCancelLoading(true);
+    try {
+      await cancelSalesInvoice(invoiceName);
+      message.success(`销售发票 ${invoiceName} 已作废`);
+      setVoidInvoiceModalOpen(false);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setCancelLoading(false);
+    }
   };
 
   const submitCancelPayment = async () => {
@@ -334,6 +311,11 @@ const SalesInvoiceDetailPage: React.FC = () => {
           data?.currency,
         )}`,
       );
+      setCancelledPaymentEntries((current) => {
+        const next = new Set(current);
+        next.add(paymentToCancel.paymentEntry);
+        return next;
+      });
       setPaymentToCancel(null);
       refresh();
     } catch (caught) {
@@ -348,8 +330,9 @@ const SalesInvoiceDetailPage: React.FC = () => {
     ...paymentEntryColumns,
     {
       title: '操作',
+      fixed: 'right' as const,
       valueType: 'option' as const,
-      width: 120,
+      width: 150,
       render: (_: unknown, record: SalesInvoicePaymentEntry) => (
         <Button
           danger
@@ -438,13 +421,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
               登记客户收款
             </Button>
           ) : null,
-          <Button
-            disabled={!SALES_RETURN_ENTRY_ENABLED}
-            key="return"
-            title="Web 端已暂停直接发起销售退货；如需改错请先取消收款，再作废销售发票"
-          >
-            创建退货
-          </Button>,
+          SALES_RETURN_REFUND_ENTRY_ENABLED ? (
+            <Button key="return">
+              <Link
+                to={`/sales/returns/new?sourceDoctype=Sales%20Invoice&sourceName=${encodeURIComponent(invoiceName)}`}
+              >
+                创建退货
+              </Link>
+            </Button>
+          ) : null,
           <Button
             danger
             disabled={!data?.canCancelSalesInvoice}
@@ -452,18 +437,18 @@ const SalesInvoiceDetailPage: React.FC = () => {
             loading={cancelLoading}
             onClick={confirmCancel}
           >
-            取消销售发票
+            作废销售发票
           </Button>,
           <Button
             danger
-            disabled={!latestPaymentEntryRecord}
+            disabled={!activePaymentEntries.length}
             key="cancel-payment"
             loading={paymentCancelLoading}
-            onClick={() => openCancelPayment(latestPaymentEntryRecord)}
+            onClick={() => setPaymentSelectionOpen(true)}
           >
             {shouldTreatPaymentsAsException
-              ? '清理最近异常收款'
-              : '取消最近客户收款'}
+              ? '选择清理异常收款'
+              : '选择取消客户收款'}
           </Button>,
         ]}
       >
@@ -568,7 +553,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                       headerTitle="收款历史"
                       pagination={false}
                       rowKey="paymentEntry"
-                      scroll={{ x: 1170 }}
+                      scroll={{ x: 1210 }}
                       search={false}
                       toolBarRender={false}
                     />
@@ -774,14 +759,12 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                 <Button
                                   danger
                                   loading={paymentCancelLoading}
-                                  onClick={() =>
-                                    openCancelPayment(latestPaymentEntryRecord)
-                                  }
+                                  onClick={() => setPaymentSelectionOpen(true)}
                                   size="small"
                                 >
                                   {shouldTreatPaymentsAsException
-                                    ? '清理最近异常收款'
-                                    : '取消最近客户收款'}
+                                    ? '选择清理异常收款'
+                                    : '选择取消客户收款'}
                                 </Button>
                               ) : null}
                               {data.canCancelSalesInvoice ? (
@@ -792,7 +775,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                   size="small"
                                 >
                                   {data.latestPaymentEntry
-                                    ? '取消这笔收款并作废发票'
+                                    ? '作废收款并作废发票'
                                     : '作废销售发票'}
                                 </Button>
                               ) : null}
@@ -823,6 +806,81 @@ const SalesInvoiceDetailPage: React.FC = () => {
           ) : null}
         </Space>
       </PageContainer>
+      {data ? (
+        <Modal
+          cancelText="取消"
+          centered
+          confirmLoading={cancelLoading}
+          destroyOnHidden
+          okButtonProps={{
+            danger: true,
+            disabled: Boolean(activePaymentEntries.length),
+          }}
+          okText="确认作废发票"
+          onCancel={() => setVoidInvoiceModalOpen(false)}
+          onOk={submitVoidInvoice}
+          open={voidInvoiceModalOpen}
+          title={`作废销售发票 ${invoiceName}？`}
+          width={820}
+        >
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            {activePaymentEntries.length ? (
+              <Alert
+                description={
+                  activePaymentEntries.length > 1
+                    ? '当前发票存在多笔客户收款。请先在下方逐笔取消客户收款，全部取消后再作废销售发票。'
+                    : '当前发票存在一笔客户收款。请先取消这笔客户收款，再作废销售发票；这不是客户退款流程。'
+                }
+                title={
+                  activePaymentEntries.length > 1
+                    ? '多笔收款需要逐笔处理'
+                    : '发票存在客户收款'
+                }
+                showIcon
+                type="warning"
+              />
+            ) : (
+              <Alert
+                description={
+                  data.cancelSalesInvoiceHint ||
+                  '作废后，这张发票将从订单结算链路中移除。如需重新开票，请回到来源订单或发货链路继续处理。'
+                }
+                title="收款已清理，可以作废发票"
+                showIcon
+                type="success"
+              />
+            )}
+            {activePaymentEntries.length ? (
+              <ProTable<SalesInvoicePaymentEntry>
+                columns={paymentColumns}
+                dataSource={activePaymentEntries}
+                headerTitle="客户收款"
+                options={false}
+                pagination={false}
+                rowKey="paymentEntry"
+                scroll={{ x: 1210 }}
+                search={false}
+                size="small"
+                toolBarRender={false}
+              />
+            ) : null}
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="销售发票">
+                {invoiceName}
+              </Descriptions.Item>
+              <Descriptions.Item label="发票金额">
+                {formatCurrencyValue(data.grandTotal, data.currency)}
+              </Descriptions.Item>
+              <Descriptions.Item label="销售订单">
+                {docLinks(data.salesOrders, '/sales/orders')}
+              </Descriptions.Item>
+              <Descriptions.Item label="发货单">
+                {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
+              </Descriptions.Item>
+            </Descriptions>
+          </Space>
+        </Modal>
+      ) : null}
       <Modal
         cancelText="取消"
         confirmLoading={paymentLoading}
@@ -843,6 +901,41 @@ const SalesInvoiceDetailPage: React.FC = () => {
           showReferenceFields
           showSettlementMode
         />
+      </Modal>
+      <Modal
+        footer={null}
+        onCancel={() => setPaymentSelectionOpen(false)}
+        open={paymentSelectionOpen}
+        title={
+          shouldTreatPaymentsAsException
+            ? '选择需要清理的异常收款'
+            : '选择需要取消的客户收款'
+        }
+        width={820}
+      >
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            description={
+              shouldTreatPaymentsAsException
+                ? '请从下方列表选择具体异常收款单清理。该操作只作废选中的收款凭证，不会自动处理其他收款。'
+                : '请从下方列表选择具体客户收款单取消。取消收款是作废 Payment Entry，不等同于客户退款。'
+            }
+            title="请选择具体收款单"
+            showIcon
+            type="warning"
+          />
+          <ProTable<SalesInvoicePaymentEntry>
+            columns={paymentColumns}
+            dataSource={activePaymentEntries}
+            options={false}
+            pagination={false}
+            rowKey="paymentEntry"
+            scroll={{ x: 1210 }}
+            search={false}
+            size="small"
+            toolBarRender={false}
+          />
+        </Space>
       </Modal>
       <Modal
         cancelText="保留收款"

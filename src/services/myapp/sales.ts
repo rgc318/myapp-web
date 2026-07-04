@@ -1073,7 +1073,7 @@ export async function quickCancelSalesOrderV2(
     {
       payload: {
         order_name: orderName,
-        rollback_payment: options.rollbackPayment === false ? 0 : 1,
+        rollback_payment: options.rollbackPayment ? 1 : 0,
       },
       successMessage: '销售订单下游单据已快捷回退',
       transform: (data) => {

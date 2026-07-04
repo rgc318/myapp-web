@@ -6,6 +6,7 @@ import {
   toOptionalText,
   type PageResult,
 } from './api-utils';
+import { runGatewayMutation } from './mutation';
 
 export type ReportFilter = {
   company?: string | null;
@@ -129,6 +130,16 @@ export type PaymentEntryDetail = {
   references: PaymentEntryReference[];
   remarks: string | null;
   unallocatedAmount: number;
+};
+
+export type CancelPaymentEntryResult = {
+  documentStatus: string;
+  paymentEntry: string;
+  references: {
+    allocatedAmount: number;
+    referenceDoctype: string | null;
+    referenceName: string | null;
+  }[];
 };
 
 export type BusinessReport = {
@@ -332,6 +343,31 @@ function mapPaymentEntryDeduction(value: unknown): PaymentEntryDeduction {
     amount: toNumber(row.amount),
     costCenter: typeof row.cost_center === 'string' ? row.cost_center : null,
     description: typeof row.description === 'string' ? row.description : null,
+  };
+}
+
+function mapCancelPaymentEntryResult(value: unknown): CancelPaymentEntryResult {
+  const row = readObject(value);
+  return {
+    documentStatus:
+      typeof row.document_status === 'string' ? row.document_status : '',
+    paymentEntry: typeof row.payment_entry === 'string' ? row.payment_entry : '',
+    references: (Array.isArray(row.references) ? row.references : []).map(
+      (item) => {
+        const reference = readObject(item);
+        return {
+          allocatedAmount: toNumber(reference.allocated_amount),
+          referenceDoctype:
+            typeof reference.reference_doctype === 'string'
+              ? reference.reference_doctype
+              : null,
+          referenceName:
+            typeof reference.reference_name === 'string'
+              ? reference.reference_name
+              : null,
+        };
+      },
+    ),
   };
 }
 
@@ -542,4 +578,11 @@ export async function getPaymentEntryDetail(
     { payment_entry_name: paymentEntryName },
   );
   return mapPaymentEntryDetail(result.data ?? {});
+}
+
+export async function cancelPaymentEntry(paymentEntryName: string) {
+  return runGatewayMutation<CancelPaymentEntryResult>('cancel_payment_entry', {
+    payload: { payment_entry_name: paymentEntryName },
+    transform: mapCancelPaymentEntryResult,
+  });
 }

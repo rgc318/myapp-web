@@ -23,6 +23,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   getSalesReturnSourceContext,
   type SalesReturnSourceContext,
@@ -47,8 +48,6 @@ type FormValues = {
   sourceDoctype: SalesReturnSourceDoctype;
   sourceName: string;
 };
-
-const SALES_RETURN_ENTRY_ENABLED = false;
 
 function getDocumentPath(doctype: SalesReturnSourceDoctype, name: string) {
   const encodedName = encodeURIComponent(name);
@@ -638,7 +637,7 @@ const SalesReturnFormPage: React.FC = () => {
 };
 
 const SalesReturnNewPage: React.FC = () =>
-  SALES_RETURN_ENTRY_ENABLED ? (
+  SALES_RETURN_REFUND_ENTRY_ENABLED ? (
     <SalesReturnFormPage />
   ) : (
     <SalesReturnDisabledPage />

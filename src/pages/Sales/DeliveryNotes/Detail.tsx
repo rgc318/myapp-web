@@ -9,6 +9,7 @@ import { Link, useParams, useRequest } from '@umijs/max';
 import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
 import React, { useState } from 'react';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelDeliveryNote,
   getDeliveryNoteDetail,
@@ -20,8 +21,6 @@ import {
   resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
-
-const SALES_RETURN_ENTRY_ENABLED = false;
 
 function docLinks(values: string[], basePath: string) {
   return values.length
@@ -153,13 +152,15 @@ const DeliveryNoteDetailPage: React.FC = () => {
             </Link>
           </Button>
         ) : null,
-        <Button
-          disabled={!SALES_RETURN_ENTRY_ENABLED}
-          key="return"
-          title="Web 端已暂停直接发起销售退货；如需改错请取消发票和发货单"
-        >
-          创建退货
-        </Button>,
+        SALES_RETURN_REFUND_ENTRY_ENABLED ? (
+          <Button key="return">
+            <Link
+              to={`/sales/returns/new?sourceDoctype=Delivery%20Note&sourceName=${encodeURIComponent(deliveryNoteName)}`}
+            >
+              创建退货
+            </Link>
+          </Button>
+        ) : null,
         <Button
           danger
           disabled={!data?.canCancelDeliveryNote}

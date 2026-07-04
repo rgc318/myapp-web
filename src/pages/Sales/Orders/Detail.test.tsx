@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { App } from 'antd';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { App, Modal } from 'antd';
 import React from 'react';
 import SalesOrderDetailPage, { buildSalesReturnSourceOptions } from './Detail';
 
@@ -58,6 +58,7 @@ jest.mock('@/components/PrintDocumentButton', () => ({
 
 jest.mock('@/services/myapp/sales', () => ({
   cancelSalesOrder: jest.fn(),
+  cancelSalesPaymentEntry: jest.fn(),
   createSalesOrderInvoice: jest.fn(),
   getSalesInvoiceDetail: jest.fn(),
   getSalesOrderDetail: jest.fn(),
@@ -66,7 +67,13 @@ jest.mock('@/services/myapp/sales', () => ({
   submitSalesOrderDelivery: jest.fn(),
 }));
 
-const { getSalesOrderDetail } = jest.requireMock('@/services/myapp/sales');
+const {
+  cancelSalesPaymentEntry,
+  createSalesOrderInvoice,
+  getSalesOrderDetail,
+  quickCancelSalesOrderV2,
+  submitSalesOrderDelivery,
+} = jest.requireMock('@/services/myapp/sales');
 
 const baseSalesOrderDetail = {
   addressDisplay: '上海市浦东新区测试路 88 号 5 楼',
@@ -123,6 +130,7 @@ const baseSalesOrderDetail = {
 
 describe('SalesOrderDetailPage', () => {
   beforeEach(() => {
+    Modal.destroyAll();
     jest.clearAllMocks();
     mockLocationSearch = '';
     getSalesOrderDetail.mockResolvedValue({ ...baseSalesOrderDetail });
@@ -149,6 +157,167 @@ describe('SalesOrderDetailPage', () => {
 
     expect(await screen.findByText('登记客户收款暂不可用')).toBeTruthy();
     expect(screen.getByText('请先创建销售发票后再登记客户收款')).toBeTruthy();
+  });
+
+  it('hides sales return and refund entry buttons while the feature is disabled', async () => {
+    getSalesOrderDetail.mockResolvedValue({
+      ...baseSalesOrderDetail,
+      deliveryNotes: ['MAT-DN-2026-00274'],
+      salesInvoices: ['ACC-SINV-2026-00695'],
+      timeline: [
+        {
+          amount: -100,
+          date: '2026-07-03',
+          description: '销售退货',
+          docname: 'ACC-SINV-RET-2026-00001',
+          doctype: 'Sales Invoice',
+          modeOfPayment: '',
+          referenceNo: '',
+          status: 'submitted',
+          type: 'sales_return',
+        },
+      ],
+    });
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    expect(await screen.findByText('ACC-SINV-2026-00695')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '发起退货' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '退款核对' })).toBeNull();
+  });
+
+  it('confirms quick billing before creating delivery note and sales invoice', async () => {
+    submitSalesOrderDelivery.mockResolvedValue({
+      data: { delivery_note: 'MAT-DN-2026-00274' },
+    });
+    createSalesOrderInvoice.mockResolvedValue({
+      data: { sales_invoice: 'ACC-SINV-2026-00695' },
+    });
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '一键开单' }));
+
+    expect(
+      await screen.findAllByText('一键开单 SAL-ORD-2026-01204'),
+    ).toHaveLength(2);
+    expect(
+      screen.getByText(
+        '系统会先按当前待发数量创建销售发货单，再创建销售发票。',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '确认发货并开票' }));
+
+    await waitFor(() => {
+      expect(submitSalesOrderDelivery).toHaveBeenCalledWith(
+        'SAL-ORD-2026-01204',
+        { forceDelivery: false },
+      );
+      expect(createSalesOrderInvoice).toHaveBeenCalledWith(
+        'SAL-ORD-2026-01204',
+      );
+    });
+    expect(await screen.findAllByText('一键开单成功')).toHaveLength(2);
+  });
+
+  it('asks for explicit confirmation before rolling back customer payments', async () => {
+    getSalesOrderDetail.mockResolvedValue({
+      ...baseSalesOrderDetail,
+      deliveryNotes: ['MAT-DN-2026-00274'],
+      paidAmount: 100,
+      paymentStatus: 'paid',
+      salesInvoices: ['ACC-SINV-2026-00695'],
+      timeline: [
+        {
+          amount: 100,
+          date: '2026-07-03',
+          description: '客户收款',
+          docname: 'ACC-PAY-2026-00001',
+          doctype: 'Payment Entry',
+          modeOfPayment: 'Bank',
+          referenceNo: '',
+          status: 'submitted',
+          type: 'payment_entry',
+        },
+      ],
+    });
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '回退并修改订单' }),
+    );
+    expect(await screen.findByText('订单存在客户收款')).toBeTruthy();
+    expect(screen.getAllByText('ACC-PAY-2026-00001').length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: '取消收款' })).toBeTruthy();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '一键回退并修改' }),
+    );
+
+    expect(await screen.findAllByText('强制回退已收款订单？')).toHaveLength(2);
+    expect(quickCancelSalesOrderV2).not.toHaveBeenCalled();
+  });
+
+  it('lists multiple customer payments for manual cancellation before rollback', async () => {
+    cancelSalesPaymentEntry.mockResolvedValue({});
+    getSalesOrderDetail.mockResolvedValue({
+      ...baseSalesOrderDetail,
+      deliveryNotes: ['MAT-DN-2026-00274'],
+      paidAmount: 300,
+      paymentStatus: 'paid',
+      salesInvoices: ['ACC-SINV-2026-00695'],
+      timeline: [
+        {
+          amount: 100,
+          date: '2026-07-03',
+          description: '客户收款',
+          docname: 'ACC-PAY-2026-00001',
+          doctype: 'Payment Entry',
+          modeOfPayment: 'Bank',
+          referenceNo: 'REF-001',
+          status: 'submitted',
+          type: 'payment_entry',
+        },
+        {
+          amount: 200,
+          date: '2026-07-03',
+          description: '客户收款',
+          docname: 'ACC-PAY-2026-00002',
+          doctype: 'Payment Entry',
+          modeOfPayment: 'Cash',
+          referenceNo: 'REF-002',
+          status: 'submitted',
+          type: 'payment_entry',
+        },
+      ],
+    });
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '回退并修改订单' }),
+    );
+
+    expect(await screen.findByText('多笔收款需要逐笔处理')).toBeTruthy();
+    expect(screen.getAllByText('ACC-PAY-2026-00001').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('ACC-PAY-2026-00002').length).toBeGreaterThan(0);
+    expect(
+      (
+        screen.getByRole('button', {
+          name: '继续回退发票和发货单',
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
   });
 
   it('uses sales invoices instead of delivery notes for invoiced order returns', () => {

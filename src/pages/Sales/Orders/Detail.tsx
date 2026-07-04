@@ -36,8 +36,10 @@ import {
   type LineQtyEditorRow,
 } from '@/components/LineQtyEditor';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelSalesOrder,
+  cancelSalesPaymentEntry,
   createSalesOrderInvoice,
   getSalesInvoiceDetail,
   getSalesOrderDetail,
@@ -116,7 +118,12 @@ type SalesReturnSourceOption = {
   name: string;
 };
 
-const SALES_RETURN_ENTRY_ENABLED = false;
+type RollbackPaymentEntry = {
+  amount: number | null;
+  date: string;
+  modeOfPayment: string;
+  paymentEntry: string;
+};
 
 export function buildSalesReturnSourceOptions(
   detail?: SalesOrderDetail | null,
@@ -273,6 +280,44 @@ function hasRollbackableDownstream(detail: SalesOrderDetail) {
   });
 }
 
+function hasCustomerPayment(detail: SalesOrderDetail) {
+  return Boolean(
+    (detail.paidAmount ?? 0) > 0 ||
+      detail.paymentStatus === 'paid' ||
+      detail.timeline.some(
+        (event) => event.type === 'payment_entry' && event.docname,
+      ),
+  );
+}
+
+function getRollbackPaymentEntries(
+  detail: SalesOrderDetail | null | undefined,
+  cancelledPaymentEntries: Set<string> = new Set(),
+): RollbackPaymentEntry[] {
+  if (!detail) {
+    return [];
+  }
+
+  const entries = detail.timeline
+    .filter(
+      (event) =>
+        event.type === 'payment_entry' &&
+        event.docname &&
+        !cancelledPaymentEntries.has(event.docname) &&
+        !['cancelled', 'canceled', '已作废'].includes(event.status),
+    )
+    .map((event) => ({
+      amount: event.amount,
+      date: event.date,
+      modeOfPayment: event.modeOfPayment,
+      paymentEntry: event.docname,
+    }));
+
+  return Array.from(
+    new Map(entries.map((entry) => [entry.paymentEntry, entry])).values(),
+  );
+}
+
 function actionTargetLabel(actionTarget: string | null) {
   if (actionTarget === 'delivery') {
     return '创建发货单';
@@ -319,6 +364,22 @@ function invoiceDisabledReason(detail: SalesOrderDetail) {
     return '当前订单没有待开票/待收款金额';
   }
   return '当前订单暂不满足开票条件';
+}
+
+function quickBillDisabledReason(detail: SalesOrderDetail) {
+  if (detail.canCreateSalesInvoice) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能一键开单';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的销售订单才能一键开单';
+  }
+  if (detail.salesInvoices.length) {
+    return '当前订单已存在销售发票';
+  }
+  return invoiceDisabledReason(detail) || '当前订单暂不满足一键开单条件';
 }
 
 function paymentDisabledReason(detail: SalesOrderDetail) {
@@ -548,6 +609,12 @@ const SalesOrderDetailPage: React.FC = () => {
   });
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [rollbackModalOpen, setRollbackModalOpen] = useState(false);
+  const [rollbackCancelledPayments, setRollbackCancelledPayments] = useState<
+    Set<string>
+  >(new Set());
+  const [rollbackPaymentCancelling, setRollbackPaymentCancelling] = useState<
+    string | null
+  >(null);
   const actionTarget = useMemo(() => {
     const value = new URLSearchParams(location.search).get('action');
     return ['delivery', 'invoice', 'payment'].includes(String(value))
@@ -577,6 +644,10 @@ const SalesOrderDetailPage: React.FC = () => {
     }, 120);
   }, [actionTarget, detail]);
 
+  useEffect(() => {
+    setRollbackCancelledPayments(new Set());
+  }, [detail?.name]);
+
   const runOrderAction = (
     key: string,
     title: string,
@@ -600,6 +671,155 @@ const SalesOrderDetailPage: React.FC = () => {
         }
       },
       title,
+    });
+  };
+
+  const confirmQuickBill = () => {
+    if (!detail) {
+      return;
+    }
+
+    const shouldCreateDelivery = detail.canSubmitDelivery;
+    const steps = shouldCreateDelivery
+      ? '系统会先按当前待发数量创建销售发货单，再创建销售发票。'
+      : '系统会基于当前订单创建销售发票，不会重复创建发货单。';
+
+    const runQuickBill = async (forceDelivery = false) => {
+      let deliveryNoteName = '';
+      let salesInvoiceName = '';
+
+      if (shouldCreateDelivery) {
+        const deliveryResult = await submitSalesOrderDelivery(detail.name, {
+          forceDelivery,
+        });
+        deliveryNoteName = readMutationName(
+          deliveryResult.data,
+          'delivery_note',
+        );
+      }
+
+      const invoiceResult = await createSalesOrderInvoice(detail.name);
+      salesInvoiceName = readMutationName(invoiceResult.data, 'sales_invoice');
+      refresh();
+
+      Modal.success({
+        content: (
+          <Space orientation="vertical" size={8}>
+            {deliveryNoteName ? (
+              <span>
+                销售发货单：
+                <Link
+                  to={`/sales/delivery-notes/${encodeURIComponent(
+                    deliveryNoteName,
+                  )}`}
+                >
+                  {deliveryNoteName}
+                </Link>
+              </span>
+            ) : null}
+            {salesInvoiceName ? (
+              <span>
+                销售发票：
+                <Link
+                  to={`/sales/invoices/${encodeURIComponent(salesInvoiceName)}`}
+                >
+                  {salesInvoiceName}
+                </Link>
+              </span>
+            ) : (
+              <span>销售发票已生成，详情刷新后可查看。</span>
+            )}
+            <span>如需收款，可继续在订单或销售发票页面登记客户收款。</span>
+          </Space>
+        ),
+        title: forceDelivery ? '强制一键开单成功' : '一键开单成功',
+      });
+    };
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            description="一键开单适合整单快速履约。若需要部分发货、部分开票或调整明细数量，请继续使用分步的创建发货单和创建销售发票。"
+            showIcon
+            title={steps}
+            type="info"
+          />
+          <Descriptions
+            column={1}
+            items={[
+              {
+                key: 'order',
+                label: '销售订单',
+                children: detail.name,
+              },
+              {
+                key: 'amount',
+                label: '订单金额',
+                children: formatCurrencyValue(detail.amount, detail.currency),
+              },
+              {
+                key: 'delivery',
+                label: '发货动作',
+                children: shouldCreateDelivery
+                  ? '创建销售发货单'
+                  : '跳过，当前无需创建发货单',
+              },
+              {
+                key: 'invoice',
+                label: '开票动作',
+                children: '创建销售发票',
+              },
+            ]}
+            size="small"
+          />
+        </Space>
+      ),
+      okText: shouldCreateDelivery ? '确认发货并开票' : '确认创建销售发票',
+      onOk: async () => {
+        setActionLoading('quick-bill');
+        try {
+          await runQuickBill();
+        } catch (caught) {
+          if (shouldCreateDelivery && isStockShortageError(caught)) {
+            Modal.confirm({
+              cancelText: '取消',
+              content: (
+                <Alert
+                  description="强制一键开单会跳过库存预检并继续创建发货单和销售发票，可能造成负库存或库存账实不一致。仅在仓库实物已确认出货、后续会补录库存或业务明确允许时使用。"
+                  showIcon
+                  title={getErrorMessage(caught, '当前可用库存不足')}
+                  type="warning"
+                />
+              ),
+              okText: '强制发货并开票',
+              okType: 'danger',
+              onOk: async () => {
+                setActionLoading('quick-bill');
+                try {
+                  await runQuickBill(true);
+                } catch (forceCaught) {
+                  message.error(getErrorMessage(forceCaught));
+                  throw forceCaught;
+                } finally {
+                  setActionLoading(undefined);
+                }
+              },
+              title: '库存不足，是否强制一键开单？',
+              width: 560,
+            });
+            return;
+          }
+
+          message.error(getErrorMessage(caught));
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `一键开单 ${detail.name}`,
+      width: 640,
     });
   };
 
@@ -914,7 +1134,9 @@ const SalesOrderDetailPage: React.FC = () => {
     setRollbackModalOpen(true);
   };
 
-  const submitQuickCancelDownstream = async () => {
+  const submitQuickCancelDownstream = async (options?: {
+    rollbackPayment?: boolean;
+  }) => {
     if (!detail) {
       return;
     }
@@ -922,7 +1144,7 @@ const SalesOrderDetailPage: React.FC = () => {
     setActionLoading('quick-cancel');
     try {
       const result = await quickCancelSalesOrderV2(detail.name || orderName, {
-        rollbackPayment: true,
+        rollbackPayment: options?.rollbackPayment,
       });
       setRollbackModalOpen(false);
       refresh();
@@ -983,6 +1205,73 @@ const SalesOrderDetailPage: React.FC = () => {
     } finally {
       setActionLoading(undefined);
     }
+  };
+
+  const cancelRollbackPaymentEntry = async (paymentEntry: string) => {
+    if (!paymentEntry) {
+      return;
+    }
+
+    setRollbackPaymentCancelling(paymentEntry);
+    try {
+      await cancelSalesPaymentEntry(paymentEntry);
+      setRollbackCancelledPayments((current) => {
+        const next = new Set(current);
+        next.add(paymentEntry);
+        return next;
+      });
+      message.success(`已取消客户收款 ${paymentEntry}`);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setRollbackPaymentCancelling(null);
+    }
+  };
+
+  const confirmSubmitQuickCancelDownstream = () => {
+    if (!detail) {
+      return;
+    }
+
+    const activePaymentEntries = getRollbackPaymentEntries(
+      detail,
+      rollbackCancelledPayments,
+    );
+    const originalPaymentEntryCount = getRollbackPaymentEntries(detail).length;
+    if (originalPaymentEntryCount > 1 && activePaymentEntries.length > 0) {
+      message.warning('请先逐笔取消客户收款，再继续回退发票和发货单');
+      return;
+    }
+
+    if (!activePaymentEntries.length) {
+      void submitQuickCancelDownstream({ rollbackPayment: false });
+      return;
+    }
+
+    if (!hasCustomerPayment(detail)) {
+      void submitQuickCancelDownstream({ rollbackPayment: false });
+      return;
+    }
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Alert
+          description="当前订单已经存在客户收款。一键回退会先作废相关客户收款凭证，再继续作废销售发票和销售发货单；这不是客户退款流程，也不会保留原收款单。若当前订单存在多笔有效收款，后端仍会拒绝快捷回退，请改用分步回退。"
+          title="请确认是否同步取消客户收款"
+          showIcon
+          type="warning"
+        />
+      ),
+      okButtonProps: { danger: true },
+      okText: '取消收款并一键回退',
+      onOk: () => submitQuickCancelDownstream({ rollbackPayment: true }),
+      style: { top: 'min(32vh, 320px)' },
+      title: '强制回退已收款订单？',
+      width: 560,
+    });
   };
 
   const pageDescriptionItems: DescriptionsProps['items'] = detail
@@ -1063,6 +1352,13 @@ const SalesOrderDetailPage: React.FC = () => {
       ]
     : [];
   const timelineEvents = detail?.timeline ?? [];
+  const rollbackPaymentEntries = getRollbackPaymentEntries(
+    detail,
+    rollbackCancelledPayments,
+  );
+  const rollbackOriginalPaymentCount = getRollbackPaymentEntries(detail).length;
+  const rollbackRequiresManualPaymentCleanup =
+    rollbackOriginalPaymentCount > 1 && rollbackPaymentEntries.length > 0;
   const canQuickCancelDownstream = detail
     ? hasRollbackableDownstream(detail)
     : false;
@@ -1158,6 +1454,57 @@ const SalesOrderDetailPage: React.FC = () => {
       ]
     : [];
   const progress = detail ? salesOrderProgress(detail) : null;
+  const rollbackPaymentColumns = [
+    {
+      title: '收款单',
+      dataIndex: 'paymentEntry',
+      ellipsis: true,
+      width: 190,
+      render: (_: unknown, record: RollbackPaymentEntry) => (
+        <Link to={`/payments/${encodeURIComponent(record.paymentEntry)}`}>
+          {record.paymentEntry}
+        </Link>
+      ),
+    },
+    {
+      title: '日期',
+      dataIndex: 'date',
+      width: 110,
+      render: (_: unknown, record: RollbackPaymentEntry) => record.date || '-',
+    },
+    {
+      title: '方式',
+      dataIndex: 'modeOfPayment',
+      ellipsis: true,
+      width: 120,
+      render: (_: unknown, record: RollbackPaymentEntry) =>
+        record.modeOfPayment || '-',
+    },
+    {
+      title: '金额',
+      dataIndex: 'amount',
+      align: 'right' as const,
+      width: 115,
+      render: (_: unknown, record: RollbackPaymentEntry) =>
+        formatCurrencyValue(record.amount, detail?.currency),
+    },
+    {
+      title: '操作',
+      valueType: 'option' as const,
+      width: 110,
+      render: (_: unknown, record: RollbackPaymentEntry) => (
+        <Button
+          danger
+          loading={rollbackPaymentCancelling === record.paymentEntry}
+          onClick={() => cancelRollbackPaymentEntry(record.paymentEntry)}
+          size="small"
+          type="link"
+        >
+          取消收款
+        </Button>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -1480,6 +1827,18 @@ const SalesOrderDetailPage: React.FC = () => {
                             </Button>
                           </span>
                         </Tooltip>
+                        <Tooltip title={quickBillDisabledReason(detail)}>
+                          <span>
+                            <Button
+                              disabled={!detail.canCreateSalesInvoice}
+                              loading={actionLoading === 'quick-bill'}
+                              onClick={confirmQuickBill}
+                              type="primary"
+                            >
+                              一键开单
+                            </Button>
+                          </span>
+                        </Tooltip>
                         <Tooltip title={paymentDisabledReason(detail)}>
                           <span>
                             <Button
@@ -1496,44 +1855,43 @@ const SalesOrderDetailPage: React.FC = () => {
                             </Button>
                           </span>
                         </Tooltip>
-                        <Tooltip
-                          title={
-                            !SALES_RETURN_ENTRY_ENABLED
-                              ? 'Web 端已暂停直接发起销售退货；如需改错请使用回退并修改订单，按顺序取消发票和发货单'
-                              : detail.salesInvoices.length ||
-                                  detail.deliveryNotes.length
+                        {SALES_RETURN_REFUND_ENTRY_ENABLED ? (
+                          <Tooltip
+                            title={
+                              detail.salesInvoices.length ||
+                              detail.deliveryNotes.length
                                 ? ''
                                 : '需要先完成发货或开票后再发起退货'
-                          }
-                        >
-                          <span>
-                            <Button
-                              disabled={
-                                !SALES_RETURN_ENTRY_ENABLED ||
-                                !returnSourceOptions.length
-                              }
-                              onClick={openReturnSource}
-                            >
-                              发起退货
-                            </Button>
-                          </span>
-                        </Tooltip>
-                        <Tooltip
-                          title={
-                            returnInvoiceNames.length
-                              ? ''
-                              : '退款核对仅用于已有退货发票后的客户退款；普通收款回退请进入销售发票详情取消客户收款'
-                          }
-                        >
-                          <span>
-                            <Button
-                              disabled={!returnInvoiceNames.length}
-                              onClick={openRefundReview}
-                            >
-                              退款核对
-                            </Button>
-                          </span>
-                        </Tooltip>
+                            }
+                          >
+                            <span>
+                              <Button
+                                disabled={!returnSourceOptions.length}
+                                onClick={openReturnSource}
+                              >
+                                发起退货
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        ) : null}
+                        {SALES_RETURN_REFUND_ENTRY_ENABLED ? (
+                          <Tooltip
+                            title={
+                              returnInvoiceNames.length
+                                ? ''
+                                : '退款核对仅用于已有退货发票后的客户退款；普通收款回退请进入销售发票详情取消客户收款'
+                            }
+                          >
+                            <span>
+                              <Button
+                                disabled={!returnInvoiceNames.length}
+                                onClick={openRefundReview}
+                              >
+                                退款核对
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        ) : null}
                         <Tooltip
                           title={
                             canQuickCancelDownstream
@@ -1629,19 +1987,70 @@ const SalesOrderDetailPage: React.FC = () => {
         cancelText="取消"
         confirmLoading={actionLoading === 'quick-cancel'}
         destroyOnHidden
-        okButtonProps={{ danger: true }}
-        okText="一键回退并修改"
+        okButtonProps={{
+          danger: true,
+          disabled: rollbackRequiresManualPaymentCleanup,
+        }}
+        okText={
+          rollbackOriginalPaymentCount > 1
+            ? '继续回退发票和发货单'
+            : '一键回退并修改'
+        }
         onCancel={() => setRollbackModalOpen(false)}
-        onOk={submitQuickCancelDownstream}
+        onOk={confirmSubmitQuickCancelDownstream}
         open={rollbackModalOpen}
         title={`回退并修改销售订单 ${detail?.name || orderName}？`}
-        width={620}
+        width={760}
       >
         {detail ? (
           <Space orientation="vertical" size={12} style={{ width: '100%' }}>
             <span>
               系统会按顺序取消客户退款单、退货发票、客户收款单、销售发票和销售发货单，让订单回到可修改状态。若当前订单存在多张发票、发货单或多笔收款/退款，后端会拒绝一键回退。
             </span>
+            {rollbackOriginalPaymentCount === 1 &&
+            rollbackPaymentEntries.length ? (
+              <Alert
+                description="当前订单存在一笔客户收款。你可以先取消这笔收款后继续回退，也可以直接一键回退并在二次确认后由系统同步取消收款。"
+                title="订单存在客户收款"
+                showIcon
+                type="warning"
+              />
+            ) : null}
+            {rollbackOriginalPaymentCount > 1 ? (
+              <Alert
+                description="当前订单存在多笔客户收款。请先在下方逐笔取消客户收款，全部取消后再继续回退销售发票和销售发货单。"
+                title="多笔收款需要逐笔处理"
+                showIcon
+                type="warning"
+              />
+            ) : null}
+            {rollbackOriginalPaymentCount > 0 &&
+            rollbackPaymentEntries.length ? (
+              <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+                <ProTable<RollbackPaymentEntry>
+                  columns={rollbackPaymentColumns}
+                  dataSource={rollbackPaymentEntries}
+                  headerTitle="客户收款"
+                  options={false}
+                  pagination={false}
+                  rowKey="paymentEntry"
+                  scroll={{ x: 645 }}
+                  search={false}
+                  size="small"
+                  tableStyle={{ minWidth: 645 }}
+                  toolBarRender={false}
+                />
+              </div>
+            ) : null}
+            {rollbackOriginalPaymentCount > 0 &&
+            !rollbackPaymentEntries.length ? (
+              <Alert
+                description="客户收款已全部取消，可以继续回退销售发票和销售发货单。"
+                title="收款已清理"
+                showIcon
+                type="success"
+              />
+            ) : null}
             <SalesRollbackGuide
               deliveryNotes={detail.deliveryNotes}
               salesInvoices={detail.salesInvoices}

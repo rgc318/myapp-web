@@ -68,6 +68,7 @@ import {
   fetchPrintPreview,
 } from '../printing';
 import {
+  cancelPaymentEntry,
   fetchCashflowEntries,
   fetchSalesReport,
   getPaymentEntryDetail,
@@ -2478,7 +2479,7 @@ describe('myapp domain services', () => {
       'quick_cancel_order_v2',
       {
         order_name: 'SO-0001',
-        rollback_payment: 1,
+        rollback_payment: 0,
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
@@ -2742,6 +2743,39 @@ describe('myapp domain services', () => {
     );
   });
 
+  it('runs generic payment entry cancellation through gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        document_status: 'cancelled',
+        payment_entry: 'PE-0001',
+        references: [
+          {
+            allocated_amount: 120,
+            reference_doctype: 'Sales Invoice',
+            reference_name: 'SI-0001',
+          },
+        ],
+      },
+    });
+
+    const result = await cancelPaymentEntry('PE-0001');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'cancel_payment_entry',
+      { payment_entry_name: 'PE-0001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(result.data).toMatchObject({
+      documentStatus: 'cancelled',
+      paymentEntry: 'PE-0001',
+    });
+    expect(result.data.references[0]).toMatchObject({
+      allocatedAmount: 120,
+      referenceDoctype: 'Sales Invoice',
+      referenceName: 'SI-0001',
+    });
+  });
+
   it('records sales payment against a selected sales invoice', async () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: { name: 'PE-0001' } });
 
@@ -2861,6 +2895,23 @@ describe('myapp domain services', () => {
     expect(result?.refund.refundedAmount).toBe(60);
     expect(result?.entries[0].paymentEntry).toBe('PE-REF-0001');
     expect(result?.returnInvoice?.name).toBe('SI-RET-0001');
+  });
+
+  it('passes rollback payment flag only after explicit confirmation', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: { completed_steps: [] },
+    });
+
+    await quickCancelSalesOrderV2('SO-0001', { rollbackPayment: true });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'quick_cancel_order_v2',
+      {
+        order_name: 'SO-0001',
+        rollback_payment: 1,
+      },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
   });
 
   it('runs purchase downstream cancel mutations through gateway', async () => {

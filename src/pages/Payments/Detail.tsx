@@ -7,9 +7,20 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { history, Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Skeleton, Space, Tag, Typography } from 'antd';
+import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import React from 'react';
 import {
+  cancelPaymentEntry,
   getPaymentEntryDetail,
   type PaymentEntryDeduction,
   type PaymentEntryDetail,
@@ -138,6 +149,58 @@ function businessTraceMessage(data: PaymentEntryDetail) {
   return '这笔收付款暂未归类到明确业务类型，请结合核销明细、账户和参考号核对。';
 }
 
+function cancelActionText(data: PaymentEntryDetail) {
+  if (data.businessType === 'customer_receipt') {
+    return '取消客户收款';
+  }
+  if (data.businessType === 'supplier_payment') {
+    return '取消供应商付款';
+  }
+  if (data.businessType === 'customer_refund') {
+    return '作废客户退款单';
+  }
+  if (data.businessType === 'supplier_refund') {
+    return '作废供应商退款单';
+  }
+  if (data.direction === 'transfer') {
+    return '作废转账凭证';
+  }
+  return '作废收付款单';
+}
+
+function cancelImpactText(data: PaymentEntryDetail) {
+  if (data.businessType === 'customer_receipt') {
+    return '作废后，对应销售发票会恢复未收金额；这不是客户退款流程，也不会生成退款出账。';
+  }
+  if (data.businessType === 'supplier_payment') {
+    return '作废后，对应采购发票会恢复未付金额；这不是供应商退款入账流程。';
+  }
+  if (data.businessType === 'customer_refund') {
+    return '作废后，对应退货发票会恢复可退余额；如客户已实际收到退款，需要按财务制度另行处理线下资金差异。';
+  }
+  if (data.businessType === 'supplier_refund') {
+    return '作废后，对应退货或采购发票的退款核销会回退；如供应商已实际退款，需要按财务制度另行处理线下资金差异。';
+  }
+  return '作废后会冲回这张 Payment Entry 的会计影响，请先确认核销明细和账户方向。';
+}
+
+function renderCancelReferenceSummary(data: PaymentEntryDetail) {
+  if (!data.references.length) {
+    return <Typography.Text type="secondary">无核销明细</Typography.Text>;
+  }
+
+  return (
+    <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+      {data.references.map((reference) => (
+        <span key={`${reference.referenceDoctype}-${reference.referenceName}`}>
+          {documentLink(reference.referenceDoctype, reference.referenceName)}：
+          {formatCurrencyValue(reference.allocatedAmount, data.currency)}
+        </span>
+      ))}
+    </Space>
+  );
+}
+
 const referenceColumns: ProColumns<PaymentEntryReference>[] = [
   {
     title: '引用单据',
@@ -229,7 +292,28 @@ const PaymentEntryDetailPage: React.FC = () => {
       refreshDeps: [paymentEntryName],
     },
   );
+  const [cancelLoading, setCancelLoading] = React.useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = React.useState(false);
   const primaryBusinessDocument = data ? firstBusinessDocument(data) : null;
+
+  const submitCancelPaymentEntry = async () => {
+    if (!data?.name || !data.actions.canCancel) {
+      return;
+    }
+
+    setCancelLoading(true);
+    try {
+      await cancelPaymentEntry(data.name);
+      message.success(`${cancelActionText(data)}完成`);
+      setCancelModalOpen(false);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   return (
     <PageContainer
@@ -274,36 +358,66 @@ const PaymentEntryDetailPage: React.FC = () => {
 
         {data ? (
           <>
-            <StatisticCard.Group direction="row">
-              <StatisticCard
-                statistic={{
-                  title: '收支金额',
-                  value: formatCurrencyValue(data.amount, data.currency),
+            <div
+              style={{
+                alignItems: 'stretch',
+                display: 'flex',
+                gap: 16,
+                width: '100%',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <StatisticCard.Group direction="row">
+                  <StatisticCard
+                    statistic={{
+                      title: '收支金额',
+                      value: formatCurrencyValue(data.amount, data.currency),
+                    }}
+                  />
+                  <StatisticCard
+                    statistic={{
+                      title: '方向',
+                      value: data.direction,
+                      formatter: () => directionTag(data.direction),
+                    }}
+                  />
+                  <StatisticCard
+                    statistic={{
+                      title: '业务类型',
+                      value: businessTypeText(data.businessType),
+                    }}
+                  />
+                  <StatisticCard
+                    statistic={{
+                      title: '未分配金额',
+                      value: formatCurrencyValue(
+                        data.unallocatedAmount,
+                        data.currency,
+                      ),
+                    }}
+                  />
+                </StatisticCard.Group>
+              </div>
+              <ProCard
+                bodyStyle={{
+                  alignItems: 'center',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: 16,
                 }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '方向',
-                  value: data.direction,
-                  formatter: () => directionTag(data.direction),
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '业务类型',
-                  value: businessTypeText(data.businessType),
-                }}
-              />
-              <StatisticCard
-                statistic={{
-                  title: '未分配金额',
-                  value: formatCurrencyValue(
-                    data.unallocatedAmount,
-                    data.currency,
-                  ),
-                }}
-              />
-            </StatisticCard.Group>
+                style={{ width: 180 }}
+              >
+                <Button
+                  block
+                  danger
+                  disabled={!data.actions.canCancel}
+                  loading={cancelLoading}
+                  onClick={() => setCancelModalOpen(true)}
+                >
+                  {cancelActionText(data)}
+                </Button>
+              </ProCard>
+            </div>
 
             <ProCard split="vertical">
               <ProCard colSpan="65%">
@@ -329,7 +443,7 @@ const PaymentEntryDetailPage: React.FC = () => {
                           ) : null
                         }
                         description={businessTraceMessage(data)}
-                        message={businessTypeText(data.businessType)}
+                        title={businessTypeText(data.businessType)}
                         showIcon
                         type={
                           data.direction === 'transfer' ? 'info' : 'success'
@@ -502,20 +616,60 @@ const PaymentEntryDetailPage: React.FC = () => {
                   </ProCard>
 
                   <ProCard title="动作状态">
-                    <Alert
-                      description={
-                        data.actions.canCancel
-                          ? '当前收付款单处于可作废状态。作废动作仍建议从对应销售或采购业务单据进入，避免脱离业务链路处理。'
-                          : data.actions.cancelHint || '当前不可作废。'
-                      }
-                      message={data.actions.canCancel ? '可作废' : '暂不可作废'}
-                      showIcon
-                      type={data.actions.canCancel ? 'info' : 'warning'}
-                    />
+                    <Space
+                      orientation="vertical"
+                      size={12}
+                      style={{ width: '100%' }}
+                    >
+                      <Alert
+                        description={
+                          data.actions.canCancel
+                            ? '当前收付款单处于可作废状态。请先核对左侧业务链路和核销明细；作废收付款单不是正式退款操作。'
+                            : data.actions.cancelHint || '当前不可作废。'
+                        }
+                        title={data.actions.canCancel ? '可作废' : '暂不可作废'}
+                        showIcon
+                        type={data.actions.canCancel ? 'info' : 'warning'}
+                      />
+                      <Button
+                        disabled={!data.actions.canCancel}
+                        onClick={() => setCancelModalOpen(true)}
+                      >
+                        查看作废确认
+                      </Button>
+                    </Space>
                   </ProCard>
                 </Space>
               </ProCard>
             </ProCard>
+            <Modal
+              cancelText="取消"
+              centered
+              confirmLoading={cancelLoading}
+              destroyOnHidden
+              okButtonProps={{ danger: true }}
+              okText={cancelActionText(data)}
+              onCancel={() => setCancelModalOpen(false)}
+              onOk={submitCancelPaymentEntry}
+              open={cancelModalOpen}
+              title={`${cancelActionText(data)}？`}
+              width={560}
+            >
+              <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+                <Alert
+                  description={cancelImpactText(data)}
+                  title="请确认这不是正式退款操作"
+                  showIcon
+                  type="warning"
+                />
+                <div>
+                  <Typography.Text strong>影响的核销明细</Typography.Text>
+                  <div style={{ marginTop: 8 }}>
+                    {renderCancelReferenceSummary(data)}
+                  </div>
+                </div>
+              </Space>
+            </Modal>
           </>
         ) : null}
       </Space>
