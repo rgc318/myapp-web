@@ -1,4 +1,5 @@
 import {
+  calculateLineAmount,
   formatCurrencyCode,
   formatCurrencyValue,
   formatDisplayUom,
@@ -15,6 +16,12 @@ describe('myapp display utilities', () => {
     expect(formatCurrencyValue(12, 'CNY')).toBe('12.00 元');
     expect(formatCurrencyValue('12.5', 'USD')).toBe('12.50 USD');
     expect(formatCurrencyValue(null, 'CNY')).toBe('-');
+  });
+
+  it('calculates transaction line amounts defensively', () => {
+    expect(calculateLineAmount({ price: 12.5, qty: 4 })).toBe(50);
+    expect(calculateLineAmount({ price: null, qty: 4 })).toBe(0);
+    expect(calculateLineAmount({ price: 12.5, qty: null })).toBe(0);
   });
 
   it('formats stock uom codes with mobile-compatible labels', () => {

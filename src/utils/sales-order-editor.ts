@@ -175,6 +175,16 @@ export function recalculateSalesOrderLine(
   };
 }
 
+export function getSalesOrderLineMergeKey(line: SalesOrderEditorLine) {
+  return [
+    line.itemCode,
+    line.warehouse || '',
+    line.salesMode,
+    line.uom || '',
+    line.price ?? '',
+  ].join('::');
+}
+
 export function getOrderLinesTotal(lines: SalesOrderEditorLine[]) {
   return lines.reduce(
     (sum, line) => sum + recalculateSalesOrderLine(line).amount,

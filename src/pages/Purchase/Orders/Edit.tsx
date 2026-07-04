@@ -20,6 +20,7 @@ import {
   PurchaseOrderLinesTable,
   RemoteLinkSelect,
 } from '@/components';
+import type { ProductSelectLine } from '@/components/ProductSelect';
 import {
   getProductDetail,
   type ProductSummary,
@@ -34,6 +35,7 @@ import {
 import { formatCurrencyValue } from '@/utils/myapp-display';
 import {
   buildPurchaseOrderLineFromProduct,
+  getPurchaseOrderLineMergeKey,
   getPurchaseOrderLinesTotal,
   type PurchaseOrderEditorLine,
   recalculatePurchaseOrderLine,
@@ -164,15 +166,52 @@ const PurchaseOrderEditPage: React.FC = () => {
       product,
     });
     setLines((current) => {
-      const existing = current.find((line) => line.key === nextLine.key);
+      const nextMergeKey = getPurchaseOrderLineMergeKey(nextLine);
+      const lineToAdd = { ...nextLine, key: nextMergeKey };
+      const existing = current.find(
+        (line) => getPurchaseOrderLineMergeKey(line) === nextMergeKey,
+      );
       if (existing) {
         return current.map((line) =>
-          line.key === nextLine.key
+          getPurchaseOrderLineMergeKey(line) === nextMergeKey
             ? recalculatePurchaseOrderLine({ ...line, qty: line.qty + 1 })
             : line,
         );
       }
-      return [...current, nextLine];
+      return [...current, lineToAdd];
+    });
+  };
+
+  const addProductLines = (productLines: ProductSelectLine[]) => {
+    setLines((current) => {
+      const nextLines = [...current];
+      productLines.forEach((productLine) => {
+        const baseLine = buildPurchaseOrderLineFromProduct({
+          defaultWarehouse: productLine.warehouse || warehouse,
+          product: productLine.product,
+        });
+        const nextLine = recalculatePurchaseOrderLine({
+          ...baseLine,
+          price: productLine.price,
+          qty: productLine.qty,
+          uom: productLine.uom,
+          warehouse: productLine.warehouse,
+        });
+        const nextMergeKey = getPurchaseOrderLineMergeKey(nextLine);
+        const lineToAdd = { ...nextLine, key: nextMergeKey };
+        const existingIndex = nextLines.findIndex(
+          (line) => getPurchaseOrderLineMergeKey(line) === nextMergeKey,
+        );
+        if (existingIndex >= 0) {
+          nextLines[existingIndex] = recalculatePurchaseOrderLine({
+            ...nextLines[existingIndex],
+            qty: nextLines[existingIndex].qty + productLine.qty,
+          });
+        } else {
+          nextLines.push(lineToAdd);
+        }
+      });
+      return nextLines;
     });
   };
 
@@ -325,6 +364,9 @@ const PurchaseOrderEditPage: React.FC = () => {
             <ProductSelect
               company={company}
               itemContext="purchase"
+              selectedProductKeys={lines.map((line) => line.itemCode)}
+              selectedProductLines={lines}
+              onSelectLines={addProductLines}
               onSelectProduct={addProduct}
               placeholder="搜索采购商品"
               style={{ minWidth: 320 }}

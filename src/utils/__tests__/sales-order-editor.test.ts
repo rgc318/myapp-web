@@ -3,6 +3,7 @@ import {
   buildSalesOrderLineFromProduct,
   convertQtyToStockQty,
   getOrderLinesTotal,
+  getSalesOrderLineMergeKey,
   resolveUomDisplay,
 } from '../sales-order-editor';
 
@@ -77,5 +78,26 @@ describe('sales order editor utils', () => {
       }),
     ).toBe(24);
     expect(resolveUomDisplay('Box', product.allUomDisplays)).toBe('箱');
+  });
+
+  it('merges only identical sales business lines', () => {
+    const line = buildSalesOrderLineFromProduct({
+      defaultMode: 'wholesale',
+      defaultWarehouse: 'Stores - RD',
+      product,
+    });
+
+    expect(getSalesOrderLineMergeKey({ ...line, qty: 1 })).toBe(
+      getSalesOrderLineMergeKey({ ...line, qty: 5 }),
+    );
+    expect(getSalesOrderLineMergeKey({ ...line, uom: 'Nos' })).not.toBe(
+      getSalesOrderLineMergeKey(line),
+    );
+    expect(
+      getSalesOrderLineMergeKey({ ...line, warehouse: 'Other - RD' }),
+    ).not.toBe(getSalesOrderLineMergeKey(line));
+    expect(
+      getSalesOrderLineMergeKey({ ...line, salesMode: 'retail' }),
+    ).not.toBe(getSalesOrderLineMergeKey(line));
   });
 });

@@ -28,6 +28,7 @@ import {
   RemoteLinkSelect,
   SalesOrderLinesTable,
 } from '@/components';
+import type { ProductSelectLine } from '@/components/ProductSelect';
 import {
   getProductDetail,
   type ProductSummary,
@@ -45,6 +46,7 @@ import {
   buildSalesOrderLineFromProduct,
   getOrderLinesTotal,
   getSalesModeLabel,
+  getSalesOrderLineMergeKey,
   normalizeSalesMode,
   recalculateSalesOrderLine,
   type SalesMode,
@@ -225,15 +227,55 @@ const SalesOrderEditPage: React.FC = () => {
     });
     setDirty(true);
     setLines((current) => {
-      const existing = current.find((line) => line.key === nextLine.key);
+      const nextMergeKey = getSalesOrderLineMergeKey(nextLine);
+      const lineToAdd = { ...nextLine, key: nextMergeKey };
+      const existing = current.find(
+        (line) => getSalesOrderLineMergeKey(line) === nextMergeKey,
+      );
       if (existing) {
         return current.map((line) =>
-          line.key === nextLine.key
+          getSalesOrderLineMergeKey(line) === nextMergeKey
             ? recalculateSalesOrderLine({ ...line, qty: line.qty + 1 })
             : line,
         );
       }
-      return [...current, nextLine];
+      return [...current, lineToAdd];
+    });
+  };
+
+  const addProductLines = (productLines: ProductSelectLine[]) => {
+    setDirty(true);
+    setLines((current) => {
+      const nextLines = [...current];
+      productLines.forEach((productLine) => {
+        const baseLine = buildSalesOrderLineFromProduct({
+          defaultMode: productLine.salesMode ?? defaultSalesMode,
+          defaultWarehouse: productLine.warehouse || warehouse,
+          product: productLine.product,
+        });
+        const nextLine = recalculateSalesOrderLine({
+          ...baseLine,
+          price: productLine.price,
+          qty: productLine.qty,
+          salesMode: productLine.salesMode ?? defaultSalesMode,
+          uom: productLine.uom,
+          warehouse: productLine.warehouse,
+        });
+        const nextMergeKey = getSalesOrderLineMergeKey(nextLine);
+        const lineToAdd = { ...nextLine, key: nextMergeKey };
+        const existingIndex = nextLines.findIndex(
+          (line) => getSalesOrderLineMergeKey(line) === nextMergeKey,
+        );
+        if (existingIndex >= 0) {
+          nextLines[existingIndex] = recalculateSalesOrderLine({
+            ...nextLines[existingIndex],
+            qty: nextLines[existingIndex].qty + productLine.qty,
+          });
+        } else {
+          nextLines.push(lineToAdd);
+        }
+      });
+      return nextLines;
     });
   };
 
@@ -493,8 +535,12 @@ const SalesOrderEditPage: React.FC = () => {
           extra={
             <ProductSelect
               company={company}
+              defaultSalesMode={defaultSalesMode}
               itemContext="sales"
+              selectedProductKeys={lines.map((line) => line.itemCode)}
+              selectedProductLines={lines}
               warehouse={warehouse}
+              onSelectLines={addProductLines}
               onSelectProduct={addProduct}
               style={{ minWidth: 320 }}
             />

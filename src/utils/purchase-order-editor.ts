@@ -92,6 +92,15 @@ export function recalculatePurchaseOrderLine(
   };
 }
 
+export function getPurchaseOrderLineMergeKey(line: PurchaseOrderEditorLine) {
+  return [
+    line.itemCode,
+    line.warehouse || '',
+    line.uom || '',
+    line.price ?? '',
+  ].join('::');
+}
+
 export function getPurchaseOrderLinesTotal(lines: PurchaseOrderEditorLine[]) {
   return lines.reduce(
     (sum, line) => sum + recalculatePurchaseOrderLine(line).amount,

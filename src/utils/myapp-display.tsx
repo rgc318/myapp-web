@@ -44,6 +44,21 @@ export function formatCurrencyValue(
   }).format(amount)} ${getCurrencyDisplayUnit(currency)}`;
 }
 
+export function calculateLineAmount(options: {
+  price?: number | null;
+  qty?: number | null;
+}) {
+  const qty =
+    typeof options.qty === 'number' && Number.isFinite(options.qty)
+      ? options.qty
+      : 0;
+  const price =
+    typeof options.price === 'number' && Number.isFinite(options.price)
+      ? options.price
+      : 0;
+  return qty * price;
+}
+
 export function formatCurrencyCode(currency: string | null | undefined) {
   const unit = getCurrencyDisplayUnit(currency);
   return unit === '元' ? '人民币' : unit;
