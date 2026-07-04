@@ -36,6 +36,7 @@ import {
   getSalesOrderDetail,
   type SalesOrderDetail,
   type SalesOrderDetailItem,
+  salesOrderEditDisabledReason,
   updateSalesOrderItemsV2,
   updateSalesOrderV2,
 } from '@/services/myapp/sales';
@@ -190,6 +191,9 @@ const SalesOrderEditPage: React.FC = () => {
       if (!detail) {
         return null;
       }
+      if (salesOrderEditDisabledReason(detail)) {
+        return detail;
+      }
       const editableLines = await buildEditableLines(detail);
       form.setFieldsValue({
         company: detail.company,
@@ -316,6 +320,33 @@ const SalesOrderEditPage: React.FC = () => {
     );
   }
 
+  const editDisabledReason = salesOrderEditDisabledReason(data);
+  if (editDisabledReason) {
+    return (
+      <PageContainer title={`编辑销售订单 ${orderName}`}>
+        <Result
+          extra={
+            <Space>
+              <Button
+                onClick={() =>
+                  history.push(`/sales/orders/${encodeURIComponent(orderName)}`)
+                }
+              >
+                返回订单详情
+              </Button>
+              <Button onClick={() => history.push('/sales/orders')}>
+                返回列表
+              </Button>
+            </Space>
+          }
+          status="warning"
+          subTitle={editDisabledReason}
+          title="当前销售订单不能直接编辑"
+        />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer
       title={`编辑销售订单 ${orderName}`}
@@ -332,7 +363,7 @@ const SalesOrderEditPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="保存会先更新订单日期、交付日期、销售模式和收货信息，再替换商品明细；已发货或已开票订单可能被后端拒绝编辑。"
+          message="保存会先更新订单日期、交付日期、销售模式和收货信息，再替换商品明细；只有未进入发货、开票或收款链路的订单允许直接编辑。"
           showIcon
           type="info"
         />

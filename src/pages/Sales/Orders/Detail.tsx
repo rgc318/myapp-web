@@ -48,6 +48,7 @@ import {
   type SalesOrderDetail,
   type SalesOrderDetailItem,
   type SalesOrderTimelineEvent,
+  salesOrderEditDisabledReason,
   submitSalesOrderDelivery,
 } from '@/services/myapp/sales';
 import {
@@ -1362,6 +1363,7 @@ const SalesOrderDetailPage: React.FC = () => {
   const canQuickCancelDownstream = detail
     ? hasRollbackableDownstream(detail)
     : false;
+  const editDisabledReason = detail ? salesOrderEditDisabledReason(detail) : '';
   const returnInvoiceNames = timelineEvents
     .filter((event) => event.type === 'sales_return' && event.docname)
     .map((event) => event.docname);
@@ -1794,11 +1796,24 @@ const SalesOrderDetailPage: React.FC = () => {
                       variant="borderless"
                     >
                       <Space wrap>
-                        <Link
-                          to={`/sales/orders/${encodeURIComponent(detail.name)}/edit`}
-                        >
-                          <Button>编辑订单</Button>
-                        </Link>
+                        <Tooltip title={editDisabledReason}>
+                          <span>
+                            <Button
+                              disabled={Boolean(editDisabledReason)}
+                              onClick={() => {
+                                if (!editDisabledReason) {
+                                  history.push(
+                                    `/sales/orders/${encodeURIComponent(
+                                      detail.name,
+                                    )}/edit`,
+                                  );
+                                }
+                              }}
+                            >
+                              编辑订单
+                            </Button>
+                          </span>
+                        </Tooltip>
                         <Tooltip title={deliveryDisabledReason(detail)}>
                           <span>
                             <Button

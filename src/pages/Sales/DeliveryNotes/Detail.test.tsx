@@ -4,9 +4,9 @@ import React from 'react';
 import DeliveryNoteDetailPage from './Detail';
 
 jest.mock('@umijs/max', () => ({
-  Link: ({ children }: any) => {
+  Link: ({ children, to }: any) => {
     const React = jest.requireActual('react');
-    return React.createElement('a', null, children);
+    return React.createElement('a', { href: to }, children);
   },
   useParams: () => ({ name: 'MAT-DN-2026-00274' }),
   useRequest: (service: any) => {
@@ -125,6 +125,21 @@ describe('DeliveryNoteDetailPage', () => {
     await waitFor(() => {
       expect(cancelDeliveryNote).toHaveBeenCalledWith('MAT-DN-2026-00274');
     });
+  });
+
+  it('links back to the source sales order detail', async () => {
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(DeliveryNoteDetailPage),
+      ),
+    );
+
+    expect(await screen.findByText('Camera')).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: '返回销售订单' }).getAttribute('href'),
+    ).toBe('/sales/orders/SAL-ORD-2026-01204');
   });
 
   it('shows downstream invoice blocking reason when the delivery note cannot be cancelled', async () => {

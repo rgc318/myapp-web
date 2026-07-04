@@ -83,6 +83,7 @@ import {
   createSalesOrderInvoice,
   exportSalesOrders,
   getCustomerRefundContext,
+  getDeliveryNoteDetail,
   getSalesReturnSourceContext,
   getCustomerSalesContext,
   getSalesInvoiceDetail,
@@ -90,6 +91,7 @@ import {
   quickCancelSalesOrderV2,
   quickCreateSalesOrderV2,
   recordSalesOrderPayment,
+  salesOrderEditDisabledReason,
   searchSalesOrders,
   submitSalesOrderDelivery,
   submitSalesReturn,
@@ -796,6 +798,97 @@ describe('myapp domain services', () => {
 
     expect(detail?.paymentEntries).toHaveLength(1);
     expect(detail?.paymentEntries[0].paymentEntry).toBe('PE-0001');
+  });
+
+  it('normalizes delivery note shipping address display text', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: { can_cancel_delivery_note: true },
+        amounts: { delivery_amount_estimate: 1280 },
+        document_status: 'submitted',
+        fulfillment: { total_qty: 2 },
+        items: [],
+        meta: {
+          company: 'rgc (Demo)',
+          currency: 'CNY',
+          posting_date: '2026-07-04',
+          posting_time: '10:00:00',
+        },
+        references: { sales_orders: ['SO-0001'] },
+        shipping: {
+          contact_display: 'Alice',
+          contact_phone: '13800000000',
+          shipping_address_text:
+            '上海市浦东新区 A&amp;B 路&nbsp;88 号<br>5 楼<p>收货点&lt;东门&gt;</p>',
+        },
+      },
+    });
+
+    const detail = await getDeliveryNoteDetail('DN-0001');
+
+    expect(detail?.addressDisplay).toBe(
+      '上海市浦东新区 A&B 路 88 号\n5 楼\n收货点<东门>',
+    );
+    expect(detail?.salesOrders).toEqual(['SO-0001']);
+  });
+
+  it('blocks direct sales order editing after downstream documents or settlement', () => {
+    const baseDetail = {
+      canCancelOrder: true,
+      canCreateSalesInvoice: true,
+      canRecordPayment: true,
+      canSubmitDelivery: true,
+      cancelSalesOrderHint: '',
+      addressDisplay: '',
+      amount: 100,
+      company: 'rgc (Demo)',
+      completionStatus: 'open',
+      contactDisplay: '',
+      contactPhone: '',
+      currency: 'CNY',
+      customer: 'CUST-0001',
+      defaultSalesMode: 'wholesale' as const,
+      deliveryDate: '2026-07-04',
+      deliveryNotes: [],
+      deliveryOverdueDays: 0,
+      documentStatus: 'submitted',
+      fulfillmentStatus: 'pending',
+      isDeliveryOverdue: false,
+      isPaymentOverdue: false,
+      items: [],
+      modified: '2026-07-04 10:00:00',
+      name: 'SO-0001',
+      outstandingAmount: 100,
+      paidAmount: 0,
+      paymentOverdueDays: 0,
+      paymentStatus: 'unpaid',
+      receivableAmount: 100,
+      remarks: '',
+      salesInvoices: [],
+      timeline: [],
+      transactionDate: '2026-07-04',
+    };
+
+    expect(salesOrderEditDisabledReason(baseDetail)).toBe('');
+    expect(
+      salesOrderEditDisabledReason({
+        ...baseDetail,
+        deliveryNotes: ['DN-0001'],
+      }),
+    ).toContain('销售发货单');
+    expect(
+      salesOrderEditDisabledReason({
+        ...baseDetail,
+        salesInvoices: ['SI-0001'],
+      }),
+    ).toContain('销售发票');
+    expect(
+      salesOrderEditDisabledReason({
+        ...baseDetail,
+        completionStatus: 'completed',
+        paymentStatus: 'paid',
+      }),
+    ).toContain('已完成并结清');
   });
 
   it('maps product list media and totals', async () => {

@@ -64,6 +64,30 @@ jest.mock('@/services/myapp/sales', () => ({
   getSalesOrderDetail: jest.fn(),
   quickCancelSalesOrderV2: jest.fn(),
   recordSalesOrderPayment: jest.fn(),
+  salesOrderEditDisabledReason: jest.fn((detail: any) => {
+    if (!detail) {
+      return '未能加载销售订单，不能编辑';
+    }
+    if (detail.documentStatus === 'cancelled') {
+      return '订单已作废，不能编辑';
+    }
+    if (detail.documentStatus !== 'submitted') {
+      return '只有已提交且未进入下游流程的销售订单才能编辑';
+    }
+    if (detail.completionStatus === 'completed') {
+      return '订单已完成并结清，不能直接编辑；如需改错，请先按回退流程处理下游单据';
+    }
+    if (detail.paymentStatus === 'paid') {
+      return '订单已结清，不能直接编辑；如需改错，请先取消客户收款并回退下游单据';
+    }
+    if (detail.salesInvoices.length) {
+      return '订单已存在销售发票，不能直接编辑；请先作废销售发票后再回退修改';
+    }
+    if (detail.deliveryNotes.length) {
+      return '订单已存在销售发货单，不能直接编辑；请先作废发货单后再回退修改';
+    }
+    return '';
+  }),
   submitSalesOrderDelivery: jest.fn(),
 }));
 
@@ -199,6 +223,24 @@ describe('SalesOrderDetailPage', () => {
     expect(screen.queryByRole('button', { name: '退款核对' })).toBeNull();
     expect(screen.queryByText('退货发票')).toBeNull();
     expect(screen.queryByText('退款单')).toBeNull();
+  });
+
+  it('disables direct editing after invoices or settlement exist', async () => {
+    getSalesOrderDetail.mockResolvedValue({
+      ...baseSalesOrderDetail,
+      completionStatus: 'completed',
+      deliveryNotes: ['MAT-DN-2026-00274'],
+      paymentStatus: 'paid',
+      salesInvoices: ['ACC-SINV-2026-00695'],
+    });
+
+    render(
+      React.createElement(App, null, React.createElement(SalesOrderDetailPage)),
+    );
+
+    expect(await screen.findByText('ACC-SINV-2026-00695')).toBeTruthy();
+    const editButton = screen.getByRole('button', { name: '编辑订单' });
+    expect((editButton as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('confirms quick billing before creating delivery note and sales invoice', async () => {

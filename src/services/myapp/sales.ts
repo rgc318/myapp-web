@@ -103,6 +103,31 @@ export type SalesOrderDetail = SalesOrderSummary & {
   items: SalesOrderDetailItem[];
 };
 
+export function salesOrderEditDisabledReason(detail: SalesOrderDetail | null) {
+  if (!detail) {
+    return '未能加载销售订单，不能编辑';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能编辑';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交且未进入下游流程的销售订单才能编辑';
+  }
+  if (detail.completionStatus === 'completed') {
+    return '订单已完成并结清，不能直接编辑；如需改错，请先按回退流程处理下游单据';
+  }
+  if (detail.paymentStatus === 'paid') {
+    return '订单已结清，不能直接编辑；如需改错，请先取消客户收款并回退下游单据';
+  }
+  if (detail.salesInvoices.length) {
+    return '订单已存在销售发票，不能直接编辑；请先作废销售发票后再回退修改';
+  }
+  if (detail.deliveryNotes.length) {
+    return '订单已存在销售发货单，不能直接编辑；请先作废发货单后再回退修改';
+  }
+  return '';
+}
+
 export type SalesOrderTimelineEvent = {
   amount: number | null;
   date: string;
@@ -388,6 +413,42 @@ function toStringList(value: unknown) {
   return Array.isArray(value)
     ? value.map((item) => String(item ?? '')).filter(Boolean)
     : [];
+}
+
+function normalizeDocumentText(value: unknown) {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<(p|div)\b[^>]*>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<\/div\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (match, entity) => {
+      const normalized = String(entity).toLowerCase();
+      if (normalized.startsWith('#x')) {
+        return String.fromCodePoint(Number.parseInt(normalized.slice(2), 16));
+      }
+      if (normalized.startsWith('#')) {
+        return String.fromCodePoint(Number.parseInt(normalized.slice(1), 10));
+      }
+      const namedEntities: Record<string, string> = {
+        amp: '&',
+        apos: "'",
+        gt: '>',
+        lt: '<',
+        nbsp: ' ',
+        quot: '"',
+      };
+      return namedEntities[normalized] ?? match;
+    })
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function normalizeOptionalText(value: unknown) {
@@ -784,7 +845,7 @@ export async function getSalesOrderDetail(
       shipping.contact_display ?? shipping.contact_person ?? '',
     ),
     contactPhone: String(shipping.contact_phone ?? ''),
-    addressDisplay: String(shipping.shipping_address_text ?? ''),
+    addressDisplay: normalizeDocumentText(shipping.shipping_address_text),
     paidAmount: toNumber(amounts.paid_amount),
     receivableAmount: toNumber(amounts.receivable_amount),
     canCancelOrder: Boolean(actions.can_cancel_sales_order),
@@ -899,7 +960,7 @@ export async function getDeliveryNoteDetail(
   const references = data.references ?? {};
 
   return {
-    addressDisplay: String(shipping.shipping_address_text ?? ''),
+    addressDisplay: normalizeDocumentText(shipping.shipping_address_text),
     canCancelDeliveryNote: Boolean(actions.can_cancel_delivery_note),
     cancelDeliveryNoteHint: String(actions.cancel_delivery_note_hint ?? ''),
     company: String(meta.company ?? ''),
@@ -942,7 +1003,7 @@ export async function getSalesInvoiceDetail(
   const references = data.references ?? {};
 
   return {
-    addressDisplay: String(shipping.shipping_address_text ?? ''),
+    addressDisplay: normalizeDocumentText(shipping.shipping_address_text),
     canCancelSalesInvoice: Boolean(actions.can_cancel_sales_invoice),
     canRecordPayment: Boolean(actions.can_record_payment),
     cancelSalesInvoiceHint: String(actions.cancel_sales_invoice_hint ?? ''),
