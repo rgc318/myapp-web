@@ -426,7 +426,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
         title={invoiceName || '销售发票详情'}
         extra={[
           <Button key="back">
-            <Link to="/sales/orders">返回销售订单</Link>
+            <Link
+              to={
+                sourceOrder
+                  ? `/sales/orders/${encodeURIComponent(sourceOrder)}`
+                  : '/sales/orders'
+              }
+            >
+              返回销售订单
+            </Link>
           </Button>,
           <Button key="refresh" loading={loading} onClick={refresh}>
             刷新
