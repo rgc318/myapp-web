@@ -1441,16 +1441,20 @@ const SalesOrderDetailPage: React.FC = () => {
           label: '收款单',
           children: timelineDocLinks(timelineEvents, 'payment_entry'),
         },
-        {
-          key: 'salesReturns',
-          label: '退货发票',
-          children: timelineDocLinks(timelineEvents, 'sales_return'),
-        },
-        {
-          key: 'customerRefunds',
-          label: '退款单',
-          children: timelineDocLinks(timelineEvents, 'customer_refund'),
-        },
+        ...(SALES_RETURN_REFUND_ENTRY_ENABLED
+          ? [
+              {
+                key: 'salesReturns',
+                label: '退货发票',
+                children: timelineDocLinks(timelineEvents, 'sales_return'),
+              },
+              {
+                key: 'customerRefunds',
+                label: '退款单',
+                children: timelineDocLinks(timelineEvents, 'customer_refund'),
+              },
+            ]
+          : []),
       ]
     : [];
   const progress = detail ? salesOrderProgress(detail) : null;

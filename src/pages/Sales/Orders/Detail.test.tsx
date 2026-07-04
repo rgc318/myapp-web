@@ -176,6 +176,17 @@ describe('SalesOrderDetailPage', () => {
           status: 'submitted',
           type: 'sales_return',
         },
+        {
+          amount: -100,
+          date: '2026-07-03',
+          description: '客户退款',
+          docname: 'ACC-PAY-RET-2026-00001',
+          doctype: 'Payment Entry',
+          modeOfPayment: 'Bank',
+          referenceNo: '',
+          status: 'submitted',
+          type: 'customer_refund',
+        },
       ],
     });
 
@@ -186,6 +197,8 @@ describe('SalesOrderDetailPage', () => {
     expect(await screen.findByText('ACC-SINV-2026-00695')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '发起退货' })).toBeNull();
     expect(screen.queryByRole('button', { name: '退款核对' })).toBeNull();
+    expect(screen.queryByText('退货发票')).toBeNull();
+    expect(screen.queryByText('退款单')).toBeNull();
   });
 
   it('confirms quick billing before creating delivery note and sales invoice', async () => {
