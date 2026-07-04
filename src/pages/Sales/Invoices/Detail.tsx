@@ -235,6 +235,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
   const [paymentToCancel, setPaymentToCancel] =
     useState<SalesInvoicePaymentEntry | null>(null);
   const [voidInvoiceModalOpen, setVoidInvoiceModalOpen] = useState(false);
+  const [voidPaymentConfirmOpen, setVoidPaymentConfirmOpen] = useState(false);
   const [cancelledPaymentEntries, setCancelledPaymentEntries] = useState<
     Set<string>
   >(new Set());
@@ -292,44 +293,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
 
     const paymentEntryToCancel = activePaymentEntries[0];
     if (paymentEntryToCancel && !options?.cancelSinglePayment) {
-      Modal.confirm({
-        cancelText: '取消',
-        content: (
-          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-            <Alert
-              description="系统会先作废这笔客户收款凭证，再继续作废销售发票。这是纠错 / 回退动作，不是正式客户退款；原收款单不会继续保留为有效凭证。"
-              showIcon
-              title="请确认是否同步取消客户收款"
-              type="warning"
-            />
-            <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="收款单">
-                <Link to={paymentEntryPath(paymentEntryToCancel.paymentEntry)}>
-                  {paymentEntryToCancel.paymentEntry}
-                </Link>
-              </Descriptions.Item>
-              <Descriptions.Item label="收款金额">
-                {formatCurrencyValue(
-                  paymentEntryToCancel.allocatedAmount ??
-                    paymentEntryToCancel.actualPaidAmount,
-                  data.currency,
-                )}
-              </Descriptions.Item>
-              <Descriptions.Item label="付款方式">
-                {paymentEntryToCancel.modeOfPayment || '-'}
-              </Descriptions.Item>
-              <Descriptions.Item label="收款日期">
-                {paymentEntryToCancel.postingDate || '-'}
-              </Descriptions.Item>
-            </Descriptions>
-          </Space>
-        ),
-        okButtonProps: { danger: true },
-        okText: '取消收款并作废发票',
-        onOk: () => submitVoidInvoice({ cancelSinglePayment: true }),
-        title: '同步取消客户收款并作废发票？',
-        width: 620,
-      });
+      setVoidPaymentConfirmOpen(true);
       return;
     }
 
@@ -349,6 +313,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
           ? `已取消客户收款 ${paymentEntryToCancel.paymentEntry}，并作废销售发票 ${invoiceName}`
           : `销售发票 ${invoiceName} 已作废`,
       );
+      setVoidPaymentConfirmOpen(false);
       setVoidInvoiceModalOpen(false);
       refresh();
     } catch (caught) {
@@ -836,7 +801,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                                   size="small"
                                 >
                                   {data.latestPaymentEntry
-                                    ? '作废收款并作废发票'
+                                    ? '取消收款并作废发票'
                                     : '作废销售发票'}
                                 </Button>
                               ) : null}
@@ -879,10 +844,13 @@ const SalesInvoiceDetailPage: React.FC = () => {
           }}
           okText={
             activePaymentEntries.length === 1
-              ? '作废收款并作废发票'
+              ? '取消收款并作废发票'
               : '确认作废发票'
           }
-          onCancel={() => setVoidInvoiceModalOpen(false)}
+          onCancel={() => {
+            setVoidPaymentConfirmOpen(false);
+            setVoidInvoiceModalOpen(false);
+          }}
           onOk={() => submitVoidInvoice()}
           open={voidInvoiceModalOpen}
           title={`作废销售发票 ${invoiceName}？`}
@@ -941,6 +909,52 @@ const SalesInvoiceDetailPage: React.FC = () => {
               </Descriptions.Item>
               <Descriptions.Item label="发货单">
                 {docLinks(data.deliveryNotes, '/sales/delivery-notes')}
+              </Descriptions.Item>
+            </Descriptions>
+          </Space>
+        </Modal>
+      ) : null}
+      {data && activePaymentEntries.length === 1 ? (
+        <Modal
+          cancelText="取消"
+          centered
+          confirmLoading={cancelLoading}
+          destroyOnHidden
+          okButtonProps={{ danger: true }}
+          okText="取消收款并作废发票"
+          onCancel={() => setVoidPaymentConfirmOpen(false)}
+          onOk={() => submitVoidInvoice({ cancelSinglePayment: true })}
+          open={voidPaymentConfirmOpen}
+          title="同步取消客户收款并作废发票？"
+          width={620}
+        >
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <Alert
+              description="系统会先取消这笔客户收款凭证，再继续作废销售发票。这是纠错 / 回退动作，不是正式客户退款；原收款单不会继续保留为有效凭证。"
+              showIcon
+              title="请确认是否同步取消客户收款"
+              type="warning"
+            />
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="收款单">
+                <Link
+                  to={paymentEntryPath(activePaymentEntries[0].paymentEntry)}
+                >
+                  {activePaymentEntries[0].paymentEntry}
+                </Link>
+              </Descriptions.Item>
+              <Descriptions.Item label="收款金额">
+                {formatCurrencyValue(
+                  activePaymentEntries[0].allocatedAmount ??
+                    activePaymentEntries[0].actualPaidAmount,
+                  data.currency,
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="付款方式">
+                {activePaymentEntries[0].modeOfPayment || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="收款日期">
+                {activePaymentEntries[0].postingDate || '-'}
               </Descriptions.Item>
             </Descriptions>
           </Space>
