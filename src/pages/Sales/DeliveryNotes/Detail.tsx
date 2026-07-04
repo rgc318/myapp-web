@@ -6,7 +6,16 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Modal, message, Skeleton, Space } from 'antd';
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Empty,
+  Modal,
+  message,
+  Skeleton,
+  Space,
+} from 'antd';
 import React, { useState } from 'react';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
@@ -88,6 +97,7 @@ const itemColumns = [
 const DeliveryNoteDetailPage: React.FC = () => {
   const params = useParams();
   const deliveryNoteName = decodeURIComponent(String(params.name ?? ''));
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const { data, error, loading, refresh } = useRequest(
     () => getDeliveryNoteDetail(deliveryNoteName),
@@ -99,26 +109,24 @@ const DeliveryNoteDetailPage: React.FC = () => {
   const cancelled = data ? isCancelled(data.documentStatus) : false;
   const sourceOrder = data?.salesOrders[0] ?? '';
   const linkedInvoice = data?.salesInvoices[0] ?? '';
+  const canCancelDeliveryNote = Boolean(data?.canCancelDeliveryNote);
 
-  const confirmCancel = () => {
-    Modal.confirm({
-      cancelText: '取消',
-      okText: '确认取消',
-      okType: 'danger',
-      onOk: async () => {
-        setCancelLoading(true);
-        try {
-          await cancelDeliveryNote(deliveryNoteName);
-          refresh();
-        } catch (caught) {
-          message.error(caught instanceof Error ? caught.message : '操作失败');
-          throw caught;
-        } finally {
-          setCancelLoading(false);
-        }
-      },
-      title: '取消销售发货单？',
-    });
+  const showCancelModal = () => {
+    setCancelModalOpen(true);
+  };
+
+  const submitCancel = async () => {
+    setCancelLoading(true);
+    try {
+      await cancelDeliveryNote(deliveryNoteName);
+      setCancelModalOpen(false);
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '操作失败');
+      throw caught;
+    } finally {
+      setCancelLoading(false);
+    }
   };
 
   return (
@@ -163,12 +171,12 @@ const DeliveryNoteDetailPage: React.FC = () => {
         ) : null,
         <Button
           danger
-          disabled={!data?.canCancelDeliveryNote}
+          disabled={!canCancelDeliveryNote}
           key="cancel"
           loading={cancelLoading}
-          onClick={confirmCancel}
+          onClick={showCancelModal}
         >
-          取消发货单
+          作废发货单
         </Button>,
       ]}
     >
@@ -361,7 +369,7 @@ const DeliveryNoteDetailPage: React.FC = () => {
                             <Button
                               danger
                               loading={cancelLoading}
-                              onClick={confirmCancel}
+                              onClick={showCancelModal}
                               size="small"
                             >
                               作废发货单
@@ -384,6 +392,58 @@ const DeliveryNoteDetailPage: React.FC = () => {
           </>
         ) : null}
       </Space>
+
+      <Modal
+        cancelText="先不作废"
+        confirmLoading={cancelLoading}
+        okButtonProps={{ danger: true }}
+        okText="确认作废发货单"
+        onCancel={() => setCancelModalOpen(false)}
+        onOk={submitCancel}
+        open={cancelModalOpen}
+        title={`作废发货单 ${deliveryNoteName}？`}
+      >
+        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+          <Alert
+            description={
+              data?.cancelDeliveryNoteHint ||
+              '系统会作废这张 Delivery Note，并由 ERPNext 回退库存扣减和来源销售订单的履约数量。作废后如需重新发货，请回到来源销售订单继续处理。'
+            }
+            title="这是库存和履约回退操作"
+            showIcon
+            type="warning"
+          />
+          {data ? (
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="发货单">
+                {deliveryNoteName}
+              </Descriptions.Item>
+              <Descriptions.Item label="销售订单">
+                {data.salesOrders.length ? data.salesOrders.join('、') : '无'}
+              </Descriptions.Item>
+              <Descriptions.Item label="销售发票">
+                {data.salesInvoices.length
+                  ? data.salesInvoices.join('、')
+                  : '无'}
+              </Descriptions.Item>
+              <Descriptions.Item label="发货数量">
+                {data.totalQty ?? 0}
+              </Descriptions.Item>
+              <Descriptions.Item label="发货金额">
+                {formatCurrencyValue(data.grandTotal, data.currency)}
+              </Descriptions.Item>
+            </Descriptions>
+          ) : null}
+          {data?.salesInvoices.length ? (
+            <Alert
+              description="当前发货单已关联销售发票时，后端会拒绝直接作废发货单。请先进入销售发票详情作废下游发票，再回到这里作废发货单。"
+              title="请先处理下游销售发票"
+              showIcon
+              type="error"
+            />
+          ) : null}
+        </Space>
+      </Modal>
     </PageContainer>
   );
 };
