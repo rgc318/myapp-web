@@ -54,6 +54,10 @@ function isCancelled(status: string) {
   return status === 'cancelled' || status === '已作废';
 }
 
+function getErrorMessage(error: unknown, fallback = '操作失败') {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function paymentEntryPath(paymentEntry: string) {
   return `/payments/${encodeURIComponent(paymentEntry)}`;
 }
@@ -274,24 +278,81 @@ const SalesInvoiceDetailPage: React.FC = () => {
     setVoidInvoiceModalOpen(true);
   };
 
-  const submitVoidInvoice = async () => {
+  const submitVoidInvoice = async (options?: {
+    cancelSinglePayment?: boolean;
+  }) => {
     if (!data) {
       return;
     }
 
-    if (activePaymentEntries.length) {
-      message.warning('请先取消客户收款，再作废销售发票');
+    if (activePaymentEntries.length > 1) {
+      message.warning('请先逐笔取消客户收款，再作废销售发票');
+      return;
+    }
+
+    const paymentEntryToCancel = activePaymentEntries[0];
+    if (paymentEntryToCancel && !options?.cancelSinglePayment) {
+      Modal.confirm({
+        cancelText: '取消',
+        content: (
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <Alert
+              description="系统会先作废这笔客户收款凭证，再继续作废销售发票。这是纠错 / 回退动作，不是正式客户退款；原收款单不会继续保留为有效凭证。"
+              showIcon
+              title="请确认是否同步取消客户收款"
+              type="warning"
+            />
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="收款单">
+                <Link to={paymentEntryPath(paymentEntryToCancel.paymentEntry)}>
+                  {paymentEntryToCancel.paymentEntry}
+                </Link>
+              </Descriptions.Item>
+              <Descriptions.Item label="收款金额">
+                {formatCurrencyValue(
+                  paymentEntryToCancel.allocatedAmount ??
+                    paymentEntryToCancel.actualPaidAmount,
+                  data.currency,
+                )}
+              </Descriptions.Item>
+              <Descriptions.Item label="付款方式">
+                {paymentEntryToCancel.modeOfPayment || '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="收款日期">
+                {paymentEntryToCancel.postingDate || '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Space>
+        ),
+        okButtonProps: { danger: true },
+        okText: '取消收款并作废发票',
+        onOk: () => submitVoidInvoice({ cancelSinglePayment: true }),
+        title: '同步取消客户收款并作废发票？',
+        width: 620,
+      });
       return;
     }
 
     setCancelLoading(true);
     try {
+      if (paymentEntryToCancel) {
+        await cancelSalesPaymentEntry(paymentEntryToCancel.paymentEntry);
+        setCancelledPaymentEntries((current) => {
+          const next = new Set(current);
+          next.add(paymentEntryToCancel.paymentEntry);
+          return next;
+        });
+      }
       await cancelSalesInvoice(invoiceName);
-      message.success(`销售发票 ${invoiceName} 已作废`);
+      message.success(
+        paymentEntryToCancel
+          ? `已取消客户收款 ${paymentEntryToCancel.paymentEntry}，并作废销售发票 ${invoiceName}`
+          : `销售发票 ${invoiceName} 已作废`,
+      );
       setVoidInvoiceModalOpen(false);
       refresh();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
+      message.error(getErrorMessage(caught));
       throw caught;
     } finally {
       setCancelLoading(false);
@@ -814,11 +875,15 @@ const SalesInvoiceDetailPage: React.FC = () => {
           destroyOnHidden
           okButtonProps={{
             danger: true,
-            disabled: Boolean(activePaymentEntries.length),
+            disabled: activePaymentEntries.length > 1,
           }}
-          okText="确认作废发票"
+          okText={
+            activePaymentEntries.length === 1
+              ? '作废收款并作废发票'
+              : '确认作废发票'
+          }
           onCancel={() => setVoidInvoiceModalOpen(false)}
-          onOk={submitVoidInvoice}
+          onOk={() => submitVoidInvoice()}
           open={voidInvoiceModalOpen}
           title={`作废销售发票 ${invoiceName}？`}
           width={820}
@@ -829,7 +894,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                 description={
                   activePaymentEntries.length > 1
                     ? '当前发票存在多笔客户收款。请先在下方逐笔取消客户收款，全部取消后再作废销售发票。'
-                    : '当前发票存在一笔客户收款。请先取消这笔客户收款，再作废销售发票；这不是客户退款流程。'
+                    : '当前发票存在一笔客户收款。你可以先取消这笔收款后作废发票，也可以直接在二次确认后由系统同步取消收款并作废发票；这不是客户退款流程。'
                 }
                 title={
                   activePaymentEntries.length > 1
