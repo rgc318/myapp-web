@@ -1040,6 +1040,34 @@ describe('myapp domain services', () => {
     });
   });
 
+  it('keeps empty product search key for transaction picker auto load', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        items: [],
+        meta: { total: 0 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await searchProducts({
+      company: 'rgc (Demo)',
+      itemContext: 'sales',
+      searchKey: '',
+      warehouse: 'Stores - RD',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'search_product_v2',
+      expect.objectContaining({
+        company: 'rgc (Demo)',
+        item_context: 'sales',
+        search_key: '',
+        warehouse: 'Stores - RD',
+      }),
+    );
+  });
+
   it('maps product detail barcodes', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: {

@@ -794,7 +794,7 @@ export async function listProducts(options: ProductListOptions = {}) {
 export async function searchProducts(options: ProductListOptions = {}) {
   const result = await callGatewayMethod<unknown>(
     'search_product_v2',
-    compactPayload({
+    definedPayload({
       company: toOptionalText(options.company),
       brand: toOptionalText(options.brand),
       disabled: options.disabled ?? 0,
@@ -810,7 +810,8 @@ export async function searchProducts(options: ProductListOptions = {}) {
         'description',
         'specification',
       ],
-      search_key: toOptionalText(options.searchKey),
+      search_key:
+        typeof options.searchKey === 'string' ? options.searchKey.trim() : '',
       sort_by: 'relevance',
       sort_order: 'asc',
       start: options.start ?? 0,

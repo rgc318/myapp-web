@@ -660,6 +660,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 使用 `RemoteLinkSelect` 选择客户、公司和仓库，客户变化后调用 `get_customer_sales_context` 自动带出默认公司、仓库、联系人和地址。
 - 使用 `ProductSelect itemContext="sales"` 搜索可销售商品；选择器应展示可判断的商品、库存、仓库库存、单位和销售参考价，商品行使用 `sales-order-editor.ts` 自动带出批发 / 零售默认单位、默认价格、可选单位、库存单位换算和金额合计。
 - 销售和采购订单选品统一使用增强版 `ProductSelect`，不要在页面内各自实现商品弹窗。订单选品应使用右侧交易选品 Drawer，打开后自动加载商品列表，加入商品后保持面板打开并让订单明细即时反馈；库存转仓、盘点等轻量单商品场景继续使用弹窗式商品选择。
+- 交易选品搜索区应提供“库存仓库”筛选，默认使用订单当前仓库，可清空查看全部仓库。该筛选只影响库存查看、库存过滤和候选范围，不决定最终明细行入库 / 出库仓；最终仓库仍以行内默认值或“调整”抽屉为准。库存范围筛选使用下拉项“全部商品 / 仅有库存”，不要使用搜索表单内难点击的开关控件。
 - 订单选品列表必须固定商品列和右侧操作列，使用 Drawer 底部固定操作栏承载批量加入动作。默认行展示系统带入的单位、仓库、价格、销售模式和数量摘要，特殊修改通过“调整”抽屉完成，避免把所有字段都暴露成必须手动填写的表格输入。
 - 选品弹窗默认表格应优先可扫读，不应把单位、仓库、价格、模式和数量全部做成可编辑列堆在横向表格里。默认行展示“默认选品参数”摘要；用户需要改单位、仓库、价格、模式或数量时，通过“调整”打开侧边抽屉修改。
 - `ProductSelect` 在销售 / 采购订单中应通过结构化 `onSelectLines` 传递业务行，不再只传商品本体；销售合并维度为商品、仓库、销售模式、单位、单价，采购合并维度为商品、仓库、单位、单价。完全一致的业务行合并数量，任一维度不同允许分行。
@@ -982,6 +983,7 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 
 - `myapp.api.gateway.search_product_v2`
   - Web 订单选品必须显式传 `item_context`：销售订单为 `sales`，采购订单为 `purchase`，库存查询为 `inventory`，通用检索为 `any`。
+  - `search_key` 后端默认空字符串；Web `searchProducts` 仍应显式传 `search_key: ''`，避免旧后端或网关 wrapper 出现必填参数缺失。交易选品空关键词自动加载可参考 mobile 策略优先使用 `list_products_v2` 载入候选，再按 `item_context` 在前端兜底过滤。
   - Web 商品选择器可传 `item_group`、`brand` 和 `in_stock_only` 缩小候选范围；分类和品牌通过 `search_link_options_v1` 查询 `Item Group` / `Brand`。
   - 返回值应继续映射到 `ProductSummary`，供 `ProductSelect`、订单行编辑器和库存页面复用。
 - `myapp.api.gateway.list_products_v2`

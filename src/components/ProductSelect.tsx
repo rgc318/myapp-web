@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  listProducts,
   type ProductSummary,
   searchProducts,
 } from '@/services/myapp/master-data';
@@ -168,6 +169,19 @@ function warehouseOptions(record: ProductSummary, defaultWarehouse?: string) {
       (entry) => entry.warehouse,
     ),
   ]).map((value) => ({ label: value, value }));
+}
+
+function productMatchesContext(
+  record: ProductSummary,
+  itemContext: ProductContext,
+) {
+  if (itemContext === 'sales') {
+    return record.isSalesItem !== false;
+  }
+  if (itemContext === 'purchase') {
+    return record.isPurchaseItem !== false;
+  }
+  return true;
 }
 
 function buildLineKey(options: {
@@ -717,9 +731,28 @@ export function ProductSelect({
       {
         dataIndex: 'inStockOnly',
         hideInTable: true,
-        title: '仅有库存',
+        initialValue: 'all',
+        title: '库存范围',
+        valueEnum: {
+          all: { text: '全部商品' },
+          in_stock: { text: '仅有库存' },
+        },
+        valueType: 'select',
+      },
+      {
+        dataIndex: 'warehouseFilter',
+        hideInTable: true,
+        initialValue: warehouse,
+        title: '库存仓库',
         formItemRender: (_, { onChange, value }) => (
-          <Switch checked={Boolean(value)} onChange={onChange} />
+          <RemoteLinkSelect
+            doctype="Warehouse"
+            extraFields={['company']}
+            filters={{ company }}
+            onChange={onChange}
+            placeholder="全部仓库"
+            value={value}
+          />
         ),
       },
       {
@@ -1176,7 +1209,11 @@ export function ProductSelect({
             const searchKey = String(params.searchKey ?? '').trim();
             const itemGroup = String(params.itemGroup ?? '').trim();
             const brand = String(params.brand ?? '').trim();
-            const inStockOnly = Boolean(params.inStockOnly);
+            const inStockOnly =
+              params.inStockOnly === true ||
+              String(params.inStockOnly ?? '') === 'in_stock';
+            const warehouseFilter =
+              String(params.warehouseFilter ?? '').trim() || warehouse;
             if (
               !enableTransactionPicker &&
               !searchKey &&
@@ -1189,16 +1226,37 @@ export function ProductSelect({
                 total: 0,
               };
             }
+            if (enableTransactionPicker && !searchKey && !itemGroup && !brand) {
+              const result = await listProducts({
+                brand,
+                company: warehouseFilter ? undefined : company,
+                disabled: 0,
+                inStockOnly,
+                itemGroup,
+                limit: params.pageSize,
+                searchKey: '',
+                start: ((params.current ?? 1) - 1) * (params.pageSize ?? 10),
+                warehouse: warehouseFilter,
+              });
+              const filteredItems = result.items.filter((record) =>
+                productMatchesContext(record, itemContext),
+              );
+              return {
+                data: filteredItems,
+                success: true,
+                total: filteredItems.length,
+              };
+            }
             const result = await searchProducts({
               brand,
-              company,
+              company: warehouseFilter ? undefined : company,
               inStockOnly,
               itemGroup,
               itemContext,
               limit: params.pageSize,
               searchKey,
               start: ((params.current ?? 1) - 1) * (params.pageSize ?? 10),
-              warehouse,
+              warehouse: warehouseFilter,
             });
             return {
               data: result.items,
@@ -1209,6 +1267,8 @@ export function ProductSelect({
           rowKey="itemCode"
           scroll={{ x: enableTransactionPicker ? 1180 : 1120, y: '55vh' }}
           search={{
+            collapseRender: false,
+            defaultCollapsed: false,
             labelWidth: 72,
           }}
           size="small"
