@@ -1,12 +1,18 @@
-import { SearchOutlined } from '@ant-design/icons';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
+import type {
+  ActionType,
+  ProColumns,
+  ProFormInstance,
+} from '@ant-design/pro-components';
 import { ProTable } from '@ant-design/pro-components';
 import {
   Badge,
   Button,
   Divider,
   Drawer,
+  Form,
   Image,
+  Input,
   InputNumber,
   Modal,
   message,
@@ -20,6 +26,7 @@ import {
 } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  createProductAndStock,
   listProducts,
   type ProductSummary,
   searchProducts,
@@ -28,15 +35,30 @@ import {
   calculateLineAmount,
   formatCurrencyValue,
 } from '@/utils/myapp-display';
+import { getProductPurchaseDefaultPrice } from '@/utils/purchase-order-editor';
 import {
   convertQtyToStockQty,
   formatQty,
+  getProductAvailableUoms,
+  getProductModeDefaultPrice,
+  getProductModeDefaultUom,
   resolveUomDisplay,
 } from '@/utils/sales-order-editor';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
+import { UomSelect } from './UomSelect';
 
 type ProductContext = 'sales' | 'purchase' | 'inventory' | 'any';
 type ProductSelectSalesMode = 'wholesale' | 'retail';
+
+type QuickCreateProductValues = {
+  defaultWarehouse?: string;
+  description?: string;
+  itemName: string;
+  nickname?: string;
+  openingQty?: number | null;
+  openingUom?: string;
+  standardRate?: number | null;
+};
 
 export type ProductSelectLine = {
   key: string;
@@ -65,7 +87,19 @@ export type SelectedProductLineSummary = {
 };
 
 function productLabel(record: ProductSummary) {
-  return record.nickname?.trim() || record.itemName || record.itemCode;
+  return record.itemName || record.itemCode;
+}
+
+function productNicknameLabel(record: ProductSummary) {
+  const nickname = record.nickname?.trim();
+  if (
+    !nickname ||
+    nickname === record.itemName ||
+    nickname === record.description?.trim()
+  ) {
+    return null;
+  }
+  return nickname;
 }
 
 function stockLabel(record: ProductSummary, warehouse?: string) {
@@ -107,56 +141,6 @@ function uniqueText(values: (string | null | undefined)[]) {
         .map((value) => (typeof value === 'string' ? value.trim() : ''))
         .filter(Boolean),
     ),
-  );
-}
-
-function availableUoms(record: ProductSummary) {
-  return uniqueText([
-    ...(record.allUoms ?? []),
-    record.wholesaleDefaultUom,
-    record.retailDefaultUom,
-    record.uom,
-    record.stockUom,
-  ]);
-}
-
-function salesDefaultUom(record: ProductSummary, mode: ProductSelectSalesMode) {
-  const profileUom =
-    record.salesProfiles.find((profile) => profile.modeCode === mode)
-      ?.defaultUom ?? null;
-  const directUom =
-    mode === 'retail' ? record.retailDefaultUom : record.wholesaleDefaultUom;
-  return uniqueText([
-    profileUom,
-    directUom,
-    record.uom,
-    record.stockUom,
-    ...record.allUoms,
-  ])[0];
-}
-
-function salesDefaultPrice(
-  record: ProductSummary,
-  mode: ProductSelectSalesMode,
-) {
-  const summary = record.priceSummary;
-  return (
-    (mode === 'retail' ? summary?.retailRate : summary?.wholesaleRate) ??
-    summary?.currentRate ??
-    record.price ??
-    summary?.standardSellingRate ??
-    null
-  );
-}
-
-function purchaseDefaultPrice(record: ProductSummary) {
-  const summary = record.priceSummary;
-  return (
-    summary?.standardBuyingRate ??
-    summary?.valuationRate ??
-    summary?.currentRate ??
-    record.price ??
-    null
   );
 }
 
@@ -287,40 +271,8 @@ function selectedLineAmount(line: SelectedProductLineSummary) {
   return calculateLineAmount({ price: line.price, qty: line.qty });
 }
 
-function draftLineQtyLabel(line: ProductSelectLine) {
-  const uomDisplay = resolveUomDisplay(
-    line.uom,
-    line.product.allUomDisplays,
-    line.product.uomDisplay,
-  );
-  return `${formatQty(line.qty)} ${uomDisplay || '未设置单位'}`;
-}
-
-function draftLineStockQtyLabel(line: ProductSelectLine) {
-  const stockQty = convertQtyToStockQty({
-    qty: line.qty,
-    stockUom: line.product.stockUom,
-    uom: line.uom,
-    uomConversions: line.product.uomConversions,
-  });
-  const stockUomDisplay = resolveUomDisplay(
-    line.product.stockUom,
-    line.product.allUomDisplays,
-    line.product.stockUomDisplay,
-  );
-  const uomDisplay = resolveUomDisplay(
-    line.uom,
-    line.product.allUomDisplays,
-    line.product.uomDisplay,
-  );
-  if (!stockUomDisplay || stockUomDisplay === uomDisplay) {
-    return '';
-  }
-  return `库存单位约 ${formatQty(stockQty)} ${stockUomDisplay}`;
-}
-
-function draftLineAmount(line: ProductSelectLine) {
-  return calculateLineAmount({ price: line.price, qty: line.qty });
+function selectedLineQty(line: SelectedProductLineSummary) {
+  return Number.isFinite(line.qty) ? Number(line.qty) : 0;
 }
 
 export function ProductSelect({
@@ -349,9 +301,13 @@ export function ProductSelect({
   onSelectProducts?: (products: ProductSummary[]) => void;
 }) {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const formRef = useRef<ProFormInstance | undefined>(undefined);
+  const [quickCreateForm] = Form.useForm<QuickCreateProductValues>();
   const [open, setOpen] = useState(false);
   const [adjustingProduct, setAdjustingProduct] =
     useState<ProductSummary | null>(null);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [creatingProduct, setCreatingProduct] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [keepOpen, setKeepOpen] = useState(false);
   const [selectedMap, setSelectedMap] = useState<
@@ -368,9 +324,10 @@ export function ProductSelect({
   const [rowWarehouseMap, setRowWarehouseMap] = useState<
     Record<string, string>
   >({});
-  const enableBatch = itemContext !== 'inventory';
+  const [activeWarehouseFilter, setActiveWarehouseFilter] = useState('');
   const enableTransactionPicker =
     itemContext === 'sales' || itemContext === 'purchase';
+  const enableBatch = itemContext !== 'inventory' && !enableTransactionPicker;
   const confirmText =
     itemContext === 'inventory'
       ? '使用商品'
@@ -420,6 +377,14 @@ export function ProductSelect({
     (sum, row) => sum + calculateLineAmount({ price: row.price, qty: row.qty }),
     0,
   );
+  const currentOrderQty = selectedProductLines.reduce(
+    (sum, line) => sum + selectedLineQty(line),
+    0,
+  );
+  const currentOrderAmount = selectedProductLines.reduce(
+    (sum, line) => sum + selectedLineAmount(line),
+    0,
+  );
 
   useEffect(() => {
     if (!open || !enableTransactionPicker) {
@@ -430,6 +395,23 @@ export function ProductSelect({
     }, 0);
     return () => window.clearTimeout(timer);
   }, [enableTransactionPicker, open]);
+
+  const resetPickerFilters = () => {
+    setActiveWarehouseFilter('');
+    setRowQtyMap({});
+    setRowPriceMap({});
+    setRowSalesModeMap({});
+    setRowUomMap({});
+    setRowWarehouseMap({});
+    formRef.current?.resetFields();
+    formRef.current?.setFieldsValue({
+      brand: undefined,
+      inStockOnly: 'all',
+      itemGroup: undefined,
+      searchKey: undefined,
+      warehouseFilter: undefined,
+    });
+  };
 
   const updateSelectedRows = (rows: ProductSummary[]) => {
     setSelectedMap((current) => {
@@ -456,24 +438,36 @@ export function ProductSelect({
       return rowUomMap[record.itemCode];
     }
     if (itemContext === 'sales') {
-      return salesDefaultUom(record, rowSalesMode(record)) || record.stockUom;
+      return (
+        getProductModeDefaultUom(record, rowSalesMode(record)) ||
+        record.stockUom
+      );
     }
-    return record.uom || record.stockUom || availableUoms(record)[0] || null;
+    return (
+      record.uom ||
+      record.stockUom ||
+      getProductAvailableUoms(record)[0] ||
+      null
+    );
   };
   const rowPrice = (record: ProductSummary) => {
     if (Object.hasOwn(rowPriceMap, record.itemCode)) {
       return rowPriceMap[record.itemCode];
     }
     if (itemContext === 'sales') {
-      return salesDefaultPrice(record, rowSalesMode(record));
+      return getProductModeDefaultPrice(record, rowSalesMode(record));
     }
     if (itemContext === 'purchase') {
-      return purchaseDefaultPrice(record);
+      return getProductPurchaseDefaultPrice(record);
     }
     return contextPrice(record, itemContext);
   };
   const rowWarehouse = (record: ProductSummary) =>
-    rowWarehouseMap[record.itemCode] || record.warehouse || warehouse || '';
+    rowWarehouseMap[record.itemCode] ||
+    record.warehouse ||
+    activeWarehouseFilter ||
+    warehouse ||
+    '';
 
   const buildDraftLine = (product: ProductSummary): ProductSelectLine => {
     const price = rowPrice(product);
@@ -554,6 +548,53 @@ export function ProductSelect({
 
   const selectProductNow = (product: ProductSummary) => {
     selectLines([buildDraftLine(product)], !enableTransactionPicker);
+  };
+
+  const openQuickCreate = () => {
+    quickCreateForm.setFieldsValue({
+      defaultWarehouse: warehouse || undefined,
+      openingQty: 0,
+      openingUom: 'Nos',
+    });
+    setQuickCreateOpen(true);
+  };
+
+  const submitQuickCreate = async () => {
+    const values = await quickCreateForm.validateFields();
+    const openingUom = values.openingUom || 'Nos';
+    setCreatingProduct(true);
+    try {
+      const result = await createProductAndStock({
+        defaultWarehouse: values.defaultWarehouse || warehouse || null,
+        description: values.description,
+        itemName: values.itemName,
+        nickname: values.nickname,
+        openingQty: Number(values.openingQty ?? 0),
+        openingUom,
+        standardRate:
+          typeof values.standardRate === 'number' &&
+          Number.isFinite(values.standardRate)
+            ? values.standardRate
+            : null,
+        stockUom: openingUom,
+        uomConversions: [{ conversionFactor: 1, uom: openingUom }],
+      });
+      const createdProduct = result.data;
+      setQuickCreateOpen(false);
+      quickCreateForm.resetFields();
+      actionRef.current?.reloadAndRest?.();
+      selectProductNow({
+        ...createdProduct,
+        warehouse:
+          createdProduct.warehouse ||
+          values.defaultWarehouse ||
+          activeWarehouseFilter ||
+          warehouse ||
+          '',
+      });
+    } finally {
+      setCreatingProduct(false);
+    }
   };
 
   const currentLineSummary = (record: ProductSummary) =>
@@ -639,9 +680,9 @@ export function ProductSelect({
                 {record.isSalesItem ? <Tag color="blue">销售</Tag> : null}
                 {record.isPurchaseItem ? <Tag color="green">采购</Tag> : null}
               </Space>
-              {record.nickname && record.itemName !== record.nickname ? (
+              {productNicknameLabel(record) ? (
                 <Typography.Text type="secondary">
-                  {record.itemName}
+                  昵称：{productNicknameLabel(record)}
                 </Typography.Text>
               ) : null}
               <Typography.Text type="secondary">
@@ -661,13 +702,17 @@ export function ProductSelect({
         hideInTable: true,
         title: '分类',
         width: 140,
-        formItemRender: (_, { onChange, value }) => (
+        formItemRender: (_, { onChange, value }, form) => (
           <RemoteLinkSelect
             doctype="Item Group"
             filters={{ is_group: 0 }}
-            onChange={onChange}
+            onChange={(nextValue) => {
+              const itemGroup = String(nextValue ?? '').trim();
+              form.setFieldValue?.('itemGroup', itemGroup || undefined);
+              onChange?.(itemGroup);
+            }}
             placeholder="选择分类"
-            value={value}
+            value={String(value ?? form.getFieldValue?.('itemGroup') ?? '')}
           />
         ),
       },
@@ -676,12 +721,16 @@ export function ProductSelect({
         hideInTable: true,
         title: '品牌',
         width: 120,
-        formItemRender: (_, { onChange, value }) => (
+        formItemRender: (_, { onChange, value }, form) => (
           <RemoteLinkSelect
             doctype="Brand"
-            onChange={onChange}
+            onChange={(nextValue) => {
+              const brand = String(nextValue ?? '').trim();
+              form.setFieldValue?.('brand', brand || undefined);
+              onChange?.(brand);
+            }}
             placeholder="选择品牌"
-            value={value}
+            value={String(value ?? form.getFieldValue?.('brand') ?? '')}
           />
         ),
       },
@@ -742,16 +791,25 @@ export function ProductSelect({
       {
         dataIndex: 'warehouseFilter',
         hideInTable: true,
-        initialValue: warehouse,
         title: '库存仓库',
-        formItemRender: (_, { onChange, value }) => (
+        formItemRender: (_, { onChange, value }, form) => (
           <RemoteLinkSelect
             doctype="Warehouse"
             extraFields={['company']}
             filters={{ company }}
-            onChange={onChange}
+            onChange={(nextValue) => {
+              const nextWarehouse = String(nextValue ?? '').trim();
+              form.setFieldValue?.(
+                'warehouseFilter',
+                nextWarehouse || undefined,
+              );
+              onChange?.(nextWarehouse);
+              setActiveWarehouseFilter(nextWarehouse);
+            }}
             placeholder="全部仓库"
-            value={value}
+            value={String(
+              value ?? form.getFieldValue?.('warehouseFilter') ?? '',
+            )}
           />
         ),
       },
@@ -762,8 +820,11 @@ export function ProductSelect({
         render: (_, record) => {
           const { stockUomDisplay, totalQty, warehouseQty } = stockLabel(
             record,
-            warehouse,
+            activeWarehouseFilter,
           );
+          const warehouseQtyLabel = activeWarehouseFilter
+            ? '当前仓'
+            : '可用库存';
           const stockWarning =
             typeof warehouseQty === 'number' && warehouseQty <= 0;
           return (
@@ -772,7 +833,7 @@ export function ProductSelect({
                 总库存 {formatQty(totalQty)} {stockUomDisplay}
               </Typography.Text>
               <Typography.Text type={stockWarning ? 'danger' : 'secondary'}>
-                当前仓 {formatQty(warehouseQty)} {stockUomDisplay}
+                {warehouseQtyLabel} {formatQty(warehouseQty)} {stockUomDisplay}
               </Typography.Text>
             </Space>
           );
@@ -868,6 +929,7 @@ export function ProductSelect({
       selectedMap,
       selectedLineSummaryMap,
       selectedProductCountMap,
+      activeWarehouseFilter,
       warehouse,
     ],
   );
@@ -994,7 +1056,10 @@ export function ProductSelect({
                         {line.itemCode}
                       </Typography.Text>
                     </Space>
-                    <Typography.Text strong>
+                    <Typography.Text
+                      strong
+                      style={{ color: '#f5222d', fontSize: 16 }}
+                    >
                       {formatCurrencyValue(selectedLineAmount(line))}
                     </Typography.Text>
                   </Space>
@@ -1020,105 +1085,35 @@ export function ProductSelect({
             </Typography.Text>
           )}
         </div>
-      </Space>
-
-      <Space
-        orientation="vertical"
-        size={8}
-        style={{ flex: 1, minHeight: 0, width: '100%' }}
-      >
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Typography.Text strong>本次暂存</Typography.Text>
-          <Badge count={selectedRows.length} overflowCount={99} showZero />
-        </Space>
         <div
           style={{
+            background: '#fafafa',
             border: '1px solid #f0f0f0',
-            flex: 1,
-            minHeight: 240,
-            overflow: 'auto',
-            padding: 8,
+            borderRadius: 6,
+            display: 'grid',
+            gap: 12,
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            padding: '10px 12px',
           }}
         >
-          {selectedRows.length ? (
-            <Space orientation="vertical" size={10} style={{ width: '100%' }}>
-              {selectedRows.map((row) => (
-                <div
-                  key={row.key}
-                  style={{
-                    borderBottom: '1px solid #f5f5f5',
-                    paddingBottom: 10,
-                  }}
-                >
-                  <Space
-                    align="start"
-                    style={{ justifyContent: 'space-between', width: '100%' }}
-                  >
-                    <Space orientation="vertical" size={0}>
-                      <Typography.Text strong>
-                        {productLabel(row.product)}
-                      </Typography.Text>
-                      <Typography.Text type="secondary">
-                        {row.product.itemCode}
-                      </Typography.Text>
-                    </Space>
-                    <Button
-                      danger
-                      onClick={() => {
-                        setSelectedMap((current) => {
-                          const next = { ...current };
-                          delete next[row.key];
-                          return next;
-                        });
-                      }}
-                      size="small"
-                      type="link"
-                    >
-                      移除
-                    </Button>
-                  </Space>
-                  <Space
-                    size={[8, 4]}
-                    style={{ marginTop: 4, width: '100%' }}
-                    wrap
-                  >
-                    <Tag color="blue">数量 {draftLineQtyLabel(row)}</Tag>
-                    {draftLineStockQtyLabel(row) ? (
-                      <Tag>{draftLineStockQtyLabel(row)}</Tag>
-                    ) : null}
-                    <Tag color="red">
-                      金额 {formatCurrencyValue(draftLineAmount(row))}
-                    </Tag>
-                  </Space>
-                  <Typography.Text type="secondary">
-                    {lineLabel(row)}
-                  </Typography.Text>
-                  <div style={{ marginTop: 8 }}>
-                    <InputNumber
-                      min={1}
-                      onChange={(value) => {
-                        setSelectedMap((current) => ({
-                          ...current,
-                          [row.key]: {
-                            ...row,
-                            qty: Math.max(1, Number(value ?? 1)),
-                          },
-                        }));
-                      }}
-                      precision={0}
-                      size="small"
-                      value={row.qty}
-                      style={{ width: 96 }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </Space>
-          ) : (
-            <Typography.Text type="secondary">
-              可勾选多行或点击“暂存”，统一调整后批量加入。
+          <Space orientation="vertical" size={0}>
+            <Typography.Text type="secondary">商品行</Typography.Text>
+            <Typography.Text strong style={{ color: '#1677ff', fontSize: 18 }}>
+              {selectedProductLines.length}
             </Typography.Text>
-          )}
+          </Space>
+          <Space orientation="vertical" size={0}>
+            <Typography.Text type="secondary">数量</Typography.Text>
+            <Typography.Text strong style={{ color: '#1677ff', fontSize: 18 }}>
+              {formatQty(currentOrderQty)}
+            </Typography.Text>
+          </Space>
+          <Space orientation="vertical" size={0}>
+            <Typography.Text type="secondary">金额</Typography.Text>
+            <Typography.Text strong style={{ color: '#f5222d', fontSize: 18 }}>
+              {formatCurrencyValue(currentOrderAmount)}
+            </Typography.Text>
+          </Space>
         </div>
       </Space>
     </div>
@@ -1194,26 +1189,47 @@ export function ProductSelect({
           }
           toolbar={{
             actions: [
+              <Button
+                icon={<PlusOutlined />}
+                key="quick-create"
+                onClick={openQuickCreate}
+              >
+                新增商品
+              </Button>,
               <Tooltip
                 key="tip"
-                title="操作列已固定在右侧；可以直接输入本次数量后加入，也可以勾选多行后用底部按钮批量加入。"
+                title={
+                  enableTransactionPicker
+                    ? '操作列已固定在右侧；点击加入后会直接写入订单明细并保持面板打开。'
+                    : '操作列已固定在右侧；可以勾选多行后用底部按钮批量加入。'
+                }
               >
                 <Typography.Text type="secondary">高效选品模式</Typography.Text>
               </Tooltip>,
             ],
           }}
           columns={columns}
+          formRef={formRef}
           options={false}
           pagination={{ pageSize: 10 }}
           request={async (params) => {
             const searchKey = String(params.searchKey ?? '').trim();
             const itemGroup = String(params.itemGroup ?? '').trim();
             const brand = String(params.brand ?? '').trim();
+            const stockRange = String(params.inStockOnly ?? 'all');
+            const warehouseFilter =
+              activeWarehouseFilter ||
+              String(params.warehouseFilter ?? '').trim();
+            const normalizedWarehouseFilter = warehouseFilter || '';
             const inStockOnly =
               params.inStockOnly === true ||
-              String(params.inStockOnly ?? '') === 'in_stock';
-            const warehouseFilter =
-              String(params.warehouseFilter ?? '').trim() || warehouse;
+              stockRange === 'in_stock' ||
+              Boolean(normalizedWarehouseFilter);
+            setActiveWarehouseFilter((current) =>
+              current === normalizedWarehouseFilter
+                ? current
+                : normalizedWarehouseFilter,
+            );
             if (
               !enableTransactionPicker &&
               !searchKey &&
@@ -1285,14 +1301,20 @@ export function ProductSelect({
 
   const closePicker = () => {
     setSelectedMap({});
+    resetPickerFilters();
     setOpen(false);
+  };
+
+  const openPicker = () => {
+    resetPickerFilters();
+    setOpen(true);
   };
 
   return (
     <>
       <Button
         icon={<SearchOutlined />}
-        onClick={() => setOpen(true)}
+        onClick={openPicker}
         style={style}
         type="primary"
       >
@@ -1322,6 +1344,73 @@ export function ProductSelect({
           {pickerContent}
         </Modal>
       )}
+      <Modal
+        destroyOnClose
+        okButtonProps={{ loading: creatingProduct }}
+        okText="新增并加入"
+        onCancel={() => setQuickCreateOpen(false)}
+        onOk={() => void submitQuickCreate()}
+        open={quickCreateOpen}
+        title="新增商品"
+        width={560}
+      >
+        <Form<QuickCreateProductValues>
+          form={quickCreateForm}
+          initialValues={{
+            defaultWarehouse: warehouse || undefined,
+            openingQty: 0,
+            openingUom: 'Nos',
+          }}
+          layout="vertical"
+        >
+          <Form.Item
+            label="商品名称"
+            name="itemName"
+            rules={[{ required: true, message: '请输入商品名称' }]}
+          >
+            <Input placeholder="输入商品名称" />
+          </Form.Item>
+          <Form.Item label="商品昵称" name="nickname">
+            <Input placeholder="用于别名、简称或搜索" />
+          </Form.Item>
+          <div
+            style={{
+              display: 'grid',
+              gap: 12,
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            }}
+          >
+            <Form.Item label="入库仓库" name="defaultWarehouse">
+              <RemoteLinkSelect
+                doctype="Warehouse"
+                extraFields={['company']}
+                filters={{ company }}
+                placeholder="默认仓库"
+              />
+            </Form.Item>
+            <Form.Item label="入库单位" name="openingUom">
+              <UomSelect placeholder="选择单位" />
+            </Form.Item>
+            <Form.Item label="初始库存" name="openingQty">
+              <InputNumber min={0} precision={3} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item label="参考售价" name="standardRate">
+              <InputNumber
+                min={0}
+                precision={2}
+                prefix="¥"
+                style={{ width: '100%' }}
+              />
+            </Form.Item>
+          </div>
+          <Form.Item label="备注" name="description">
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} />
+          </Form.Item>
+          <Typography.Text type="secondary">
+            新增成功后会自动加入当前订单明细；初始库存会落入所选仓库。
+          </Typography.Text>
+        </Form>
+      </Modal>
       <Drawer
         destroyOnClose
         onClose={() => setAdjustingProduct(null)}
@@ -1359,11 +1448,12 @@ export function ProductSelect({
                     setRowUomMap((current) => ({
                       ...current,
                       [adjustingProduct.itemCode]:
-                        salesDefaultUom(adjustingProduct, value) ?? null,
+                        getProductModeDefaultUom(adjustingProduct, value) ??
+                        null,
                     }));
                     setRowPriceMap((current) => ({
                       ...current,
-                      [adjustingProduct.itemCode]: salesDefaultPrice(
+                      [adjustingProduct.itemCode]: getProductModeDefaultPrice(
                         adjustingProduct,
                         value,
                       ),
@@ -1388,13 +1478,15 @@ export function ProductSelect({
                     [adjustingProduct.itemCode]: value,
                   }));
                 }}
-                options={availableUoms(adjustingProduct).map((uom) => ({
-                  label: resolveUomDisplay(
-                    uom,
-                    adjustingProduct.allUomDisplays,
-                  ),
-                  value: uom,
-                }))}
+                options={getProductAvailableUoms(adjustingProduct).map(
+                  (uom) => ({
+                    label: resolveUomDisplay(
+                      uom,
+                      adjustingProduct.allUomDisplays,
+                    ),
+                    value: uom,
+                  }),
+                )}
                 value={rowUom(adjustingProduct) ?? undefined}
                 style={{ width: '100%' }}
               />
@@ -1459,14 +1551,16 @@ export function ProductSelect({
             <Divider style={{ margin: '4px 0' }} />
             <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
               <Button onClick={() => setAdjustingProduct(null)}>取消</Button>
-              <Button
-                onClick={() => {
-                  stageLine(adjustingProduct);
-                  setAdjustingProduct(null);
-                }}
-              >
-                暂存
-              </Button>
+              {enableBatch ? (
+                <Button
+                  onClick={() => {
+                    stageLine(adjustingProduct);
+                    setAdjustingProduct(null);
+                  }}
+                >
+                  暂存
+                </Button>
+              ) : null}
               <Button
                 onClick={() => {
                   selectProductNow(adjustingProduct);

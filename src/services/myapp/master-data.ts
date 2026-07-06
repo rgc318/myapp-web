@@ -127,6 +127,21 @@ export type SaveProductPayload = {
 
 export type UpdateProductPayload = Partial<SaveProductPayload>;
 
+export type CreateProductAndStockPayload = {
+  defaultWarehouse?: string | null;
+  description?: string | null;
+  itemName: string;
+  nickname?: string | null;
+  openingQty?: number | null;
+  openingUom?: string | null;
+  standardRate?: number | null;
+  stockUom?: string | null;
+  uomConversions?: {
+    conversionFactor?: number | null;
+    uom?: string | null;
+  }[];
+};
+
 export type PartySummary = {
   creation: string | null;
   defaultAddress: PartyAddressSummary | null;
@@ -924,6 +939,31 @@ export async function createProduct(payload: SaveProductPayload) {
       item_code: payload.itemCode ?? undefined,
     }),
     successMessage: '商品已创建',
+    transform: (raw) => mapProduct(readObject(raw)),
+  });
+}
+
+export async function createProductAndStock(
+  payload: CreateProductAndStockPayload,
+) {
+  return runGatewayMutation<ProductSummary>('create_product_and_stock', {
+    payload: definedPayload({
+      default_warehouse: toOptionalText(payload.defaultWarehouse),
+      description: toOptionalText(payload.description),
+      item_name: payload.itemName,
+      nickname: toOptionalText(payload.nickname),
+      opening_qty: payload.openingQty ?? 0,
+      opening_uom: toOptionalText(payload.openingUom),
+      standard_rate: payload.standardRate ?? undefined,
+      stock_uom: toOptionalText(payload.stockUom),
+      uom_conversions: payload.uomConversions
+        ?.map((entry) => ({
+          conversion_factor: entry.conversionFactor ?? undefined,
+          uom: toOptionalText(entry.uom),
+        }))
+        .filter((entry) => entry.uom),
+    }),
+    successMessage: '商品已创建并入库',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }

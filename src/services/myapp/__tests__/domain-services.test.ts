@@ -16,6 +16,7 @@ import {
   bulkUpdateProducts,
   createCustomer,
   createProduct,
+  createProductAndStock,
   createSupplier,
   createUom,
   deleteProductBarcode,
@@ -2270,6 +2271,17 @@ describe('myapp domain services', () => {
       wholesaleRate: 11,
     });
     await setProductDisabled('ITEM-001', true);
+    await createProductAndStock({
+      defaultWarehouse: 'Stores - RD',
+      description: '快速新增',
+      itemName: '快速商品',
+      nickname: '快商',
+      openingQty: 5,
+      openingUom: 'Nos',
+      standardRate: 18,
+      stockUom: 'Nos',
+      uomConversions: [{ conversionFactor: 1, uom: 'Nos' }],
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -2333,6 +2345,22 @@ describe('myapp domain services', () => {
       3,
       'disable_product_v2',
       { disabled: 1, item_code: 'ITEM-001' },
+      expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      4,
+      'create_product_and_stock',
+      {
+        default_warehouse: 'Stores - RD',
+        description: '快速新增',
+        item_name: '快速商品',
+        nickname: '快商',
+        opening_qty: 5,
+        opening_uom: 'Nos',
+        standard_rate: 18,
+        stock_uom: 'Nos',
+        uom_conversions: [{ conversion_factor: 1, uom: 'Nos' }],
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

@@ -40,6 +40,8 @@ export function SalesOrderLinesTable({
       ),
     );
   };
+  const totalQty = lines.reduce((sum, line) => sum + Number(line.qty || 0), 0);
+  const totalAmount = getOrderLinesTotal(lines);
 
   const columns: ColumnsType<SalesOrderEditorLine> = [
     {
@@ -176,7 +178,7 @@ export function SalesOrderLinesTable({
     {
       dataIndex: 'stockQty',
       title: '库存参考',
-      width: 160,
+      width: 170,
       render: (_, record) => {
         const stockQty = convertQtyToStockQty({
           qty: record.qty,
@@ -190,14 +192,27 @@ export function SalesOrderLinesTable({
           record.stockUomDisplay,
         );
         return (
-          <Space orientation="vertical" size={0}>
-            <Typography.Text>
-              {formatQty(record.stockQty)} {stockUomDisplay}
-            </Typography.Text>
-            <Typography.Text type="secondary">
-              本单 {formatQty(stockQty)} {stockUomDisplay}
-            </Typography.Text>
-          </Space>
+          <div
+            style={{
+              background: '#fafafa',
+              borderRadius: 6,
+              padding: '6px 8px',
+            }}
+          >
+            <Space size={6}>
+              <Typography.Text type="secondary">可用</Typography.Text>
+              <Typography.Text strong style={{ color: '#1677ff' }}>
+                {formatQty(record.stockQty)} {stockUomDisplay}
+              </Typography.Text>
+            </Space>
+            <br />
+            <Space size={6}>
+              <Typography.Text type="secondary">本单</Typography.Text>
+              <Typography.Text style={{ color: '#8c8c8c' }}>
+                {formatQty(stockQty)} {stockUomDisplay}
+              </Typography.Text>
+            </Space>
+          </div>
         );
       },
     },
@@ -205,9 +220,9 @@ export function SalesOrderLinesTable({
       align: 'right',
       dataIndex: 'amount',
       title: '金额',
-      width: 140,
+      width: 150,
       render: (_, record) => (
-        <Typography.Text strong style={{ color: '#cf1322' }}>
+        <Typography.Text strong style={{ color: '#f5222d', fontSize: 17 }}>
           {formatCurrencyValue(record.amount)}
         </Typography.Text>
       ),
@@ -239,15 +254,21 @@ export function SalesOrderLinesTable({
       scroll={{ x: 1380 }}
       summary={() => (
         <Table.Summary.Row>
-          <Table.Summary.Cell colSpan={7} index={0}>
+          <Table.Summary.Cell colSpan={2} index={0}>
             <Typography.Text strong>合计</Typography.Text>
           </Table.Summary.Cell>
-          <Table.Summary.Cell align="right" index={1}>
-            <Typography.Text strong style={{ color: '#cf1322', fontSize: 16 }}>
-              {formatCurrencyValue(getOrderLinesTotal(lines))}
+          <Table.Summary.Cell index={1}>
+            <Typography.Text strong style={{ color: '#1677ff', fontSize: 16 }}>
+              {formatQty(totalQty)}
             </Typography.Text>
           </Table.Summary.Cell>
-          <Table.Summary.Cell index={2} />
+          <Table.Summary.Cell colSpan={4} index={2} />
+          <Table.Summary.Cell align="right" index={3}>
+            <Typography.Text strong style={{ color: '#f5222d', fontSize: 18 }}>
+              {formatCurrencyValue(totalAmount)}
+            </Typography.Text>
+          </Table.Summary.Cell>
+          <Table.Summary.Cell index={4} />
         </Table.Summary.Row>
       )}
     />

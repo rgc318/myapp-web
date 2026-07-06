@@ -49,6 +49,26 @@ function firstFiniteNumber(values: (number | null | undefined)[]) {
   return null;
 }
 
+function modePriceFromSummary(
+  summary: ProductSummary['priceSummary'],
+  mode: SalesMode,
+) {
+  if (!summary) {
+    return null;
+  }
+  const priceList = mode === 'retail' ? 'Retail' : 'Wholesale';
+  const explicitEntry = summary.sellingPrices?.find(
+    (entry) => entry.priceList.toLowerCase() === priceList.toLowerCase(),
+  );
+  if (explicitEntry) {
+    return explicitEntry.rate;
+  }
+
+  const legacyModeRate =
+    mode === 'retail' ? summary.retailRate : summary.wholesaleRate;
+  return legacyModeRate === 0 ? null : legacyModeRate;
+}
+
 function uniqueText(values: (string | null | undefined)[]) {
   return Array.from(
     new Set(
@@ -104,9 +124,9 @@ export function getProductModeDefaultPrice(
 ) {
   const summary = product.priceSummary;
   return firstFiniteNumber([
-    mode === 'retail' ? summary?.retailRate : summary?.wholesaleRate,
-    summary?.currentRate,
+    modePriceFromSummary(summary, mode),
     product.price,
+    summary?.currentRate,
     summary?.standardSellingRate,
   ]);
 }

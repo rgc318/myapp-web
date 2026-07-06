@@ -1,5 +1,9 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { PageContainer, ProCard } from '@ant-design/pro-components';
+import {
+  FooterToolbar,
+  PageContainer,
+  ProCard,
+} from '@ant-design/pro-components';
 import { history } from '@umijs/max';
 import {
   Alert,
@@ -48,6 +52,27 @@ const requiredFieldLabels: Record<string, string> = {
   deliveryDate: '交货日期',
   transactionDate: '订单日期',
 };
+const footerContentStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: 16,
+  justifyContent: 'space-between',
+  margin: '0 auto',
+  maxWidth: 1488,
+  padding: '0 24px',
+  width: '100%',
+};
+const footerSummaryStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flex: '1 1 auto',
+  flexWrap: 'wrap',
+  gap: '8px 24px',
+  minWidth: 0,
+};
+const footerActionsStyle: React.CSSProperties = {
+  flex: '0 0 auto',
+};
 
 type FormValues = {
   company: string;
@@ -74,6 +99,14 @@ const SalesOrderNewPage: React.FC = () => {
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getOrderLinesTotal(lines), [lines]);
+  const totalQty = useMemo(
+    () =>
+      lines.reduce(
+        (sum, line) => sum + (Number.isFinite(line.qty) ? line.qty : 0),
+        0,
+      ),
+    [lines],
+  );
 
   React.useEffect(() => {
     const currentCompany = form.getFieldValue('company');
@@ -368,32 +401,53 @@ const SalesOrderNewPage: React.FC = () => {
             onChange={setLines}
           />
         </ProCard>
-
-        <ProCard>
-          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-            <Typography.Text type="secondary">
-              共 {lines.length} 个商品，总金额{' '}
-              {formatCurrencyValue(totalAmount)}
-            </Typography.Text>
-            <Space>
-              <Button
-                icon={<PlusOutlined />}
-                loading={submitting}
-                onClick={() => void submitOrder(false)}
-                type="primary"
-              >
-                保存订单
-              </Button>
-              <Button
-                loading={submitting}
-                onClick={() => void submitOrder(true)}
-              >
-                快捷下单
-              </Button>
-            </Space>
-          </Space>
-        </ProCard>
       </Space>
+      <FooterToolbar>
+        <div style={footerContentStyle}>
+          <div style={footerSummaryStyle}>
+            <Space size={8}>
+              <Typography.Text type="secondary">行数</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {lines.length}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">数量</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {totalQty}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">总金额</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#f5222d', fontSize: 20 }}
+              >
+                {formatCurrencyValue(totalAmount)}
+              </Typography.Text>
+            </Space>
+          </div>
+          <Space style={footerActionsStyle}>
+            <Button
+              icon={<PlusOutlined />}
+              loading={submitting}
+              onClick={() => void submitOrder(false)}
+              type="primary"
+            >
+              保存订单
+            </Button>
+            <Button loading={submitting} onClick={() => void submitOrder(true)}>
+              快捷下单
+            </Button>
+          </Space>
+        </div>
+      </FooterToolbar>
     </PageContainer>
   );
 };

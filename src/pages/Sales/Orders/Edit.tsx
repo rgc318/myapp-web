@@ -65,6 +65,27 @@ type FormValues = {
   transactionDate: dayjs.Dayjs;
   warehouse?: string;
 };
+const footerContentStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: 16,
+  justifyContent: 'space-between',
+  margin: '0 auto',
+  maxWidth: 1488,
+  padding: '0 24px',
+  width: '100%',
+};
+const footerSummaryStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flex: '1 1 auto',
+  flexWrap: 'wrap',
+  gap: '8px 24px',
+  minWidth: 0,
+};
+const footerActionsStyle: React.CSSProperties = {
+  flex: '0 0 auto',
+};
 
 function dateValue(value: string) {
   return value ? dayjs(value) : dayjs();
@@ -558,12 +579,40 @@ const SalesOrderEditPage: React.FC = () => {
         </ProCard>
       </Space>
       <FooterToolbar>
-        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <Typography.Text type={dirty ? 'danger' : 'secondary'}>
-            {dirty ? '有未保存修改' : '当前无待保存修改'}，共 {lines.length}{' '}
-            个商品，总金额 {formatCurrencyValue(totalAmount)}
-          </Typography.Text>
-          <Space>
+        <div style={footerContentStyle}>
+          <div style={footerSummaryStyle}>
+            <Typography.Text type={dirty ? 'danger' : 'secondary'}>
+              {dirty ? '有未保存修改' : '当前无待保存修改'}
+            </Typography.Text>
+            <Space size={8}>
+              <Typography.Text type="secondary">行数</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {lines.length}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">数量</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {totalQty}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">总金额</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#f5222d', fontSize: 20 }}
+              >
+                {formatCurrencyValue(totalAmount)}
+              </Typography.Text>
+            </Space>
+          </div>
+          <Space style={footerActionsStyle}>
             <Button
               onClick={() =>
                 history.push(`/sales/orders/${encodeURIComponent(orderName)}`)
@@ -580,7 +629,7 @@ const SalesOrderEditPage: React.FC = () => {
               保存修改
             </Button>
           </Space>
-        </Space>
+        </div>
       </FooterToolbar>
     </PageContainer>
   );

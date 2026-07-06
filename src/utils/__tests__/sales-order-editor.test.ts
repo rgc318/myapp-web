@@ -3,6 +3,9 @@ import {
   buildSalesOrderLineFromProduct,
   convertQtyToStockQty,
   getOrderLinesTotal,
+  getProductAvailableUoms,
+  getProductModeDefaultPrice,
+  getProductModeDefaultUom,
   getSalesOrderLineMergeKey,
   resolveUomDisplay,
 } from '../sales-order-editor';
@@ -66,6 +69,69 @@ describe('sales order editor utils', () => {
     });
     expect(line.modeDefaults.retail).toEqual({ price: 12, uom: 'Nos' });
     expect(getOrderLinesTotal([line])).toBe(100);
+  });
+
+  it('resolves sales mode default units from shared uom context', () => {
+    expect(getProductModeDefaultUom(product, 'wholesale')).toBe('Box');
+    expect(getProductModeDefaultUom(product, 'retail')).toBe('Nos');
+    expect(getProductAvailableUoms(product)).toEqual(['Nos', 'Box']);
+  });
+
+  it('keeps explicit zero mode price instead of falling back', () => {
+    expect(
+      getProductModeDefaultPrice(
+        {
+          ...product,
+          price: 9,
+          priceSummary: {
+            currentRate: 8,
+            sellingPrices: [
+              { currency: 'CNY', priceList: 'Wholesale', rate: 0 },
+            ],
+            standardSellingRate: 10,
+            wholesaleRate: 0,
+          },
+        },
+        'wholesale',
+      ),
+    ).toBe(0);
+  });
+
+  it('falls back when a missing mode price is represented as zero', () => {
+    expect(
+      getProductModeDefaultPrice(
+        {
+          ...product,
+          price: null,
+          priceSummary: {
+            currentRate: 10000,
+            sellingPrices: [
+              { currency: 'CNY', priceList: 'Standard Selling', rate: 10000 },
+            ],
+            standardSellingRate: 10000,
+            wholesaleRate: 0,
+          },
+        },
+        'wholesale',
+      ),
+    ).toBe(10000);
+  });
+
+  it('keeps explicit zero product price before fallback prices', () => {
+    expect(
+      getProductModeDefaultPrice(
+        {
+          ...product,
+          price: 0,
+          priceSummary: {
+            currentRate: 4800,
+            standardSellingRate: 4800,
+            wholesaleRate: null,
+          },
+        },
+        'wholesale',
+      ),
+    ).toBe(0);
   });
 
   it('converts entered qty to stock qty', () => {
