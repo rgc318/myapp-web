@@ -36,6 +36,12 @@ import {
 } from '@/services/myapp/sales';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 import {
+  normalizePhoneInput,
+  PHONE_MAX_LENGTH,
+  phoneValidationMessage,
+  validatePhoneValue,
+} from '@/utils/phone-validation';
+import {
   buildSalesOrderLineFromProduct,
   getOrderLinesTotal,
   getSalesModeLabel,
@@ -91,11 +97,10 @@ const SalesOrderNewPage: React.FC = () => {
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<SalesOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [lastCustomer, setLastCustomer] = useState('');
+  const customerContextRequestRef = React.useRef(0);
   const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const defaultSalesMode =
     Form.useWatch('defaultSalesMode', form) ?? 'wholesale';
-  const customer = Form.useWatch('customer', form);
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getOrderLinesTotal(lines), [lines]);
@@ -120,23 +125,33 @@ const SalesOrderNewPage: React.FC = () => {
     });
   }, [defaultCompany, defaultWarehouse, form]);
 
-  React.useEffect(() => {
-    if (!customer || customer === lastCustomer) {
+  const applyCustomerSalesContext = async (nextCustomer: string) => {
+    const requestId = customerContextRequestRef.current + 1;
+    customerContextRequestRef.current = requestId;
+    form.setFieldValue('customer', nextCustomer || undefined);
+    if (!nextCustomer) {
+      form.setFieldsValue({
+        contactDisplayName: undefined,
+        contactPhone: undefined,
+        shippingAddressText: undefined,
+      });
       return;
     }
-    setLastCustomer(customer);
-    void getCustomerSalesContext(customer).then((context) => {
-      form.setFieldsValue({
-        company: context.suggestions.company ?? form.getFieldValue('company'),
-        contactDisplayName: context.defaultContact?.displayName ?? undefined,
-        contactPhone: context.defaultContact?.phone ?? undefined,
-        shippingAddressText:
-          context.defaultAddress?.addressDisplay ?? undefined,
-        warehouse:
-          context.suggestions.warehouse ?? form.getFieldValue('warehouse'),
-      });
+
+    const context = await getCustomerSalesContext(nextCustomer);
+    if (requestId !== customerContextRequestRef.current) {
+      return;
+    }
+    form.setFieldsValue({
+      company: context.suggestions.company ?? form.getFieldValue('company'),
+      contactDisplayName: context.defaultContact?.displayName || undefined,
+      contactPhone:
+        normalizePhoneInput(context.defaultContact?.phone) || undefined,
+      shippingAddressText: context.defaultAddress?.addressDisplay || undefined,
+      warehouse:
+        context.suggestions.warehouse ?? form.getFieldValue('warehouse'),
     });
-  }, [customer, form, lastCustomer]);
+  };
 
   const addProduct = (product: ProductSummary) => {
     const nextLine = buildSalesOrderLineFromProduct({
@@ -233,12 +248,14 @@ const SalesOrderNewPage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const contactPhone = normalizePhoneInput(values.contactPhone);
+      form.setFieldValue('contactPhone', contactPhone || undefined);
       const payload = {
         company: values.company,
         customer: values.customer,
         customerInfo: {
           contactDisplayName: values.contactDisplayName,
-          contactPhone: values.contactPhone,
+          contactPhone,
         },
         defaultSalesMode: values.defaultSalesMode,
         deliveryDate: values.deliveryDate.format('YYYY-MM-DD'),
@@ -253,7 +270,7 @@ const SalesOrderNewPage: React.FC = () => {
         remarks: values.remarks,
         shippingInfo: {
           receiverName: values.contactDisplayName,
-          receiverPhone: values.contactPhone,
+          receiverPhone: contactPhone,
           shippingAddressText: values.shippingAddressText,
         },
         transactionDate: values.transactionDate.format('YYYY-MM-DD'),
@@ -310,7 +327,13 @@ const SalesOrderNewPage: React.FC = () => {
                 name="customer"
                 rules={[{ required: true, message: '请选择客户' }]}
               >
-                <RemoteLinkSelect doctype="Customer" placeholder="搜索客户" />
+                <RemoteLinkSelect
+                  doctype="Customer"
+                  placeholder="搜索客户"
+                  onChange={(nextCustomer) => {
+                    void applyCustomerSalesContext(nextCustomer);
+                  }}
+                />
               </Form.Item>
               <Form.Item
                 label="公司"
@@ -366,8 +389,22 @@ const SalesOrderNewPage: React.FC = () => {
               <Form.Item label="联系人" name="contactDisplayName">
                 <Input placeholder="默认联系人" />
               </Form.Item>
-              <Form.Item label="联系电话" name="contactPhone">
-                <Input placeholder="默认联系电话" />
+              <Form.Item
+                label="联系电话"
+                name="contactPhone"
+                normalize={normalizePhoneInput}
+                rules={[
+                  {
+                    message: phoneValidationMessage(),
+                    validator: validatePhoneValue,
+                  },
+                ]}
+              >
+                <Input
+                  inputMode="numeric"
+                  maxLength={PHONE_MAX_LENGTH}
+                  placeholder="默认联系电话"
+                />
               </Form.Item>
             </div>
             <Form.Item label="收货地址" name="shippingAddressText">

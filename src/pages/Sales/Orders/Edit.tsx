@@ -43,6 +43,12 @@ import {
 } from '@/services/myapp/sales';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 import {
+  normalizePhoneInput,
+  PHONE_MAX_LENGTH,
+  phoneValidationMessage,
+  validatePhoneValue,
+} from '@/utils/phone-validation';
+import {
   buildSalesOrderLineFromProduct,
   getOrderLinesTotal,
   getSalesModeLabel,
@@ -221,7 +227,7 @@ const SalesOrderEditPage: React.FC = () => {
       form.setFieldsValue({
         company: detail.company,
         contactDisplayName: detail.contactDisplay,
-        contactPhone: detail.contactPhone,
+        contactPhone: normalizePhoneInput(detail.contactPhone),
         customer: detail.customer,
         defaultSalesMode: detail.defaultSalesMode,
         deliveryDate: dateValue(detail.deliveryDate),
@@ -323,17 +329,19 @@ const SalesOrderEditPage: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const contactPhone = normalizePhoneInput(values.contactPhone);
+      form.setFieldValue('contactPhone', contactPhone || undefined);
       await updateSalesOrderV2(orderName, {
         customerInfo: {
           contactDisplayName: values.contactDisplayName,
-          contactPhone: values.contactPhone,
+          contactPhone,
         },
         defaultSalesMode: values.defaultSalesMode,
         deliveryDate: values.deliveryDate.format('YYYY-MM-DD'),
         remarks: values.remarks,
         shippingInfo: {
           receiverName: values.contactDisplayName,
-          receiverPhone: values.contactPhone,
+          receiverPhone: contactPhone,
           shippingAddressText: values.shippingAddressText,
         },
         transactionDate: values.transactionDate.format('YYYY-MM-DD'),
@@ -539,8 +547,22 @@ const SalesOrderEditPage: React.FC = () => {
               <Form.Item label="联系人" name="contactDisplayName">
                 <Input placeholder="联系人" />
               </Form.Item>
-              <Form.Item label="联系电话" name="contactPhone">
-                <Input placeholder="联系电话" />
+              <Form.Item
+                label="联系电话"
+                name="contactPhone"
+                normalize={normalizePhoneInput}
+                rules={[
+                  {
+                    message: phoneValidationMessage(),
+                    validator: validatePhoneValue,
+                  },
+                ]}
+              >
+                <Input
+                  inputMode="numeric"
+                  maxLength={PHONE_MAX_LENGTH}
+                  placeholder="联系电话"
+                />
               </Form.Item>
             </div>
             <Form.Item label="收货地址" name="shippingAddressText">
