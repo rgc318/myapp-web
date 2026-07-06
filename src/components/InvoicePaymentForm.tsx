@@ -167,8 +167,8 @@ export const InvoicePaymentForm: React.FC<Props> = ({
       </Spin>
       {outstandingAmount !== null ? (
         <Alert
-          message={`${label}未结金额：${formatCurrencyValue(outstandingAmount)}`}
           showIcon
+          title={`${label}未结金额：${formatCurrencyValue(outstandingAmount)}`}
           type="info"
         />
       ) : null}

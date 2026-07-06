@@ -854,8 +854,8 @@ const SalesOrderDetailPage: React.FC = () => {
         <Space orientation="vertical" size={16} style={{ width: '100%' }}>
           <Alert
             description={`系统默认按当前待发数量创建发货单，已完成发货的商品不会出现在本次明细中。数量可以调整为部分发货，填 0 的行不会提交。`}
-            message={`默认本次发货 ${defaultDeliveryLines.length} 种商品，共 ${defaultDeliveryQty} 件`}
             showIcon
+            title={`默认本次发货 ${defaultDeliveryLines.length} 种商品，共 ${defaultDeliveryQty} 件`}
             type="info"
           />
           <Row gutter={12}>
@@ -945,8 +945,8 @@ const SalesOrderDetailPage: React.FC = () => {
               content: (
                 <Alert
                   description="强制创建发货单会跳过库存预检，可能造成负库存或库存账实不一致。仅在仓库实物已确认出货、后续会补录库存或业务明确允许时使用。"
-                  message={getErrorMessage(caught, '当前可用库存不足')}
                   showIcon
+                  title={getErrorMessage(caught, '当前可用库存不足')}
                   type="warning"
                 />
               ),
@@ -1721,7 +1721,7 @@ const SalesOrderDetailPage: React.FC = () => {
                             );
                             return {
                               color: timelineColor(event),
-                              children: (
+                              content: (
                                 <Space orientation="vertical" size={4}>
                                   <Space wrap>
                                     <Typography.Text strong>
