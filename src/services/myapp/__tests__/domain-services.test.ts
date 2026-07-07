@@ -53,8 +53,11 @@ import {
   createPurchaseOrderV2,
   createPurchaseOrderInvoice,
   getPurchaseCompanyContext,
+  getPurchaseInvoiceDetail,
+  getPurchaseOrderDetail,
   getPurchaseReturnSourceContext,
   getSupplierPurchaseContext,
+  purchaseOrderEditDisabledReason,
   quickCancelPurchaseOrderV2,
   quickCreatePurchaseOrderV2,
   receivePurchaseOrder,
@@ -1512,6 +1515,243 @@ describe('myapp domain services', () => {
       'get_customer_sales_context',
       { customer: 'CUST-0001' },
     );
+  });
+
+  it('maps purchase order detail latest payment entry', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: {
+          can_cancel_purchase_order: false,
+          can_create_purchase_invoice: true,
+          can_receive_purchase_order: true,
+          can_record_supplier_payment: true,
+        },
+        address: { address_display: 'Supplier address' },
+        amounts: {
+          order_amount_estimate: 120,
+          outstanding_amount: 20,
+          paid_amount: 100,
+        },
+        completion: { status: 'open' },
+        document_status: 'submitted',
+        items: [
+          {
+            item_code: 'SKU-1',
+            item_name: 'Camera',
+            name: 'POI-0001',
+            qty: 2,
+            received_qty: 1,
+            uom: 'Nos',
+            warehouse: 'Stores - RD',
+          },
+        ],
+        meta: {
+          company: 'rgc (Demo)',
+          currency: 'CNY',
+          transaction_date: '2026-06-04',
+        },
+        payment: {
+          actual_paid_amount: 100,
+          entries: [
+            {
+              actual_paid_amount: 100,
+              allocated_amount: 100,
+              invoice_name: 'PI-0001',
+              mode_of_payment: 'Bank',
+              payment_entry: 'PAY-0001',
+              posting_date: '2026-06-05',
+            },
+          ],
+          status: 'partial',
+        },
+        purchase_order_name: 'PO-0001',
+        receiving: { status: 'partial' },
+        references: {
+          latest_payment_entry: 'PAY-0001',
+          purchase_invoices: ['PI-0001'],
+          purchase_receipts: ['PR-0001'],
+        },
+        supplier: {
+          display_name: 'Supplier A',
+          name: 'SUP-0001',
+        },
+        timeline: [
+          {
+            amount: 120,
+            date: '2026-06-04',
+            docname: 'PO-0001',
+            doctype: 'Purchase Order',
+            key: 'purchase_order:PO-0001',
+            status: 'submitted',
+            title: '采购订单',
+            type: 'purchase_order',
+          },
+          {
+            amount: 100,
+            date: '2026-06-05',
+            docname: 'PAY-0001',
+            doctype: 'Payment Entry',
+            key: 'payment_entry:PAY-0001:PI-0001',
+            mode_of_payment: 'Bank',
+            related_docname: 'PI-0001',
+            related_doctype: 'Purchase Invoice',
+            status: 'submitted',
+            title: '供应商付款',
+            type: 'payment_entry',
+          },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const detail = await getPurchaseOrderDetail('PO-0001');
+
+    expect(detail).toMatchObject({
+      actualPaidAmount: 100,
+      latestPaymentEntry: 'PAY-0001',
+      paidAmount: 100,
+      paymentEntries: [
+        {
+          amount: 100,
+          modeOfPayment: 'Bank',
+          paymentEntry: 'PAY-0001',
+          referenceName: 'PI-0001',
+        },
+      ],
+      purchaseInvoices: ['PI-0001'],
+      purchaseReceipts: ['PR-0001'],
+      timeline: [
+        { docname: 'PO-0001', type: 'purchase_order' },
+        { docname: 'PAY-0001', relatedDocname: 'PI-0001', type: 'payment_entry' },
+      ],
+    });
+  });
+
+  it('blocks direct purchase order editing after downstream documents or settlement', () => {
+    const baseDetail = {
+      actualPaidAmount: 0,
+      amount: 100,
+      canCancelOrder: true,
+      canCreateInvoice: true,
+      canReceive: true,
+      canRecordPayment: true,
+      company: 'rgc (Demo)',
+      completionStatus: 'open',
+      currency: 'CNY',
+      documentStatus: 'submitted',
+      items: [],
+      latestPaymentEntry: '',
+      modified: '2026-07-04 10:00:00',
+      name: 'PO-0001',
+      outstandingAmount: 100,
+      paidAmount: 0,
+      paymentEntries: [],
+      paymentStatus: 'unpaid',
+      purchaseInvoices: [],
+      purchaseReceipts: [],
+      receivingStatus: 'pending',
+      remarks: '',
+      scheduleDate: '2026-07-11',
+      supplier: 'SUP-0001',
+      supplierAddressDisplay: '',
+      supplierContactDisplay: '',
+      supplierContactPhone: '',
+      supplierName: '供应商 A',
+      supplierRef: '',
+      timeline: [],
+      transactionDate: '2026-07-04',
+    };
+
+    expect(purchaseOrderEditDisabledReason(baseDetail)).toBe('');
+    expect(
+      purchaseOrderEditDisabledReason({
+        ...baseDetail,
+        documentStatus: 'cancelled',
+      }),
+    ).toContain('已作废');
+    expect(
+      purchaseOrderEditDisabledReason({
+        ...baseDetail,
+        purchaseReceipts: ['PR-0001'],
+      }),
+    ).toContain('采购收货单');
+    expect(
+      purchaseOrderEditDisabledReason({
+        ...baseDetail,
+        purchaseInvoices: ['PI-0001'],
+      }),
+    ).toContain('采购发票');
+    expect(
+      purchaseOrderEditDisabledReason({
+        ...baseDetail,
+        completionStatus: 'completed',
+        paymentStatus: 'paid',
+      }),
+    ).toContain('已完成并结清');
+  });
+
+  it('maps purchase invoice detail payment entries', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        actions: { can_cancel_purchase_invoice: true },
+        amounts: {
+          invoice_amount_estimate: 180,
+          outstanding_amount: 60,
+          paid_amount: 120,
+        },
+        document_status: 'submitted',
+        items: [],
+        meta: {
+          company: 'rgc (Demo)',
+          currency: 'CNY',
+          posting_date: '2026-06-05',
+        },
+        payment: {
+          entries: [
+            {
+              actual_paid_amount: 120,
+              allocated_amount: 120,
+              invoice_name: 'PINV-0001',
+              mode_of_payment: 'Bank',
+              payment_entry: 'PAY-0001',
+              posting_date: '2026-06-06',
+            },
+          ],
+          status: 'partial',
+        },
+        purchase_invoice_name: 'PINV-0001',
+        references: {
+          latest_payment_entry: 'PAY-0001',
+          purchase_orders: ['PO-0001'],
+          purchase_receipts: ['PR-0001'],
+        },
+        supplier: {
+          display_name: 'Supplier A',
+          name: 'SUP-0001',
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const detail = await getPurchaseInvoiceDetail('PINV-0001');
+
+    expect(detail).toMatchObject({
+      latestPaymentEntry: 'PAY-0001',
+      paidAmount: 120,
+      paymentEntries: [
+        {
+          amount: 120,
+          allocatedAmount: 120,
+          modeOfPayment: 'Bank',
+          paymentEntry: 'PAY-0001',
+          referenceName: 'PINV-0001',
+        },
+      ],
+      purchaseOrders: ['PO-0001'],
+      purchaseReceipts: ['PR-0001'],
+    });
   });
 
   it('maps supplier purchase context', async () => {

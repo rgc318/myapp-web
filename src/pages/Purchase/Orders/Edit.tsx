@@ -29,6 +29,7 @@ import {
   getPurchaseOrderDetail,
   type PurchaseDocumentItem,
   type PurchaseOrderDetail,
+  purchaseOrderEditDisabledReason,
   updatePurchaseOrderItemsV2,
   updatePurchaseOrderV2,
 } from '@/services/myapp/purchase';
@@ -139,6 +140,9 @@ const PurchaseOrderEditPage: React.FC = () => {
       const detail = await getPurchaseOrderDetail(orderName);
       if (!detail) {
         return null;
+      }
+      if (purchaseOrderEditDisabledReason(detail)) {
+        return detail;
       }
       const editableLines = await buildEditableLines(detail);
       form.setFieldsValue({
@@ -276,6 +280,35 @@ const PurchaseOrderEditPage: React.FC = () => {
     );
   }
 
+  const editDisabledReason = purchaseOrderEditDisabledReason(data);
+  if (editDisabledReason) {
+    return (
+      <PageContainer title={`编辑采购订单 ${orderName}`}>
+        <Result
+          extra={
+            <Space>
+              <Button
+                onClick={() =>
+                  history.push(
+                    `/purchase/orders/${encodeURIComponent(orderName)}`,
+                  )
+                }
+              >
+                返回订单详情
+              </Button>
+              <Button onClick={() => history.push('/purchase/orders')}>
+                返回列表
+              </Button>
+            </Space>
+          }
+          status="warning"
+          subTitle={editDisabledReason}
+          title="当前采购订单不能直接编辑"
+        />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer
       extra={[
@@ -292,7 +325,7 @@ const PurchaseOrderEditPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="保存会先更新订单日期、交货日期、供应商单号和备注，再替换商品明细；已收货或已开票订单可能被后端拒绝编辑。"
+          message="保存会先更新订单日期、交货日期、供应商单号和备注，再替换商品明细；只有未进入收货、开票或付款链路的订单允许直接编辑。"
           showIcon
           type="info"
         />

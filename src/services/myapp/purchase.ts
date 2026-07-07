@@ -121,6 +121,32 @@ export type QuickCancelPurchaseOrderResult = {
   orderName: string;
 };
 
+export type PurchaseOrderTimelineEvent = {
+  amount: number | null;
+  date: string;
+  description: string;
+  docname: string;
+  doctype: string;
+  key: string;
+  modeOfPayment: string;
+  outstandingAmount: number | null;
+  referenceNo: string;
+  relatedDocname: string;
+  relatedDoctype: string;
+  status: string;
+  title: string;
+  type: string;
+};
+
+export type PurchaseOrderPaymentEntry = {
+  allocatedAmount: number | null;
+  amount: number | null;
+  date: string;
+  modeOfPayment: string;
+  paymentEntry: string;
+  referenceName: string;
+};
+
 export type PurchaseReturnSourceDoctype =
   | 'Purchase Receipt'
   | 'Purchase Invoice';
@@ -232,7 +258,9 @@ export type PurchaseOrderDetail = PurchaseOrderSummary & {
   canRecordPayment: boolean;
   currency: string;
   items: PurchaseDocumentItem[];
+  latestPaymentEntry: string;
   paidAmount: number | null;
+  paymentEntries: PurchaseOrderPaymentEntry[];
   purchaseInvoices: string[];
   purchaseReceipts: string[];
   remarks: string;
@@ -241,12 +269,41 @@ export type PurchaseOrderDetail = PurchaseOrderSummary & {
   supplierContactDisplay: string;
   supplierContactPhone: string;
   supplierRef: string;
+  timeline: PurchaseOrderTimelineEvent[];
 };
+
+export function purchaseOrderEditDisabledReason(
+  detail: PurchaseOrderDetail | null,
+) {
+  if (!detail) {
+    return '未能加载采购订单，不能编辑';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已作废，不能编辑';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交且未进入下游流程的采购订单才能编辑';
+  }
+  if (detail.completionStatus === 'completed') {
+    return '订单已完成并结清，不能直接编辑；如需改错，请先按回退流程处理下游单据';
+  }
+  if (detail.paymentStatus === 'paid') {
+    return '订单已结清，不能直接编辑；如需改错，请先取消供应商付款并回退下游单据';
+  }
+  if (detail.purchaseInvoices.length) {
+    return '订单已存在采购发票，不能直接编辑；请先作废采购发票后再回退修改';
+  }
+  if (detail.purchaseReceipts.length) {
+    return '订单已存在采购收货单，不能直接编辑；请先取消采购收货单后再回退修改';
+  }
+  return '';
+}
 
 export type PurchaseReceiptDetail = {
   amount: number | null;
   canCreateInvoice: boolean;
   canCancel: boolean;
+  cancelPurchaseReceiptHint: string;
   company: string;
   currency: string;
   documentStatus: string;
@@ -274,6 +331,7 @@ export type PurchaseInvoiceDetail = {
   name: string;
   outstandingAmount: number | null;
   paidAmount: number | null;
+  paymentEntries: PurchaseOrderPaymentEntry[];
   paymentStatus: string;
   postingDate: string;
   purchaseOrders: string[];
@@ -399,6 +457,74 @@ function normalizeReferences(value: unknown) {
     },
     {},
   );
+}
+
+function normalizePurchaseOrderTimeline(
+  value: unknown,
+): PurchaseOrderTimelineEvent[] {
+  return Array.isArray(value)
+    ? value
+        .map((event) => {
+          const row = readObject(event);
+          const key = String(
+            row.key ?? `${row.type ?? 'event'}:${row.docname ?? ''}`,
+          );
+          if (!key) {
+            return null;
+          }
+          return {
+            amount: toOptionalNumber(row.amount),
+            date: String(row.date ?? row.datetime ?? ''),
+            description: String(row.description ?? ''),
+            docname: String(row.docname ?? ''),
+            doctype: String(row.doctype ?? ''),
+            key,
+            modeOfPayment: String(row.mode_of_payment ?? ''),
+            outstandingAmount: toOptionalNumber(row.outstanding_amount),
+            referenceNo: String(row.reference_no ?? ''),
+            relatedDocname: String(row.related_docname ?? ''),
+            relatedDoctype: String(row.related_doctype ?? ''),
+            status: String(row.status ?? ''),
+            title: String(row.title ?? ''),
+            type: String(row.type ?? ''),
+          } satisfies PurchaseOrderTimelineEvent;
+        })
+        .filter(
+          (
+            event: PurchaseOrderTimelineEvent | null,
+          ): event is PurchaseOrderTimelineEvent => Boolean(event),
+        )
+    : [];
+}
+
+function normalizePurchaseOrderPaymentEntries(
+  value: unknown,
+): PurchaseOrderPaymentEntry[] {
+  return Array.isArray(value)
+    ? value
+        .map((entry) => {
+          const row = readObject(entry);
+          const paymentEntry = String(row.payment_entry ?? '');
+          if (!paymentEntry) {
+            return null;
+          }
+          return {
+            allocatedAmount: toOptionalNumber(row.allocated_amount),
+            amount: toOptionalNumber(
+              row.actual_paid_amount ?? row.paid_amount ?? row.allocated_amount,
+            ),
+            date: String(row.posting_date ?? ''),
+            modeOfPayment: String(row.mode_of_payment ?? ''),
+            paymentEntry,
+            referenceName: String(row.invoice_name ?? ''),
+          } satisfies PurchaseOrderPaymentEntry;
+        })
+        .filter(
+          (
+            entry: PurchaseOrderPaymentEntry | null,
+          ): entry is PurchaseOrderPaymentEntry => Boolean(entry),
+        )
+    : [];
 }
 
 function normalizeSupplierRefundInvoiceSnapshot(
@@ -559,7 +685,9 @@ export async function getPurchaseOrderDetail(
     canRecordPayment: Boolean(actions.can_record_supplier_payment),
     currency: String(meta.currency ?? 'CNY'),
     items: mapItems(data.items),
+    latestPaymentEntry: String(references.latest_payment_entry ?? ''),
     paidAmount: toOptionalNumber(amounts.paid_amount),
+    paymentEntries: normalizePurchaseOrderPaymentEntries(payment.entries),
     purchaseInvoices: toStringList(references.purchase_invoices),
     purchaseReceipts: toStringList(references.purchase_receipts),
     remarks: String(meta.remarks ?? ''),
@@ -572,6 +700,7 @@ export async function getPurchaseOrderDetail(
     ),
     supplierContactPhone: String(supplier.contact_phone ?? ''),
     supplierRef: String(meta.supplier_ref ?? ''),
+    timeline: normalizePurchaseOrderTimeline(data.timeline),
   };
 }
 
@@ -691,6 +820,9 @@ export async function getPurchaseReceiptDetail(
     amount: toOptionalNumber(amounts.receipt_amount_estimate),
     canCancel: Boolean(actions.can_cancel_purchase_receipt),
     canCreateInvoice: Boolean(actions.can_create_purchase_invoice),
+    cancelPurchaseReceiptHint: String(
+      actions.cancel_purchase_receipt_hint ?? '',
+    ),
     company: String(meta.company ?? ''),
     currency: String(meta.currency ?? 'CNY'),
     documentStatus: String(data.document_status ?? ''),
@@ -738,6 +870,7 @@ export async function getPurchaseInvoiceDetail(
     name: String(data.purchase_invoice_name ?? invoiceName),
     outstandingAmount: toOptionalNumber(amounts.outstanding_amount),
     paidAmount: toOptionalNumber(amounts.paid_amount),
+    paymentEntries: normalizePurchaseOrderPaymentEntries(payment.entries),
     paymentStatus: String(payment.status ?? ''),
     postingDate: String(meta.posting_date ?? ''),
     purchaseOrders: toStringList(references.purchase_orders),
