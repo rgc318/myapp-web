@@ -1,1 +1,2 @@
 export const SALES_RETURN_REFUND_ENTRY_ENABLED = false;
+export const PURCHASE_RETURN_REFUND_ENTRY_ENABLED = false;

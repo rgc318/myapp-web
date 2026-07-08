@@ -32,6 +32,7 @@ import {
   type PurchaseOrderSummary,
   searchPurchaseOrders,
 } from '@/services/myapp/purchase';
+import { downloadCsv } from '@/utils/csv-export';
 import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
 
 const PAGE_SIZE = 20;
@@ -136,29 +137,6 @@ function statusTabLabel(
       ) : null}
     </Space>
   );
-}
-
-function escapeCsvValue(value: unknown) {
-  const text = String(value ?? '');
-  if (/[",\n\r]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-  return text;
-}
-
-function downloadCsv(filename: string, rows: Array<Array<unknown>>) {
-  const csvText = rows
-    .map((row) => row.map((value) => escapeCsvValue(value)).join(','))
-    .join('\n');
-  const blob = new Blob([`\uFEFF${csvText}`], {
-    type: 'text/csv;charset=utf-8;',
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function buildPurchaseOrdersCsvRows(rows: PurchaseOrderSummary[]) {

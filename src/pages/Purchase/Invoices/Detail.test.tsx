@@ -83,12 +83,16 @@ jest.mock('@umijs/max', () => ({
   },
 }));
 
-jest.mock('@/components/InvoicePaymentForm', () => ({
-  InvoicePaymentForm: () => {
-    const React = jest.requireActual('react');
-    return React.createElement('div', null, '付款表单');
-  },
-}));
+jest.mock('@/components/InvoicePaymentForm', () => {
+  const actual = jest.requireActual('@/components/InvoicePaymentForm');
+  return {
+    ...actual,
+    InvoicePaymentForm: () => {
+      const React = jest.requireActual('react');
+      return React.createElement('div', null, '付款表单');
+    },
+  };
+});
 
 jest.mock('@/components/PrintDocumentButton', () => ({
   PrintDocumentButton: () => {

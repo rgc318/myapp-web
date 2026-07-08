@@ -1,5 +1,6 @@
 import {
   Button,
+  Image,
   InputNumber,
   Popconfirm,
   Select,
@@ -100,18 +101,47 @@ export function PurchaseOrderLinesTable({
     {
       dataIndex: 'itemName',
       render: (_, record) => (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{record.itemName}</Typography.Text>
-          <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
-          {record.specification ? (
+        <Space align="start" size={12}>
+          {record.imageUrl ? (
+            <Image
+              alt={record.itemName || record.itemCode}
+              height={48}
+              preview={false}
+              src={record.imageUrl}
+              style={{ objectFit: 'cover' }}
+              width={48}
+            />
+          ) : (
+            <div
+              style={{
+                alignItems: 'center',
+                background: '#f5f5f5',
+                border: '1px solid #f0f0f0',
+                color: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                height: 48,
+                justifyContent: 'center',
+                width: 48,
+              }}
+            >
+              无图
+            </div>
+          )}
+          <Space orientation="vertical" size={0}>
+            <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">
-              {record.specification}
+              {record.itemCode}
             </Typography.Text>
-          ) : null}
+            {record.specification ? (
+              <Typography.Text type="secondary">
+                {record.specification}
+              </Typography.Text>
+            ) : null}
+          </Space>
         </Space>
       ),
       title: '商品',
-      width: 260,
+      width: 320,
     },
     {
       dataIndex: 'qty',
@@ -121,7 +151,7 @@ export function PurchaseOrderLinesTable({
           onChange={(nextValue) => {
             updateLine(record.key, { qty: Number(nextValue ?? 0) });
           }}
-          precision={3}
+          step={1}
           style={{ width: '100%' }}
           value={record.qty}
         />
@@ -167,7 +197,7 @@ export function PurchaseOrderLinesTable({
         <RemoteLinkSelect
           doctype="Warehouse"
           extraFields={['company']}
-          filters={{ company }}
+          filters={{ company, disabled: 0, is_group: 0 }}
           onChange={(nextWarehouse) => {
             updateLine(record.key, { warehouse: nextWarehouse });
           }}
@@ -282,7 +312,10 @@ export function PurchaseOrderLinesTable({
         );
         const availableWarehouseRows =
           leadRow.warehouseStockDetails?.filter(
-            (entry) => entry.warehouse && !groupWarehouses.has(entry.warehouse),
+            (entry) =>
+              entry.warehouse &&
+              !entry.warehouse.toLowerCase().startsWith('all warehouses') &&
+              !groupWarehouses.has(entry.warehouse),
           ) ?? [];
 
         return (
@@ -350,17 +383,21 @@ export function PurchaseOrderLinesTable({
             {availableWarehouseRows.length ? (
               <div
                 style={{
+                  background: '#fcfcfc',
                   borderTop: '1px solid #f0f0f0',
-                  padding: '8px 16px',
+                  padding: '6px 16px',
                 }}
               >
                 <Space wrap size={[8, 8]}>
-                  <Typography.Text type="secondary">分仓库存</Typography.Text>
+                  <Typography.Text type="secondary">
+                    可拆分到已有库存仓
+                  </Typography.Text>
                   {availableWarehouseRows.slice(0, 8).map((entry) => (
                     <Button
                       key={entry.warehouse}
                       onClick={() => addWarehouseLine(leadRow, entry.warehouse)}
                       size="small"
+                      type="link"
                     >
                       {entry.warehouse} · {formatQty(entry.qty)}{' '}
                       {stockUomDisplay}

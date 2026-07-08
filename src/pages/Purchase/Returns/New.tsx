@@ -22,6 +22,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   getPurchaseReturnSourceContext,
   type PurchaseReturnSourceContext,
@@ -77,7 +78,22 @@ function estimateLineAmount(line: ReturnLine) {
   return (line.amount / maxQty) * line.returnQty;
 }
 
-const PurchaseReturnNewPage: React.FC = () => {
+const PurchaseReturnDisabledPage: React.FC = () => (
+  <PageContainer title="采购退货">
+    <Result
+      extra={[
+        <Button key="orders" onClick={() => history.push('/purchase/orders')}>
+          返回采购订单
+        </Button>,
+      ]}
+      status="info"
+      subTitle="Web 端已暂停直接发起采购退货。当前业务改错请从采购订单使用“回退并修改订单”，或进入采购发票/采购收货单详情按顺序作废相关单据。"
+      title="采购退货入口已暂停"
+    />
+  </PageContainer>
+);
+
+const PurchaseReturnFormPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const initialSourceDoctype =
@@ -489,5 +505,12 @@ const PurchaseReturnNewPage: React.FC = () => {
     </PageContainer>
   );
 };
+
+const PurchaseReturnNewPage: React.FC = () =>
+  PURCHASE_RETURN_REFUND_ENTRY_ENABLED ? (
+    <PurchaseReturnFormPage />
+  ) : (
+    <PurchaseReturnDisabledPage />
+  );
 
 export default PurchaseReturnNewPage;

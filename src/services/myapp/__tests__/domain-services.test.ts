@@ -1526,7 +1526,12 @@ describe('myapp domain services', () => {
           can_receive_purchase_order: true,
           can_record_supplier_payment: true,
         },
-        address: { address_display: 'Supplier address' },
+        address: {
+          address_display: 'Supplier address<br>Hangzhou<br>China<br>',
+          address_line1: 'Supplier address',
+          city: 'Hangzhou',
+          country: 'China',
+        },
         amounts: {
           order_amount_estimate: 120,
           outstanding_amount: 20,
@@ -1538,7 +1543,9 @@ describe('myapp domain services', () => {
           {
             item_code: 'SKU-1',
             item_name: 'Camera',
+            billed_qty: 1,
             name: 'POI-0001',
+            pending_billing_qty: 1,
             qty: 2,
             received_qty: 1,
             uom: 'Nos',
@@ -1611,6 +1618,13 @@ describe('myapp domain services', () => {
       actualPaidAmount: 100,
       latestPaymentEntry: 'PAY-0001',
       paidAmount: 100,
+      items: [
+        {
+          billedQty: 1,
+          pendingBillingQty: 1,
+          purchaseOrderItem: 'POI-0001',
+        },
+      ],
       paymentEntries: [
         {
           amount: 100,
@@ -1621,6 +1635,7 @@ describe('myapp domain services', () => {
       ],
       purchaseInvoices: ['PI-0001'],
       purchaseReceipts: ['PR-0001'],
+      supplierAddressDisplay: 'Supplier address\nHangzhou\nChina',
       timeline: [
         { docname: 'PO-0001', type: 'purchase_order' },
         { docname: 'PAY-0001', relatedDocname: 'PI-0001', type: 'payment_entry' },

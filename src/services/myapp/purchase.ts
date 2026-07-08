@@ -6,6 +6,7 @@ import {
   toOptionalText,
   toStringList,
 } from './api-utils';
+import { resolveMediaUrl } from './media-url';
 import { runGatewayMutation } from './mutation';
 
 export type PurchaseOrderStatusFilter =
@@ -64,11 +65,15 @@ export type SearchPurchaseOrdersParams = {
 
 export type PurchaseDocumentItem = {
   amount: number | null;
+  billedAmt?: number | null;
+  billedQty?: number | null;
+  imageUrl?: string;
   itemCode: string;
   itemName: string;
   purchaseOrderItem: string;
   qty: number | null;
   rate: number | null;
+  pendingBillingQty?: number | null;
   receivedQty?: number | null;
   uom: string;
   uomDisplay: string | null;
@@ -272,6 +277,45 @@ export type PurchaseOrderDetail = PurchaseOrderSummary & {
   timeline: PurchaseOrderTimelineEvent[];
 };
 
+function normalizeDocumentText(value: unknown) {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<(p|div)\b[^>]*>/gi, '\n')
+    .replace(/<\/p\s*>/gi, '\n')
+    .replace(/<\/div\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(
+      /&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,
+      (match, entity) => {
+        const normalized = String(entity).toLowerCase();
+        if (normalized.startsWith('#x')) {
+          return String.fromCodePoint(Number.parseInt(normalized.slice(2), 16));
+        }
+        if (normalized.startsWith('#')) {
+          return String.fromCodePoint(Number.parseInt(normalized.slice(1), 10));
+        }
+        const namedEntities: Record<string, string> = {
+          amp: '&',
+          apos: "'",
+          gt: '>',
+          lt: '<',
+          nbsp: ' ',
+          quot: '"',
+        };
+        return namedEntities[normalized] ?? match;
+      },
+    )
+    .replace(/\u00a0/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function purchaseOrderEditDisabledReason(
   detail: PurchaseOrderDetail | null,
 ) {
@@ -420,9 +464,21 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
   return Array.isArray(value)
     ? value.map((item: Record<string, any>) => ({
         amount: toOptionalNumber(item.amount),
+        billedAmt: toOptionalNumber(item.billed_amt),
+        billedQty: toOptionalNumber(item.billed_qty),
+        imageUrl: resolveMediaUrl(
+          typeof item.image === 'string'
+            ? item.image
+            : typeof item.image_url === 'string'
+              ? item.image_url
+              : typeof item.item_image === 'string'
+                ? item.item_image
+                : '',
+        ),
         itemCode: String(item.item_code ?? ''),
         itemName: String(item.item_name ?? item.item_code ?? ''),
         purchaseOrderItem: String(item.purchase_order_item ?? item.name ?? ''),
+        pendingBillingQty: toOptionalNumber(item.pending_billing_qty),
         qty: toOptionalNumber(item.qty),
         rate: toOptionalNumber(item.rate),
         receivedQty: toOptionalNumber(item.received_qty),
@@ -692,9 +748,22 @@ export async function getPurchaseOrderDetail(
     purchaseReceipts: toStringList(references.purchase_receipts),
     remarks: String(meta.remarks ?? ''),
     scheduleDate: String(meta.schedule_date ?? ''),
-    supplierAddressDisplay: String(
-      address.supplier_address_text ?? address.address_display ?? '',
-    ),
+    supplierAddressDisplay:
+      [
+        address.address_line1,
+        address.address_line2,
+        address.city,
+        address.county,
+        address.state,
+        address.country,
+        address.pincode,
+      ]
+        .map(normalizeDocumentText)
+        .filter(Boolean)
+        .join('\n') ||
+      normalizeDocumentText(
+        address.supplier_address_text ?? address.address_display,
+      ),
     supplierContactDisplay: String(
       supplier.contact_display_name ?? supplier.contact_person ?? '',
     ),
@@ -748,7 +817,7 @@ export async function getSupplierPurchaseContext(
       ? {
           addressDisplay:
             typeof defaultAddress.address_display === 'string'
-              ? defaultAddress.address_display
+              ? normalizeDocumentText(defaultAddress.address_display)
               : null,
           name:
             typeof defaultAddress.name === 'string' ? defaultAddress.name : null,

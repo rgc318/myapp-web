@@ -21,6 +21,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelPurchaseReceipt,
   createPurchaseInvoiceFromReceipt,
@@ -212,6 +213,7 @@ const PurchaseReceiptDetailPage: React.FC = () => {
         >
           创建采购发票
         </Button>,
+        PURCHASE_RETURN_REFUND_ENTRY_ENABLED &&
         data?.documentStatus !== 'cancelled' ? (
           <Button
             key="return"

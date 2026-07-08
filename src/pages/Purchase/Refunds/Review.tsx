@@ -14,12 +14,14 @@ import {
   InputNumber,
   Modal,
   message,
+  Result,
   Skeleton,
   Space,
   Typography,
 } from 'antd';
 import React, { useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelSupplierPaymentEntry,
   createSupplierRefund,
@@ -42,7 +44,22 @@ function paymentEntryPath(name: string) {
   return `/payments/${encodeURIComponent(name)}`;
 }
 
-const PurchaseRefundReviewPage: React.FC = () => {
+const PurchaseRefundReviewDisabledPage: React.FC = () => (
+  <PageContainer title="采购退款核对">
+    <Result
+      extra={[
+        <Button key="orders" onClick={() => history.push('/purchase/orders')}>
+          返回采购订单
+        </Button>,
+      ]}
+      status="info"
+      subTitle="Web 端已暂停直接登记供应商退款。当前业务改错请从采购订单使用“回退并修改订单”，或进入采购发票详情取消相关付款后再处理。"
+      title="采购退款入口已暂停"
+    />
+  </PageContainer>
+);
+
+const PurchaseRefundReviewFormPage: React.FC = () => {
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const [form] = Form.useForm<FormValues>();
@@ -561,5 +578,12 @@ const PurchaseRefundReviewPage: React.FC = () => {
     </PageContainer>
   );
 };
+
+const PurchaseRefundReviewPage: React.FC = () =>
+  PURCHASE_RETURN_REFUND_ENTRY_ENABLED ? (
+    <PurchaseRefundReviewFormPage />
+  ) : (
+    <PurchaseRefundReviewDisabledPage />
+  );
 
 export default PurchaseRefundReviewPage;

@@ -1,5 +1,9 @@
 import { SaveOutlined } from '@ant-design/icons';
-import { PageContainer, ProCard } from '@ant-design/pro-components';
+import {
+  FooterToolbar,
+  PageContainer,
+  ProCard,
+} from '@ant-design/pro-components';
 import { history, useParams, useRequest } from '@umijs/max';
 import {
   Alert,
@@ -9,6 +13,7 @@ import {
   Input,
   message,
   Result,
+  Select,
   Skeleton,
   Space,
   Typography,
@@ -41,6 +46,7 @@ import {
   type PurchaseOrderEditorLine,
   recalculatePurchaseOrderLine,
 } from '@/utils/purchase-order-editor';
+import type { SalesMode } from '@/utils/sales-order-editor';
 
 type FormValues = {
   addressDisplay?: string;
@@ -48,12 +54,34 @@ type FormValues = {
   contactDisplayName?: string;
   contactPhone?: string;
   currency?: string;
+  defaultPurchaseMode: SalesMode;
   remarks?: string;
   scheduleDate: dayjs.Dayjs;
   supplier: string;
   supplierRef?: string;
   transactionDate: dayjs.Dayjs;
   warehouse?: string;
+};
+const footerContentStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: 16,
+  justifyContent: 'space-between',
+  margin: '0 auto',
+  maxWidth: 1488,
+  padding: '0 24px',
+  width: '100%',
+};
+const footerSummaryStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flex: '1 1 auto',
+  flexWrap: 'wrap',
+  gap: '8px 24px',
+  minWidth: 0,
+};
+const footerActionsStyle: React.CSSProperties = {
+  flex: '0 0 auto',
 };
 
 function dateValue(value: string) {
@@ -71,11 +99,16 @@ function fallbackLineFromItem(
     allUomDisplays,
     allUoms: uom ? [uom] : [],
     amount: item.amount ?? 0,
+    imageUrl: item.imageUrl,
     itemCode: item.itemCode,
     itemName: item.itemName || item.itemCode,
     key:
       item.purchaseOrderItem ||
       `${item.itemCode}:${item.warehouse || 'default'}`,
+    modeDefaults: {
+      retail: { uom },
+      wholesale: { uom },
+    },
     price,
     qty: item.qty ?? 1,
     standardBuyingRate: null,
@@ -114,6 +147,7 @@ async function buildEditableLines(detail: PurchaseOrderDetail) {
         product,
       }),
       amount: item.amount ?? 0,
+      imageUrl: product.imageUrl || item.imageUrl,
       key:
         item.purchaseOrderItem ||
         `${item.itemCode}:${item.warehouse || 'default'}`,
@@ -132,8 +166,18 @@ const PurchaseOrderEditPage: React.FC = () => {
   const [lines, setLines] = useState<PurchaseOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const company = Form.useWatch('company', form);
+  const defaultPurchaseMode =
+    Form.useWatch('defaultPurchaseMode', form) ?? 'wholesale';
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getPurchaseOrderLinesTotal(lines), [lines]);
+  const totalQty = useMemo(
+    () =>
+      lines.reduce(
+        (sum, line) => sum + (Number.isFinite(line.qty) ? line.qty : 0),
+        0,
+      ),
+    [lines],
+  );
 
   const { data, error, loading } = useRequest(
     async () => {
@@ -151,6 +195,7 @@ const PurchaseOrderEditPage: React.FC = () => {
         contactDisplayName: detail.supplierContactDisplay,
         contactPhone: detail.supplierContactPhone,
         currency: detail.currency,
+        defaultPurchaseMode: 'wholesale',
         remarks: detail.remarks,
         scheduleDate: dateValue(detail.scheduleDate),
         supplier: detail.supplier,
@@ -166,6 +211,7 @@ const PurchaseOrderEditPage: React.FC = () => {
 
   const addProduct = (product: ProductSummary) => {
     const nextLine = buildPurchaseOrderLineFromProduct({
+      defaultMode: defaultPurchaseMode,
       defaultWarehouse: warehouse,
       product,
     });
@@ -191,6 +237,7 @@ const PurchaseOrderEditPage: React.FC = () => {
       const nextLines = [...current];
       productLines.forEach((productLine) => {
         const baseLine = buildPurchaseOrderLineFromProduct({
+          defaultMode: productLine.salesMode ?? defaultPurchaseMode,
           defaultWarehouse: productLine.warehouse || warehouse,
           product: productLine.product,
         });
@@ -217,6 +264,17 @@ const PurchaseOrderEditPage: React.FC = () => {
       });
       return nextLines;
     });
+  };
+
+  const applyDefaultModeToLines = (nextMode: SalesMode) => {
+    setLines((current) =>
+      current.map((line) =>
+        recalculatePurchaseOrderLine({
+          ...line,
+          uom: line.modeDefaults[nextMode]?.uom || line.uom,
+        }),
+      ),
+    );
   };
 
   const submitOrder = async () => {
@@ -352,12 +410,23 @@ const PurchaseOrderEditPage: React.FC = () => {
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
-                  filters={{ company }}
+                  filters={{ company, disabled: 0, is_group: 0 }}
                   placeholder="搜索仓库"
                 />
               </Form.Item>
               <Form.Item label="币种" name="currency">
                 <Input disabled />
+              </Form.Item>
+              <Form.Item label="默认取值模式" name="defaultPurchaseMode">
+                <Select
+                  onChange={(nextMode: SalesMode) => {
+                    applyDefaultModeToLines(nextMode);
+                  }}
+                  options={[
+                    { label: '批发', value: 'wholesale' },
+                    { label: '零售', value: 'retail' },
+                  ]}
+                />
               </Form.Item>
               <Form.Item
                 label="订单日期"
@@ -396,6 +465,7 @@ const PurchaseOrderEditPage: React.FC = () => {
           extra={
             <ProductSelect
               company={company}
+              defaultSalesMode={defaultPurchaseMode}
               itemContext="purchase"
               selectedProductKeys={lines.map((line) => line.itemCode)}
               selectedProductLines={lines}
@@ -414,13 +484,48 @@ const PurchaseOrderEditPage: React.FC = () => {
             onChange={setLines}
           />
         </ProCard>
-
-        <ProCard>
-          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-            <Typography.Text type="secondary">
-              共 {lines.length} 个商品，总金额{' '}
-              {formatCurrencyValue(totalAmount)}
-            </Typography.Text>
+      </Space>
+      <FooterToolbar>
+        <div style={footerContentStyle}>
+          <div style={footerSummaryStyle}>
+            <Space size={8}>
+              <Typography.Text type="secondary">行数</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {lines.length}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">数量</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {totalQty}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">总金额</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#f5222d', fontSize: 20 }}
+              >
+                {formatCurrencyValue(totalAmount)}
+              </Typography.Text>
+            </Space>
+          </div>
+          <Space style={footerActionsStyle}>
+            <Button
+              onClick={() =>
+                history.push(
+                  `/purchase/orders/${encodeURIComponent(orderName)}`,
+                )
+              }
+            >
+              取消
+            </Button>
             <Button
               icon={<SaveOutlined />}
               loading={submitting}
@@ -430,8 +535,8 @@ const PurchaseOrderEditPage: React.FC = () => {
               保存修改
             </Button>
           </Space>
-        </ProCard>
-      </Space>
+        </div>
+      </FooterToolbar>
     </PageContainer>
   );
 };

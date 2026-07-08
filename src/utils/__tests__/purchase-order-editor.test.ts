@@ -1,5 +1,8 @@
 import type { PurchaseOrderEditorLine } from '../purchase-order-editor';
-import { getPurchaseOrderLineMergeKey } from '../purchase-order-editor';
+import {
+  buildPurchaseOrderLineFromProduct,
+  getPurchaseOrderLineMergeKey,
+} from '../purchase-order-editor';
 
 const line: PurchaseOrderEditorLine = {
   allUomDisplays: { Box: '箱', Nos: '个' },
@@ -8,6 +11,10 @@ const line: PurchaseOrderEditorLine = {
   itemCode: 'SKU-1',
   itemName: '测试商品',
   key: 'SKU-1:Stores - RD',
+  modeDefaults: {
+    retail: { uom: 'Nos' },
+    wholesale: { uom: 'Box' },
+  },
   price: 100,
   qty: 1,
   standardBuyingRate: 100,
@@ -40,5 +47,39 @@ describe('purchase order editor utils', () => {
     expect(getPurchaseOrderLineMergeKey({ ...line, price: 88 })).not.toBe(
       getPurchaseOrderLineMergeKey(line),
     );
+  });
+
+  it('uses the selected sales profile unit as purchase line default', () => {
+    const product = {
+      allUomDisplays: { Box: '箱', Nos: '个' },
+      allUoms: ['Nos', 'Box'],
+      itemCode: 'SKU-1',
+      itemName: '测试商品',
+      priceSummary: { standardBuyingRate: 80 },
+      retailDefaultUom: 'Nos',
+      salesProfiles: [],
+      specification: '',
+      stockUom: 'Nos',
+      uom: 'Nos',
+      uomConversions: [
+        { conversionFactor: 1, uom: 'Nos' },
+        { conversionFactor: 12, uom: 'Box' },
+      ],
+      warehouseStockDetails: [],
+      wholesaleDefaultUom: 'Box',
+    } as any;
+
+    expect(
+      buildPurchaseOrderLineFromProduct({
+        defaultMode: 'wholesale',
+        product,
+      }).uom,
+    ).toBe('Box');
+    expect(
+      buildPurchaseOrderLineFromProduct({
+        defaultMode: 'retail',
+        product,
+      }).uom,
+    ).toBe('Nos');
   });
 });

@@ -9,26 +9,31 @@ import {
   DatePicker,
   Descriptions,
   Empty,
-  Image,
   Input,
   Modal,
   message,
-  Progress,
   Row,
   Skeleton,
   Space,
-  Statistic,
   Steps,
-  Timeline,
   Tooltip,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AmountOverview,
+  BusinessTimeline,
+  buildTransactionItemColumns,
+} from '@/components/BusinessOrderDetail';
+import {
+  buildPaymentActionColumn,
+  buildPaymentEntryColumns,
+} from '@/components/BusinessPaymentTables';
 import { SalesRollbackGuide } from '@/components/DownstreamRollbackGuide';
 import {
-  type InvoicePaymentDraft,
   InvoicePaymentForm,
+  useInvoicePaymentModal,
 } from '@/components/InvoicePaymentForm';
 import {
   buildLineQtyRow,
@@ -52,65 +57,21 @@ import {
   submitSalesOrderDelivery,
 } from '@/services/myapp/sales';
 import {
+  DocumentLinks,
+  isCancelledStatus,
+  TimelineDocumentLinks,
+} from '@/utils/business-document';
+import {
   formatCurrencyCode,
   formatCurrencyValue,
-  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
-
-function docLinks(values: string[], basePath: string) {
-  return values.length
-    ? values.map((name, index) => (
-        <React.Fragment key={name}>
-          {index > 0 ? '、' : null}
-          <Link to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link>
-        </React.Fragment>
-      ))
-    : '无';
-}
 
 function timelineDocLinks(
   events: SalesOrderTimelineEvent[],
   type: SalesOrderTimelineEvent['type'],
 ) {
-  const documents = events
-    .filter((event) => event.type === type && event.docname)
-    .map((event) => ({
-      docname: event.docname,
-      path: documentPath(event.doctype, event.docname),
-    }));
-
-  return documents.length
-    ? documents.map((document, index) => (
-        <React.Fragment key={`${type}-${document.docname}`}>
-          {index > 0 ? '、' : null}
-          {document.path ? (
-            <Link to={document.path}>{document.docname}</Link>
-          ) : (
-            document.docname
-          )}
-        </React.Fragment>
-      ))
-    : '无';
-}
-
-function documentPath(doctype: string, docname: string) {
-  if (!docname) {
-    return '';
-  }
-  if (doctype === 'Delivery Note') {
-    return `/sales/delivery-notes/${encodeURIComponent(docname)}`;
-  }
-  if (doctype === 'Sales Invoice') {
-    return `/sales/invoices/${encodeURIComponent(docname)}`;
-  }
-  if (doctype === 'Payment Entry') {
-    return `/payments/${encodeURIComponent(docname)}`;
-  }
-  if (doctype === 'Sales Order') {
-    return `/sales/orders/${encodeURIComponent(docname)}`;
-  }
-  return '';
+  return <TimelineDocumentLinks events={events} type={type} />;
 }
 
 type SalesReturnSourceOption = {
@@ -172,34 +133,8 @@ function timelineColor(event: SalesOrderTimelineEvent) {
   return 'blue';
 }
 
-function timelineEventDescription(
-  event: SalesOrderTimelineEvent,
-  currency: string,
-) {
-  const pieces = [
-    event.date,
-    event.description,
-    event.amount != null ? formatCurrencyValue(event.amount, currency) : '',
-    event.modeOfPayment,
-    event.referenceNo ? `参考号 ${event.referenceNo}` : '',
-  ].filter(Boolean);
-
-  return pieces.join(' · ');
-}
-
 function toQty(value: number | null | undefined) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
-}
-
-function toPercent(
-  value: number | null | undefined,
-  total: number | null | undefined,
-) {
-  const totalValue = toQty(total);
-  if (totalValue <= 0) {
-    return 0;
-  }
-  return Math.min(Math.round((toQty(value) / totalValue) * 100), 100);
 }
 
 function getErrorMessage(error: unknown, fallback = '操作失败') {
@@ -277,7 +212,7 @@ function hasRollbackableDownstream(detail: SalesOrderDetail) {
     ) {
       return false;
     }
-    return !['cancelled', 'canceled', '已作废'].includes(event.status);
+    return !isCancelledStatus(event.status);
   });
 }
 
@@ -305,7 +240,7 @@ function getRollbackPaymentEntries(
         event.type === 'payment_entry' &&
         event.docname &&
         !cancelledPaymentEntries.has(event.docname) &&
-        !['cancelled', 'canceled', '已作废'].includes(event.status),
+        !isCancelledStatus(event.status),
     )
     .map((event) => ({
       amount: event.amount,
@@ -503,99 +438,11 @@ function salesOrderProgress(detail: SalesOrderDetail) {
   };
 }
 
-const itemColumns = [
-  {
-    title: '商品信息',
-    dataIndex: 'itemName',
-    width: 320,
-    render: (_: unknown, record: SalesOrderDetailItem) => (
-      <Space align="start" size={12}>
-        {record.imageUrl ? (
-          <Image
-            alt={record.itemName || record.itemCode}
-            height={56}
-            preview={false}
-            src={record.imageUrl}
-            style={{ objectFit: 'cover' }}
-            width={56}
-          />
-        ) : (
-          <div
-            style={{
-              alignItems: 'center',
-              background: '#f5f5f5',
-              border: '1px solid #f0f0f0',
-              color: 'rgba(0, 0, 0, 0.45)',
-              display: 'flex',
-              height: 56,
-              justifyContent: 'center',
-              width: 56,
-            }}
-          >
-            无图
-          </div>
-        )}
-        <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{record.itemName}</Typography.Text>
-          <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
-          {record.specification ? (
-            <Typography.Text type="secondary">
-              {record.specification}
-            </Typography.Text>
-          ) : null}
-          {record.warehouse ? (
-            <Typography.Text type="secondary">
-              {record.warehouse}
-            </Typography.Text>
-          ) : null}
-        </Space>
-      </Space>
-    ),
-  },
-  {
-    title: '数量',
-    dataIndex: 'qty',
-    align: 'right' as const,
-    width: 100,
-  },
-  {
-    title: '已发数量',
-    dataIndex: 'deliveredQty',
-    align: 'right' as const,
-    width: 110,
-  },
-  {
-    title: '待发数量',
-    dataIndex: 'pendingDeliveryQty',
-    align: 'right' as const,
-    width: 110,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      Math.max(toQty(record.qty) - toQty(record.deliveredQty), 0),
-  },
-  {
-    title: '单位',
-    dataIndex: 'uom',
-    width: 90,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      resolveDisplayUom(record.uom, record.uomDisplay),
-  },
-  {
-    title: '单价',
-    dataIndex: 'rate',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatCurrencyValue(record.rate),
-  },
-  {
-    title: '金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatCurrencyValue(record.amount),
-  },
-];
+const itemColumns = buildTransactionItemColumns<SalesOrderDetailItem>({
+  completedQtyKey: 'deliveredQty',
+  completedTitle: '已发数量',
+  pendingTitle: '待发数量',
+});
 
 const SalesOrderDetailPage: React.FC = () => {
   const params = useParams();
@@ -603,12 +450,7 @@ const SalesOrderDetailPage: React.FC = () => {
   const orderName = decodeURIComponent(String(params.name ?? ''));
   const actionPanelRef = useRef<HTMLDivElement | null>(null);
   const [actionLoading, setActionLoading] = useState<string>();
-  const [paymentDraft, setPaymentDraft] = useState<InvoicePaymentDraft>({
-    amount: 0,
-    modeOfPayment: '',
-    referenceName: '',
-  });
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const paymentModal = useInvoicePaymentModal();
   const [rollbackModalOpen, setRollbackModalOpen] = useState(false);
   const [rollbackCancelledPayments, setRollbackCancelledPayments] = useState<
     Set<string>
@@ -1065,62 +907,64 @@ const SalesOrderDetailPage: React.FC = () => {
       return;
     }
 
-    setPaymentDraft({
+    paymentModal.openWithDraft({
       amount: 0,
-      modeOfPayment: '',
       referenceName: invoiceNames[0],
     });
-    setPaymentModalOpen(true);
   };
 
   const submitRecordPayment = async () => {
-    const paymentAmount = Number(paymentDraft.amount ?? 0);
+    const paymentAmount = Number(paymentModal.draft.amount ?? 0);
     if (paymentAmount <= 0) {
       message.error('收款金额必须大于 0 且不能超过未收金额');
       throw new Error('Invalid payment amount');
     }
-    if (!paymentDraft.referenceName) {
+    if (!paymentModal.draft.referenceName) {
       message.error('请选择销售发票');
       throw new Error('Missing payment reference');
     }
 
-    setActionLoading('payment');
-    try {
-      const result = await recordSalesOrderPayment(
-        paymentDraft.referenceName,
-        paymentAmount,
-        {
-          modeOfPayment: paymentDraft.modeOfPayment,
-          referenceDate: paymentDraft.referenceDate,
-          referenceDoctype: 'Sales Invoice',
-          referenceNo: paymentDraft.referenceNo,
-          settlementMode:
-            paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
-          writeoffReason:
-            paymentDraft.settlementMode === 'writeoff'
-              ? 'Web 端差额核销结清'
-              : undefined,
-        },
-      );
-      setPaymentModalOpen(false);
-      refresh();
-      const paymentEntryName = readMutationName(result.data, 'payment_entry');
-      showActionResult({
-        actionText: '登记客户收款',
-        documentName: paymentEntryName,
-        documentText: '收款单',
-        nextAction: (
-          <span>
-            可在 <Link to="/payments">收付款流水</Link> 中核对本次收款记录。
-          </span>
-        ),
+    await paymentModal
+      .runSubmit(async (paymentDraft) => {
+        setActionLoading('payment');
+        const result = await recordSalesOrderPayment(
+          paymentDraft.referenceName,
+          paymentAmount,
+          {
+            modeOfPayment: paymentDraft.modeOfPayment,
+            referenceDate: paymentDraft.referenceDate,
+            referenceDoctype: 'Sales Invoice',
+            referenceNo: paymentDraft.referenceNo,
+            settlementMode:
+              paymentDraft.settlementMode === 'writeoff'
+                ? 'writeoff'
+                : 'partial',
+            writeoffReason:
+              paymentDraft.settlementMode === 'writeoff'
+                ? 'Web 端差额核销结清'
+                : undefined,
+          },
+        );
+        refresh();
+        const paymentEntryName = readMutationName(result.data, 'payment_entry');
+        showActionResult({
+          actionText: '登记客户收款',
+          documentName: paymentEntryName,
+          documentText: '收款单',
+          nextAction: (
+            <span>
+              可在 <Link to="/payments">收付款流水</Link> 中核对本次收款记录。
+            </span>
+          ),
+        });
+      })
+      .catch((caught) => {
+        message.error(caught instanceof Error ? caught.message : '操作失败');
+        throw caught;
+      })
+      .finally(() => {
+        setActionLoading(undefined);
       });
-    } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
-      throw caught;
-    } finally {
-      setActionLoading(undefined);
-    }
   };
 
   const confirmQuickCancelDownstream = () => {
@@ -1431,12 +1275,22 @@ const SalesOrderDetailPage: React.FC = () => {
         {
           key: 'deliveryNotes',
           label: '发货单',
-          children: docLinks(detail.deliveryNotes, '/sales/delivery-notes'),
+          children: (
+            <DocumentLinks
+              basePath="/sales/delivery-notes"
+              names={detail.deliveryNotes}
+            />
+          ),
         },
         {
           key: 'salesInvoices',
           label: '销售发票',
-          children: docLinks(detail.salesInvoices, '/sales/invoices'),
+          children: (
+            <DocumentLinks
+              basePath="/sales/invoices"
+              names={detail.salesInvoices}
+            />
+          ),
         },
         {
           key: 'paymentEntries',
@@ -1461,55 +1315,21 @@ const SalesOrderDetailPage: React.FC = () => {
     : [];
   const progress = detail ? salesOrderProgress(detail) : null;
   const rollbackPaymentColumns = [
-    {
-      title: '收款单',
-      dataIndex: 'paymentEntry',
-      ellipsis: true,
-      width: 190,
-      render: (_: unknown, record: RollbackPaymentEntry) => (
-        <Link to={`/payments/${encodeURIComponent(record.paymentEntry)}`}>
-          {record.paymentEntry}
-        </Link>
-      ),
-    },
-    {
-      title: '日期',
-      dataIndex: 'date',
+    ...buildPaymentEntryColumns<RollbackPaymentEntry>({
+      actualAmountKey: 'amount',
+      actualAmountTitle: '金额',
+      currency: detail?.currency,
+      dateTitle: '日期',
+      entryTitle: '收款单',
+      showAllocatedAmount: false,
+    }),
+    buildPaymentActionColumn<RollbackPaymentEntry>({
+      cancelText: '取消收款',
+      loading: (record) => rollbackPaymentCancelling === record.paymentEntry,
+      onCancelPayment: (record) =>
+        cancelRollbackPaymentEntry(record.paymentEntry),
       width: 110,
-      render: (_: unknown, record: RollbackPaymentEntry) => record.date || '-',
-    },
-    {
-      title: '方式',
-      dataIndex: 'modeOfPayment',
-      ellipsis: true,
-      width: 120,
-      render: (_: unknown, record: RollbackPaymentEntry) =>
-        record.modeOfPayment || '-',
-    },
-    {
-      title: '金额',
-      dataIndex: 'amount',
-      align: 'right' as const,
-      width: 115,
-      render: (_: unknown, record: RollbackPaymentEntry) =>
-        formatCurrencyValue(record.amount, detail?.currency),
-    },
-    {
-      title: '操作',
-      valueType: 'option' as const,
-      width: 110,
-      render: (_: unknown, record: RollbackPaymentEntry) => (
-        <Button
-          danger
-          loading={rollbackPaymentCancelling === record.paymentEntry}
-          onClick={() => cancelRollbackPaymentEntry(record.paymentEntry)}
-          size="small"
-          type="link"
-        >
-          取消收款
-        </Button>
-      ),
-    },
+    }),
   ];
 
   return (
@@ -1580,90 +1400,18 @@ const SalesOrderDetailPage: React.FC = () => {
                 />
               ) : null}
 
-              <Card title="金额概览" variant="borderless">
-                <Row gutter={[24, 16]}>
-                  <Col lg={6} sm={12} xs={24}>
-                    <Statistic
-                      styles={{ content: { fontSize: 24, fontWeight: 600 } }}
-                      title="订单金额"
-                      value={formatCurrencyValue(
-                        detail.amount,
-                        detail.currency,
-                      )}
-                    />
-                    <Typography.Text type="secondary">
-                      当前订单商品与税费合计
-                    </Typography.Text>
-                  </Col>
-                  <Col lg={6} sm={12} xs={24}>
-                    <Statistic
-                      styles={{ content: { fontSize: 22, fontWeight: 600 } }}
-                      title="应收金额"
-                      value={formatCurrencyValue(
-                        detail.receivableAmount,
-                        detail.currency,
-                      )}
-                    />
-                    <Typography.Text type="secondary">
-                      按订单/发票口径汇总
-                    </Typography.Text>
-                  </Col>
-                  <Col lg={6} sm={12} xs={24}>
-                    <Statistic
-                      styles={{
-                        content: {
-                          color: '#389e0d',
-                          fontSize: 22,
-                          fontWeight: 600,
-                        },
-                      }}
-                      title="已收金额"
-                      value={formatCurrencyValue(
-                        detail.paidAmount,
-                        detail.currency,
-                      )}
-                    />
-                    <Progress
-                      percent={toPercent(
-                        detail.paidAmount,
-                        detail.receivableAmount || detail.amount,
-                      )}
-                      size="small"
-                      status="success"
-                    />
-                  </Col>
-                  <Col lg={6} sm={12} xs={24}>
-                    <Statistic
-                      styles={{
-                        content: {
-                          color:
-                            (detail.outstandingAmount ?? 0) > 0
-                              ? '#cf1322'
-                              : '#389e0d',
-                          fontSize: 24,
-                          fontWeight: 700,
-                        },
-                      }}
-                      title="未收金额"
-                      value={formatCurrencyValue(
-                        detail.outstandingAmount,
-                        detail.currency,
-                      )}
-                    />
-                    <Typography.Text
-                      type={
-                        (detail.outstandingAmount ?? 0) > 0
-                          ? 'danger'
-                          : 'secondary'
-                      }
-                    >
-                      {(detail.outstandingAmount ?? 0) > 0
-                        ? '仍需跟进收款'
-                        : '当前已结清'}
-                    </Typography.Text>
-                  </Col>
-                </Row>
-              </Card>
+              <AmountOverview
+                amount={detail.amount}
+                currency={detail.currency}
+                outstandingAmount={detail.outstandingAmount}
+                outstandingTitle="未收金额"
+                paidAmount={detail.paidAmount}
+                paidTitle="已收金额"
+                payableAmount={detail.receivableAmount}
+                payableTitle="应收金额"
+                settledText="当前已结清"
+                unsettledText="仍需跟进收款"
+              />
 
               <Row gutter={[16, 16]}>
                 <Col lg={16} xs={24}>
@@ -1707,64 +1455,11 @@ const SalesOrderDetailPage: React.FC = () => {
                       />
                     </Card>
 
-                    <Card title="业务时间线" variant="borderless">
-                      {timelineEvents.length ? (
-                        <Timeline
-                          items={timelineEvents.map((event) => {
-                            const path = documentPath(
-                              event.doctype,
-                              event.docname,
-                            );
-                            const relatedPath = documentPath(
-                              event.relatedDoctype,
-                              event.relatedDocname,
-                            );
-                            return {
-                              color: timelineColor(event),
-                              content: (
-                                <Space orientation="vertical" size={4}>
-                                  <Space wrap>
-                                    <Typography.Text strong>
-                                      {event.title || event.type}
-                                    </Typography.Text>
-                                    {path ? (
-                                      <Link to={path}>{event.docname}</Link>
-                                    ) : (
-                                      <Typography.Text>
-                                        {event.docname}
-                                      </Typography.Text>
-                                    )}
-                                    {event.status ? (
-                                      <StatusTag value={event.status} />
-                                    ) : null}
-                                  </Space>
-                                  <Typography.Text type="secondary">
-                                    {timelineEventDescription(
-                                      event,
-                                      detail.currency,
-                                    )}
-                                  </Typography.Text>
-                                  {event.relatedDocname ? (
-                                    <Typography.Text type="secondary">
-                                      关联：
-                                      {relatedPath ? (
-                                        <Link to={relatedPath}>
-                                          {event.relatedDocname}
-                                        </Link>
-                                      ) : (
-                                        event.relatedDocname
-                                      )}
-                                    </Typography.Text>
-                                  ) : null}
-                                </Space>
-                              ),
-                            };
-                          })}
-                        />
-                      ) : (
-                        <Empty description="暂无业务时间线" />
-                      )}
-                    </Card>
+                    <BusinessTimeline
+                      currency={detail.currency}
+                      events={timelineEvents}
+                      getColor={timelineColor}
+                    />
 
                     <ProTable<SalesOrderDetailItem>
                       columns={itemColumns}
@@ -1971,16 +1666,16 @@ const SalesOrderDetailPage: React.FC = () => {
       </PageContainer>
       <Modal
         cancelText="取消"
-        confirmLoading={actionLoading === 'payment'}
+        confirmLoading={paymentModal.loading}
         destroyOnHidden
         okText="确认登记"
-        onCancel={() => setPaymentModalOpen(false)}
+        onCancel={paymentModal.close}
         onOk={submitRecordPayment}
-        open={paymentModalOpen}
+        open={paymentModal.open}
         title={
           (detail?.salesInvoices.length ?? 0) > 1
             ? `选择销售发票并登记客户收款 ${detail?.name ?? ''}`
-            : `登记客户收款 ${paymentDraft.referenceName || detail?.salesInvoices[0] || ''}`
+            : `登记客户收款 ${paymentModal.draft.referenceName || detail?.salesInvoices[0] || ''}`
         }
         width={520}
       >
@@ -1996,7 +1691,7 @@ const SalesOrderDetailPage: React.FC = () => {
               }
               return invoice.outstandingAmount ?? 0;
             }}
-            onChange={setPaymentDraft}
+            onChange={paymentModal.setDraft}
             showReferenceFields
             showSettlementMode
           />

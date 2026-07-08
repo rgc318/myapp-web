@@ -1,13 +1,19 @@
 import type { ProductSummary } from '@/services/myapp/master-data';
-import { getProductAvailableUoms } from '@/utils/sales-order-editor';
+import {
+  getProductAvailableUoms,
+  getProductModeDefaultUom,
+  type SalesMode,
+} from '@/utils/sales-order-editor';
 
 export type PurchaseOrderEditorLine = {
   allUomDisplays: Record<string, string>;
   allUoms: string[];
   amount: number;
+  imageUrl?: string;
   itemCode: string;
   itemName: string;
   key: string;
+  modeDefaults: Record<SalesMode, { uom: string | null }>;
   price: number | null;
   qty: number;
   standardBuyingRate?: number | null;
@@ -43,23 +49,35 @@ export function getProductPurchaseDefaultPrice(product: ProductSummary) {
 }
 
 export function buildPurchaseOrderLineFromProduct(options: {
+  defaultMode?: SalesMode;
   defaultWarehouse?: string;
   product: ProductSummary;
 }) {
-  const { defaultWarehouse, product } = options;
+  const { defaultMode = 'wholesale', defaultWarehouse, product } = options;
   const allUoms = getProductAvailableUoms(product);
   const stockUom = product.stockUom || product.uom || null;
   const price = getProductPurchaseDefaultPrice(product);
-  const uom = product.uom || stockUom || allUoms[0] || null;
+  const modeDefaults = {
+    retail: { uom: getProductModeDefaultUom(product, 'retail') || null },
+    wholesale: { uom: getProductModeDefaultUom(product, 'wholesale') || null },
+  };
+  const uom =
+    modeDefaults[defaultMode]?.uom ||
+    product.uom ||
+    stockUom ||
+    allUoms[0] ||
+    null;
   const warehouse = product.warehouse || defaultWarehouse || '';
 
   return {
     allUomDisplays: product.allUomDisplays,
     allUoms,
     amount: price ?? 0,
+    imageUrl: product.imageUrl,
     itemCode: product.itemCode,
     itemName: product.itemName || product.itemCode,
     key: `${product.itemCode}:${warehouse || 'default'}`,
+    modeDefaults,
     price,
     qty: 1,
     standardBuyingRate: product.priceSummary?.standardBuyingRate ?? null,

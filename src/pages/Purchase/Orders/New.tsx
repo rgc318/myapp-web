@@ -1,5 +1,9 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { PageContainer, ProCard } from '@ant-design/pro-components';
+import {
+  FooterToolbar,
+  PageContainer,
+  ProCard,
+} from '@ant-design/pro-components';
 import { history } from '@umijs/max';
 import {
   Alert,
@@ -8,6 +12,7 @@ import {
   Form,
   Input,
   message,
+  Select,
   Space,
   Typography,
 } from 'antd';
@@ -37,8 +42,30 @@ import {
   type PurchaseOrderEditorLine,
   recalculatePurchaseOrderLine,
 } from '@/utils/purchase-order-editor';
+import type { SalesMode } from '@/utils/sales-order-editor';
 
 const today = dayjs();
+const footerContentStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: 16,
+  justifyContent: 'space-between',
+  margin: '0 auto',
+  maxWidth: 1488,
+  padding: '0 24px',
+  width: '100%',
+};
+const footerSummaryStyle: React.CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flex: '1 1 auto',
+  flexWrap: 'wrap',
+  gap: '8px 24px',
+  minWidth: 0,
+};
+const footerActionsStyle: React.CSSProperties = {
+  flex: '0 0 auto',
+};
 
 type FormValues = {
   addressDisplay?: string;
@@ -46,6 +73,7 @@ type FormValues = {
   contactDisplayName?: string;
   contactPhone?: string;
   currency?: string;
+  defaultPurchaseMode: SalesMode;
   remarks?: string;
   scheduleDate: dayjs.Dayjs;
   supplier: string;
@@ -60,10 +88,20 @@ const PurchaseOrderNewPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [lastSupplier, setLastSupplier] = useState('');
   const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
+  const defaultPurchaseMode =
+    Form.useWatch('defaultPurchaseMode', form) ?? 'wholesale';
   const supplier = Form.useWatch('supplier', form);
   const company = Form.useWatch('company', form);
   const warehouse = Form.useWatch('warehouse', form);
   const totalAmount = useMemo(() => getPurchaseOrderLinesTotal(lines), [lines]);
+  const totalQty = useMemo(
+    () =>
+      lines.reduce(
+        (sum, line) => sum + (Number.isFinite(line.qty) ? line.qty : 0),
+        0,
+      ),
+    [lines],
+  );
 
   React.useEffect(() => {
     const currentCompany = form.getFieldValue('company');
@@ -103,6 +141,7 @@ const PurchaseOrderNewPage: React.FC = () => {
 
   const addProduct = (product: ProductSummary) => {
     const nextLine = buildPurchaseOrderLineFromProduct({
+      defaultMode: defaultPurchaseMode,
       defaultWarehouse: warehouse,
       product,
     });
@@ -128,6 +167,7 @@ const PurchaseOrderNewPage: React.FC = () => {
       const nextLines = [...current];
       productLines.forEach((productLine) => {
         const baseLine = buildPurchaseOrderLineFromProduct({
+          defaultMode: productLine.salesMode ?? defaultPurchaseMode,
           defaultWarehouse: productLine.warehouse || warehouse,
           product: productLine.product,
         });
@@ -154,6 +194,17 @@ const PurchaseOrderNewPage: React.FC = () => {
       });
       return nextLines;
     });
+  };
+
+  const applyDefaultModeToLines = (nextMode: SalesMode) => {
+    setLines((current) =>
+      current.map((line) =>
+        recalculatePurchaseOrderLine({
+          ...line,
+          uom: line.modeDefaults[nextMode]?.uom || line.uom,
+        }),
+      ),
+    );
   };
 
   const submitOrder = async (quick: boolean) => {
@@ -221,6 +272,7 @@ const PurchaseOrderNewPage: React.FC = () => {
             form={form}
             initialValues={{
               company: defaultCompany,
+              defaultPurchaseMode: 'wholesale',
               scheduleDate: today,
               transactionDate: today,
             }}
@@ -258,7 +310,7 @@ const PurchaseOrderNewPage: React.FC = () => {
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
-                  filters={{ company }}
+                  filters={{ company, disabled: 0, is_group: 0 }}
                   placeholder="搜索仓库"
                   value={warehouse}
                   onChange={(nextWarehouse) => {
@@ -268,6 +320,17 @@ const PurchaseOrderNewPage: React.FC = () => {
               </Form.Item>
               <Form.Item label="币种" name="currency">
                 <Input placeholder="自动带出供应商默认币种" />
+              </Form.Item>
+              <Form.Item label="默认取值模式" name="defaultPurchaseMode">
+                <Select
+                  onChange={(nextMode: SalesMode) => {
+                    applyDefaultModeToLines(nextMode);
+                  }}
+                  options={[
+                    { label: '批发', value: 'wholesale' },
+                    { label: '零售', value: 'retail' },
+                  ]}
+                />
               </Form.Item>
               <Form.Item
                 label="订单日期"
@@ -306,6 +369,7 @@ const PurchaseOrderNewPage: React.FC = () => {
           extra={
             <ProductSelect
               company={company}
+              defaultSalesMode={defaultPurchaseMode}
               itemContext="purchase"
               selectedProductKeys={lines.map((line) => line.itemCode)}
               selectedProductLines={lines}
@@ -324,32 +388,53 @@ const PurchaseOrderNewPage: React.FC = () => {
             onChange={setLines}
           />
         </ProCard>
-
-        <ProCard>
-          <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-            <Typography.Text type="secondary">
-              共 {lines.length} 个商品，总金额{' '}
-              {formatCurrencyValue(totalAmount)}
-            </Typography.Text>
-            <Space>
-              <Button
-                icon={<PlusOutlined />}
-                loading={submitting}
-                onClick={() => void submitOrder(false)}
-                type="primary"
-              >
-                保存订单
-              </Button>
-              <Button
-                loading={submitting}
-                onClick={() => void submitOrder(true)}
-              >
-                快捷采购
-              </Button>
-            </Space>
-          </Space>
-        </ProCard>
       </Space>
+      <FooterToolbar>
+        <div style={footerContentStyle}>
+          <div style={footerSummaryStyle}>
+            <Space size={8}>
+              <Typography.Text type="secondary">行数</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {lines.length}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">数量</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#1677ff', fontSize: 18 }}
+              >
+                {totalQty}
+              </Typography.Text>
+            </Space>
+            <Space size={8}>
+              <Typography.Text type="secondary">总金额</Typography.Text>
+              <Typography.Text
+                strong
+                style={{ color: '#f5222d', fontSize: 20 }}
+              >
+                {formatCurrencyValue(totalAmount)}
+              </Typography.Text>
+            </Space>
+          </div>
+          <Space style={footerActionsStyle}>
+            <Button
+              icon={<PlusOutlined />}
+              loading={submitting}
+              onClick={() => void submitOrder(false)}
+              type="primary"
+            >
+              保存订单
+            </Button>
+            <Button loading={submitting} onClick={() => void submitOrder(true)}>
+              快捷采购
+            </Button>
+          </Space>
+        </div>
+      </FooterToolbar>
     </PageContainer>
   );
 };

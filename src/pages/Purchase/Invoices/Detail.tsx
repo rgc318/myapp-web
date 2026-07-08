@@ -18,11 +18,17 @@ import {
   Space,
 } from 'antd';
 import React, { useState } from 'react';
+import { buildInvoiceItemColumns } from '@/components/BusinessOrderDetail';
 import {
-  type InvoicePaymentDraft,
+  buildPaymentActionColumn,
+  buildPaymentEntryColumns,
+} from '@/components/BusinessPaymentTables';
+import {
   InvoicePaymentForm,
+  useInvoicePaymentModal,
 } from '@/components/InvoicePaymentForm';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelPurchaseInvoice,
   cancelSupplierPaymentEntry,
@@ -31,10 +37,10 @@ import {
   type PurchaseOrderPaymentEntry,
   recordSupplierPayment,
 } from '@/services/myapp/purchase';
+import { paymentEntryPath } from '@/utils/business-document';
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -51,10 +57,6 @@ function docLinks(values: string[], basePath: string) {
 
 function isCancelled(status: string) {
   return status === 'cancelled' || status === '已作废';
-}
-
-function paymentEntryPath(paymentEntry: string) {
-  return `/payments/${encodeURIComponent(paymentEntry)}`;
 }
 
 function toPercent(
@@ -85,113 +87,24 @@ function paymentStatusHint(data: {
   return '当前采购发票没有未付金额，可继续打印留档或返回来源单据核对业务链路。';
 }
 
-const paymentEntryColumns = [
+const paymentEntryColumns = buildPaymentEntryColumns<PurchaseOrderPaymentEntry>(
   {
-    title: '付款单',
-    dataIndex: 'paymentEntry',
-    width: 180,
-    render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-      record.paymentEntry ? (
-        <Link to={paymentEntryPath(record.paymentEntry)}>
-          {record.paymentEntry}
-        </Link>
-      ) : (
-        '-'
-      ),
+    actualAmountKey: 'amount',
+    actualAmountTitle: '实付金额',
+    dateTitle: '付款日期',
+    entryTitle: '付款单',
   },
-  {
-    title: '付款日期',
-    dataIndex: 'date',
-    width: 110,
-    render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-      record.date || '-',
-  },
-  {
-    title: '付款方式',
-    dataIndex: 'modeOfPayment',
-    width: 120,
-    render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-      record.modeOfPayment || '-',
-  },
-  {
-    title: '核销金额',
-    dataIndex: 'allocatedAmount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-      formatCurrencyValue(record.allocatedAmount),
-  },
-  {
-    title: '实付金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-      formatCurrencyValue(record.amount),
-  },
-];
+);
 
-const itemColumns = [
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    width: 160,
-  },
-  {
-    title: '商品名称',
-    dataIndex: 'itemName',
-    ellipsis: true,
-  },
-  {
-    title: '数量',
-    dataIndex: 'qty',
-    align: 'right' as const,
-    width: 100,
-  },
-  {
-    title: '单位',
-    dataIndex: 'uom',
-    width: 90,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      resolveDisplayUom(record.uom, record.uomDisplay),
-  },
-  {
-    title: '单价',
-    dataIndex: 'rate',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.rate),
-  },
-  {
-    title: '金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.amount),
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    ellipsis: true,
-    width: 180,
-  },
-];
+const itemColumns = buildInvoiceItemColumns<PurchaseDocumentItem>();
 
 const PurchaseInvoiceDetailPage: React.FC = () => {
   const { message } = AntdApp.useApp();
   const params = useParams();
   const invoiceName = decodeURIComponent(String(params.name ?? ''));
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [paymentDraft, setPaymentDraft] = useState<InvoicePaymentDraft>({
-    amount: 0,
-    modeOfPayment: '',
-    referenceName: invoiceName,
-  });
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  const paymentModal = useInvoicePaymentModal({ referenceName: invoiceName });
   const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentSelectionOpen, setPaymentSelectionOpen] = useState(false);
   const [paymentToCancel, setPaymentToCancel] =
     useState<PurchaseOrderPaymentEntry | null>(null);
@@ -308,55 +221,39 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
       return;
     }
 
-    setPaymentDraft({
+    paymentModal.openWithDraft({
       amount: data.outstandingAmount ?? 0,
-      modeOfPayment: '',
       referenceName: invoiceName,
     });
-    setPaymentModalOpen(true);
   };
 
   const submitRecordPayment = async () => {
-    const paymentAmount = Number(paymentDraft.amount ?? 0);
+    const paymentAmount = Number(paymentModal.draft.amount ?? 0);
     if (paymentAmount <= 0 || paymentAmount > (data?.outstandingAmount ?? 0)) {
       message.error('付款金额必须大于 0 且不能超过未付金额');
       throw new Error('Invalid payment amount');
     }
 
-    setPaymentLoading(true);
-    try {
-      await recordSupplierPayment(invoiceName, paymentAmount, {
-        modeOfPayment: paymentDraft.modeOfPayment,
+    await paymentModal
+      .runSubmit(async (paymentDraft) => {
+        await recordSupplierPayment(invoiceName, paymentAmount, {
+          modeOfPayment: paymentDraft.modeOfPayment,
+        });
+        refresh();
+      })
+      .catch((caught) => {
+        message.error(caught instanceof Error ? caught.message : '操作失败');
+        throw caught;
       });
-      setPaymentModalOpen(false);
-      refresh();
-    } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
-      throw caught;
-    } finally {
-      setPaymentLoading(false);
-    }
   };
 
   const paymentColumns = [
     ...paymentEntryColumns,
-    {
-      title: '操作',
-      fixed: 'right' as const,
-      valueType: 'option' as const,
-      width: 120,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) => (
-        <Button
-          danger
-          disabled={cancelled || !record.paymentEntry}
-          onClick={() => openCancelPayment(record)}
-          size="small"
-          type="link"
-        >
-          取消付款
-        </Button>
-      ),
-    },
+    buildPaymentActionColumn<PurchaseOrderPaymentEntry>({
+      cancelText: '取消付款',
+      disabled: cancelled,
+      onCancelPayment: openCancelPayment,
+    }),
   ];
 
   return (
@@ -376,6 +273,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
             doctype="Purchase Invoice"
             key="print"
           />,
+          PURCHASE_RETURN_REFUND_ENTRY_ENABLED &&
           data?.documentStatus !== 'cancelled' ? (
             <Button
               key="return"
@@ -393,7 +291,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
           <Button
             disabled={cancelled || !hasOutstanding}
             key="payment"
-            loading={paymentLoading}
+            loading={paymentModal.loading}
             onClick={confirmRecordPayment}
             type="primary"
           >
@@ -831,12 +729,12 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
       ) : null}
       <Modal
         cancelText="取消"
-        confirmLoading={paymentLoading}
+        confirmLoading={paymentModal.loading}
         destroyOnHidden
         okText="确认付款"
-        onCancel={() => setPaymentModalOpen(false)}
+        onCancel={paymentModal.close}
         onOk={submitRecordPayment}
-        open={paymentModalOpen}
+        open={paymentModal.open}
         title={`记录付款 ${invoiceName}`}
         width={520}
       >
@@ -845,7 +743,7 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
           invoices={[invoiceName]}
           label="采购发票"
           loadOutstandingAmount={async () => data?.outstandingAmount ?? 0}
-          onChange={setPaymentDraft}
+          onChange={paymentModal.setDraft}
         />
       </Modal>
       <Modal

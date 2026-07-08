@@ -10,7 +10,13 @@ import {
   Spin,
 } from 'antd';
 import dayjs from 'dayjs';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { PaymentModeSelect } from '@/components/PaymentModeSelect';
 import { formatCurrencyValue } from '@/utils/myapp-display';
 
@@ -22,6 +28,62 @@ export type InvoicePaymentDraft = {
   referenceNo?: string;
   settlementMode?: 'partial' | 'writeoff';
 };
+
+function createPaymentDraft(
+  draft: Partial<InvoicePaymentDraft> = {},
+): InvoicePaymentDraft {
+  return {
+    amount: 0,
+    modeOfPayment: '',
+    referenceName: '',
+    ...draft,
+  };
+}
+
+export function useInvoicePaymentModal(
+  initialDraft: Partial<InvoicePaymentDraft> = {},
+) {
+  const [draft, setDraft] = useState<InvoicePaymentDraft>(() =>
+    createPaymentDraft(initialDraft),
+  );
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  const close = useCallback(() => {
+    setOpen(false);
+  }, []);
+
+  const openWithDraft = useCallback(
+    (nextDraft: Partial<InvoicePaymentDraft>) => {
+      setDraft(createPaymentDraft(nextDraft));
+      setOpen(true);
+    },
+    [],
+  );
+
+  const runSubmit = useCallback(
+    async (submit: (currentDraft: InvoicePaymentDraft) => Promise<void>) => {
+      setLoading(true);
+      try {
+        await submit(draft);
+        setOpen(false);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [draft],
+  );
+
+  return {
+    close,
+    draft,
+    loading,
+    open,
+    openWithDraft,
+    runSubmit,
+    setDraft,
+  };
+}
 
 type Props = {
   detailBasePath: string;

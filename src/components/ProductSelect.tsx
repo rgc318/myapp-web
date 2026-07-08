@@ -443,6 +443,15 @@ export function ProductSelect({
         record.stockUom
       );
     }
+    if (itemContext === 'purchase') {
+      return (
+        getProductModeDefaultUom(record, rowSalesMode(record)) ||
+        record.uom ||
+        record.stockUom ||
+        getProductAvailableUoms(record)[0] ||
+        null
+      );
+    }
     return (
       record.uom ||
       record.stockUom ||
@@ -472,7 +481,9 @@ export function ProductSelect({
   const buildDraftLine = (product: ProductSummary): ProductSelectLine => {
     const price = rowPrice(product);
     const salesMode =
-      itemContext === 'sales' ? rowSalesMode(product) : undefined;
+      itemContext === 'sales' || itemContext === 'purchase'
+        ? rowSalesMode(product)
+        : undefined;
     const uom = rowUom(product);
     const nextWarehouse = rowWarehouse(product);
     return {
@@ -749,11 +760,11 @@ export function ProductSelect({
 
           const line = buildDraftLine(record);
           const modeText =
-            line.salesMode === 'retail'
-              ? '零售'
-              : line.salesMode === 'wholesale'
-                ? '批发'
-                : '';
+            itemContext === 'sales' || itemContext === 'purchase'
+              ? line.salesMode === 'retail'
+                ? '零售'
+                : '批发'
+              : '';
           const uomText = resolveUomDisplay(
             line.uom,
             record.allUomDisplays,
@@ -796,7 +807,7 @@ export function ProductSelect({
           <RemoteLinkSelect
             doctype="Warehouse"
             extraFields={['company']}
-            filters={{ company }}
+            filters={{ company, disabled: 0, is_group: 0 }}
             onChange={(nextValue) => {
               const nextWarehouse = String(nextValue ?? '').trim();
               form.setFieldValue?.(
@@ -1384,7 +1395,7 @@ export function ProductSelect({
               <RemoteLinkSelect
                 doctype="Warehouse"
                 extraFields={['company']}
-                filters={{ company }}
+                filters={{ company, disabled: 0, is_group: 0 }}
                 placeholder="默认仓库"
               />
             </Form.Item>
@@ -1436,9 +1447,11 @@ export function ProductSelect({
               </Typography.Text>
             </Space>
 
-            {itemContext === 'sales' ? (
+            {itemContext === 'sales' || itemContext === 'purchase' ? (
               <Space orientation="vertical" size={6} style={{ width: '100%' }}>
-                <Typography.Text type="secondary">销售模式</Typography.Text>
+                <Typography.Text type="secondary">
+                  {itemContext === 'purchase' ? '取值模式' : '销售模式'}
+                </Typography.Text>
                 <Select
                   onChange={(value: ProductSelectSalesMode) => {
                     setRowSalesModeMap((current) => ({
@@ -1451,13 +1464,15 @@ export function ProductSelect({
                         getProductModeDefaultUom(adjustingProduct, value) ??
                         null,
                     }));
-                    setRowPriceMap((current) => ({
-                      ...current,
-                      [adjustingProduct.itemCode]: getProductModeDefaultPrice(
-                        adjustingProduct,
-                        value,
-                      ),
-                    }));
+                    if (itemContext === 'sales') {
+                      setRowPriceMap((current) => ({
+                        ...current,
+                        [adjustingProduct.itemCode]: getProductModeDefaultPrice(
+                          adjustingProduct,
+                          value,
+                        ),
+                      }));
+                    }
                   }}
                   options={[
                     { label: '批发', value: 'wholesale' },
@@ -1622,13 +1637,13 @@ export function ProductSelect({
                     title: '单位',
                     width: 90,
                   },
-                  ...(itemContext === 'sales'
+                  ...(itemContext === 'sales' || itemContext === 'purchase'
                     ? [
                         {
                           dataIndex: 'salesMode',
                           render: (value: ProductSelectSalesMode) =>
                             value === 'retail' ? '零售' : '批发',
-                          title: '模式',
+                          title: itemContext === 'purchase' ? '取值' : '模式',
                           width: 80,
                         },
                       ]

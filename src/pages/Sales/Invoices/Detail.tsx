@@ -18,9 +18,14 @@ import {
   Space,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
+import { buildInvoiceItemColumns } from '@/components/BusinessOrderDetail';
 import {
-  type InvoicePaymentDraft,
+  buildPaymentActionColumn,
+  buildPaymentEntryColumns,
+} from '@/components/BusinessPaymentTables';
+import {
   InvoicePaymentForm,
+  useInvoicePaymentModal,
 } from '@/components/InvoicePaymentForm';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import { SALES_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
@@ -32,10 +37,10 @@ import {
   type SalesInvoicePaymentEntry,
   type SalesOrderDetailItem,
 } from '@/services/myapp/sales';
+import { paymentEntryPath } from '@/utils/business-document';
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -56,10 +61,6 @@ function isCancelled(status: string) {
 
 function getErrorMessage(error: unknown, fallback = '操作失败') {
   return error instanceof Error ? error.message : fallback;
-}
-
-function paymentEntryPath(paymentEntry: string) {
-  return `/payments/${encodeURIComponent(paymentEntry)}`;
 }
 
 function toPercent(
@@ -103,133 +104,45 @@ function paymentStatusHint(data: {
   return '当前发票没有未收金额，可继续打印留档或返回来源单据核对业务链路。';
 }
 
-const itemColumns = [
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    width: 160,
-  },
-  {
-    title: '商品名称',
-    dataIndex: 'itemName',
-    ellipsis: true,
-  },
-  {
-    title: '数量',
-    dataIndex: 'qty',
-    align: 'right' as const,
-    width: 100,
-  },
-  {
-    title: '单位',
-    dataIndex: 'uom',
-    width: 90,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      resolveDisplayUom(record.uom, record.uomDisplay),
-  },
-  {
-    title: '单价',
-    dataIndex: 'rate',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatCurrencyValue(record.rate),
-  },
-  {
-    title: '金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesOrderDetailItem) =>
-      formatCurrencyValue(record.amount),
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    ellipsis: true,
-    width: 180,
-  },
-];
+const itemColumns = buildInvoiceItemColumns<SalesOrderDetailItem>();
 
-const paymentEntryColumns = [
-  {
-    title: '收款单',
-    dataIndex: 'paymentEntry',
-    width: 180,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      record.paymentEntry ? (
-        <Link to={paymentEntryPath(record.paymentEntry)}>
-          {record.paymentEntry}
-        </Link>
-      ) : (
-        '-'
-      ),
-  },
-  {
-    title: '收款日期',
-    dataIndex: 'postingDate',
-    width: 110,
-  },
-  {
-    title: '付款方式',
-    dataIndex: 'modeOfPayment',
-    width: 120,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      record.modeOfPayment || '-',
-  },
-  {
-    title: '核销金额',
-    dataIndex: 'allocatedAmount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      formatCurrencyValue(record.allocatedAmount),
-  },
-  {
-    title: '实收金额',
-    dataIndex: 'actualPaidAmount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      formatCurrencyValue(record.actualPaidAmount),
-  },
-  {
-    title: '差额核销',
-    dataIndex: 'writeoffAmount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      formatCurrencyValue(record.writeoffAmount),
-  },
-  {
-    title: '多收保留',
-    dataIndex: 'latestUnallocatedAmount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      formatCurrencyValue(record.latestUnallocatedAmount),
-  },
-  {
-    title: '参考号',
-    dataIndex: 'referenceNo',
-    ellipsis: true,
-    width: 160,
-    render: (_: unknown, record: SalesInvoicePaymentEntry) =>
-      record.referenceNo || '-',
-  },
-];
+const paymentEntryColumns = buildPaymentEntryColumns<SalesInvoicePaymentEntry>({
+  actualAmountKey: 'actualPaidAmount',
+  actualAmountTitle: '实收金额',
+  dateKey: 'postingDate',
+  dateTitle: '收款日期',
+  entryTitle: '收款单',
+  extraColumns: [
+    {
+      title: '差额核销',
+      dataIndex: 'writeoffAmount',
+      align: 'right',
+      width: 120,
+      render: (_, record) => formatCurrencyValue(record.writeoffAmount),
+    },
+    {
+      title: '多收保留',
+      dataIndex: 'latestUnallocatedAmount',
+      align: 'right',
+      width: 120,
+      render: (_, record) =>
+        formatCurrencyValue(record.latestUnallocatedAmount),
+    },
+    {
+      title: '参考号',
+      dataIndex: 'referenceNo',
+      ellipsis: true,
+      width: 160,
+      render: (_, record) => record.referenceNo || '-',
+    },
+  ],
+});
 
 const SalesInvoiceDetailPage: React.FC = () => {
   const params = useParams();
   const invoiceName = decodeURIComponent(String(params.name ?? ''));
   const [cancelLoading, setCancelLoading] = useState(false);
-  const [paymentDraft, setPaymentDraft] = useState<InvoicePaymentDraft>({
-    amount: 0,
-    modeOfPayment: '',
-    referenceName: invoiceName,
-  });
-  const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const paymentModal = useInvoicePaymentModal({ referenceName: invoiceName });
   const [paymentCancelLoading, setPaymentCancelLoading] = useState(false);
   const [paymentSelectionOpen, setPaymentSelectionOpen] = useState(false);
   const [paymentToCancel, setPaymentToCancel] =
@@ -354,23 +267,14 @@ const SalesInvoiceDetailPage: React.FC = () => {
 
   const paymentColumns = [
     ...paymentEntryColumns,
-    {
-      title: '操作',
-      fixed: 'right' as const,
-      valueType: 'option' as const,
+    buildPaymentActionColumn<SalesInvoicePaymentEntry>({
+      cancelText: shouldTreatPaymentsAsException
+        ? '清理这笔异常收款'
+        : '取消这笔收款',
+      disabled: cancelled,
+      onCancelPayment: openCancelPayment,
       width: 150,
-      render: (_: unknown, record: SalesInvoicePaymentEntry) => (
-        <Button
-          danger
-          disabled={cancelled || !record.paymentEntry}
-          onClick={() => openCancelPayment(record)}
-          size="small"
-          type="link"
-        >
-          {shouldTreatPaymentsAsException ? '清理这笔异常收款' : '取消这笔收款'}
-        </Button>
-      ),
-    },
+    }),
   ];
 
   const confirmRecordPayment = () => {
@@ -381,43 +285,39 @@ const SalesInvoiceDetailPage: React.FC = () => {
       return;
     }
 
-    setPaymentDraft({
+    paymentModal.openWithDraft({
       amount: data.outstandingAmount ?? 0,
-      modeOfPayment: '',
       referenceName: invoiceName,
     });
-    setPaymentModalOpen(true);
   };
 
   const submitRecordPayment = async () => {
-    const paymentAmount = Number(paymentDraft.amount ?? 0);
+    const paymentAmount = Number(paymentModal.draft.amount ?? 0);
     if (paymentAmount <= 0) {
       message.error('收款金额必须大于 0');
       throw new Error('Invalid payment amount');
     }
 
-    setPaymentLoading(true);
-    try {
-      await recordSalesOrderPayment(invoiceName, paymentAmount, {
-        modeOfPayment: paymentDraft.modeOfPayment,
-        referenceDate: paymentDraft.referenceDate,
-        referenceDoctype: 'Sales Invoice',
-        referenceNo: paymentDraft.referenceNo,
-        settlementMode:
-          paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
-        writeoffReason:
-          paymentDraft.settlementMode === 'writeoff'
-            ? 'Web 端差额核销结清'
-            : undefined,
+    await paymentModal
+      .runSubmit(async (paymentDraft) => {
+        await recordSalesOrderPayment(invoiceName, paymentAmount, {
+          modeOfPayment: paymentDraft.modeOfPayment,
+          referenceDate: paymentDraft.referenceDate,
+          referenceDoctype: 'Sales Invoice',
+          referenceNo: paymentDraft.referenceNo,
+          settlementMode:
+            paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
+          writeoffReason:
+            paymentDraft.settlementMode === 'writeoff'
+              ? 'Web 端差额核销结清'
+              : undefined,
+        });
+        refresh();
+      })
+      .catch((caught) => {
+        message.error(caught instanceof Error ? caught.message : '操作失败');
+        throw caught;
       });
-      setPaymentModalOpen(false);
-      refresh();
-    } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
-      throw caught;
-    } finally {
-      setPaymentLoading(false);
-    }
   };
 
   return (
@@ -448,7 +348,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
           hasOutstanding && canRecordPayment && !cancelled ? (
             <Button
               key="payment"
-              loading={paymentLoading}
+              loading={paymentModal.loading}
               onClick={confirmRecordPayment}
               type="primary"
             >
@@ -620,7 +520,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
                           ) : hasOutstanding ? (
                             <Button
                               disabled={!canRecordPayment}
-                              loading={paymentLoading}
+                              loading={paymentModal.loading}
                               onClick={confirmRecordPayment}
                               size="small"
                               type="primary"
@@ -970,12 +870,12 @@ const SalesInvoiceDetailPage: React.FC = () => {
       ) : null}
       <Modal
         cancelText="取消"
-        confirmLoading={paymentLoading}
+        confirmLoading={paymentModal.loading}
         destroyOnHidden
         okText="确认登记"
-        onCancel={() => setPaymentModalOpen(false)}
+        onCancel={paymentModal.close}
         onOk={submitRecordPayment}
-        open={paymentModalOpen}
+        open={paymentModal.open}
         title={`登记客户收款 ${invoiceName}`}
         width={520}
       >
@@ -984,7 +884,7 @@ const SalesInvoiceDetailPage: React.FC = () => {
           invoices={[invoiceName]}
           label="销售发票"
           loadOutstandingAmount={async () => data?.outstandingAmount ?? 0}
-          onChange={setPaymentDraft}
+          onChange={paymentModal.setDraft}
           showReferenceFields
           showSettlementMode
         />

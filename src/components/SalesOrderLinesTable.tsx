@@ -166,7 +166,7 @@ export function SalesOrderLinesTable({
         <RemoteLinkSelect
           doctype="Warehouse"
           extraFields={['company']}
-          filters={{ company }}
+          filters={{ company, disabled: 0, is_group: 0 }}
           onChange={(nextWarehouse) => {
             updateLine(record.key, { warehouse: nextWarehouse });
           }}

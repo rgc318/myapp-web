@@ -515,7 +515,7 @@ const SalesOrderEditPage: React.FC = () => {
                 <RemoteLinkSelect
                   doctype="Warehouse"
                   extraFields={['company']}
-                  filters={{ company }}
+                  filters={{ company, disabled: 0, is_group: 0 }}
                   placeholder="搜索仓库"
                 />
               </Form.Item>

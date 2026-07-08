@@ -12,22 +12,28 @@ import {
   Input,
   Modal,
   message,
-  Progress,
   Row,
   Skeleton,
   Space,
-  Statistic,
   Steps,
-  Timeline,
   Tooltip,
-  Typography,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
+import {
+  AmountOverview,
+  BusinessTimeline,
+  buildTransactionItemColumns,
+} from '@/components/BusinessOrderDetail';
+import {
+  buildPaymentActionColumn,
+  buildPaymentEntryColumns,
+  purchaseInvoiceReferenceColumn,
+} from '@/components/BusinessPaymentTables';
 import { PurchaseRollbackGuide } from '@/components/DownstreamRollbackGuide';
 import {
-  type InvoicePaymentDraft,
   InvoicePaymentForm,
+  useInvoicePaymentModal,
 } from '@/components/InvoicePaymentForm';
 import {
   buildLineQtyRow,
@@ -35,9 +41,11 @@ import {
   type LineQtyEditorRow,
 } from '@/components/LineQtyEditor';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
+import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   cancelPurchaseOrder,
   cancelSupplierPaymentEntry,
+  createPurchaseInvoiceFromReceipt,
   createPurchaseOrderInvoice,
   getPurchaseInvoiceDetail,
   getPurchaseOrderDetail,
@@ -51,22 +59,14 @@ import {
   recordSupplierPayment,
 } from '@/services/myapp/purchase';
 import {
+  DocumentLinks,
+  TimelineDocumentLinks,
+} from '@/utils/business-document';
+import {
   formatCurrencyCode,
   formatCurrencyValue,
-  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
-
-function docLinks(values: string[], basePath: string) {
-  return values.length
-    ? values.map((name, index) => (
-        <React.Fragment key={name}>
-          {index > 0 ? '、' : null}
-          <Link to={`${basePath}/${encodeURIComponent(name)}`}>{name}</Link>
-        </React.Fragment>
-      ))
-    : '无';
-}
 
 function toQty(value: number | null | undefined) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
@@ -74,12 +74,13 @@ function toQty(value: number | null | undefined) {
 
 function buildPurchaseActionRows(
   items: PurchaseDocumentItem[],
+  getCompletedQty: (item: PurchaseDocumentItem) => number,
   getMaxQty: (item: PurchaseDocumentItem) => number,
 ) {
   return items
     .map((item) =>
       buildLineQtyRow({
-        completedQty: item.receivedQty,
+        completedQty: getCompletedQty(item),
         itemCode: item.itemCode,
         itemName: item.itemName,
         key: item.purchaseOrderItem || item.itemCode,
@@ -138,52 +139,11 @@ function purchaseRefundReviewPath(returnInvoice: string, sourceInvoice = '') {
   return `/purchase/refunds/review?${params.toString()}`;
 }
 
-function paymentEntryPath(paymentEntry: string) {
-  return `/payments/${encodeURIComponent(paymentEntry)}`;
-}
-
-function documentPath(doctype: string, docname: string) {
-  if (!docname) {
-    return '';
-  }
-  if (doctype === 'Purchase Receipt') {
-    return `/purchase/receipts/${encodeURIComponent(docname)}`;
-  }
-  if (doctype === 'Purchase Invoice') {
-    return `/purchase/invoices/${encodeURIComponent(docname)}`;
-  }
-  if (doctype === 'Payment Entry') {
-    return paymentEntryPath(docname);
-  }
-  if (doctype === 'Purchase Order') {
-    return `/purchase/orders/${encodeURIComponent(docname)}`;
-  }
-  return '';
-}
-
 function timelineDocLinks(
   events: PurchaseOrderTimelineEvent[],
   type: PurchaseOrderTimelineEvent['type'],
 ) {
-  const documents = events
-    .filter((event) => event.type === type && event.docname)
-    .map((event) => ({
-      docname: event.docname,
-      path: documentPath(event.doctype, event.docname),
-    }));
-
-  return documents.length
-    ? documents.map((document, index) => (
-        <React.Fragment key={`${type}-${document.docname}`}>
-          {index > 0 ? '、' : null}
-          {document.path ? (
-            <Link to={document.path}>{document.docname}</Link>
-          ) : (
-            document.docname
-          )}
-        </React.Fragment>
-      ))
-    : '无';
+  return <TimelineDocumentLinks events={events} type={type} />;
 }
 
 function timelineColor(event: PurchaseOrderTimelineEvent) {
@@ -200,32 +160,6 @@ function timelineColor(event: PurchaseOrderTimelineEvent) {
     return 'orange';
   }
   return 'blue';
-}
-
-function timelineEventDescription(
-  event: PurchaseOrderTimelineEvent,
-  currency: string,
-) {
-  const pieces = [
-    event.date,
-    event.description,
-    event.amount != null ? formatCurrencyValue(event.amount, currency) : '',
-    event.modeOfPayment,
-    event.referenceNo ? `参考号 ${event.referenceNo}` : '',
-  ].filter(Boolean);
-
-  return pieces.join(' · ');
-}
-
-function toPercent(
-  value: number | null | undefined,
-  total: number | null | undefined,
-) {
-  const totalValue = toQty(total);
-  if (totalValue <= 0) {
-    return 0;
-  }
-  return Math.min(Math.round((toQty(value) / totalValue) * 100), 100);
 }
 
 function purchaseOrderProgress(detail: {
@@ -294,6 +228,30 @@ function invoiceDisabledReason(detail: {
   return '当前订单暂不满足开票条件';
 }
 
+function quickBillDisabledReason(detail: {
+  canCreateInvoice: boolean;
+  documentStatus: string;
+  outstandingAmount: number | null;
+  purchaseInvoices: string[];
+}) {
+  if (detail.canCreateInvoice) {
+    return '';
+  }
+  if (detail.documentStatus === 'cancelled') {
+    return '订单已取消，不能一键开单';
+  }
+  if (detail.documentStatus !== 'submitted') {
+    return '只有已提交的采购订单才能一键开单';
+  }
+  if (detail.purchaseInvoices.length) {
+    return '当前订单已存在采购发票';
+  }
+  if ((detail.outstandingAmount ?? 0) <= 0) {
+    return '当前订单没有待开票/待付款金额';
+  }
+  return '当前订单暂不满足一键开单条件';
+}
+
 function paymentDisabledReason(detail: {
   canRecordPayment: boolean;
   documentStatus: string;
@@ -315,94 +273,25 @@ function paymentDisabledReason(detail: {
   return '当前订单暂不满足付款条件';
 }
 
-const itemColumns = [
-  {
-    title: '商品信息',
-    dataIndex: 'itemName',
-    width: 320,
-    render: (_: unknown, record: PurchaseDocumentItem) => (
-      <Space align="start" size={12}>
-        <div
-          style={{
-            alignItems: 'center',
-            background: '#f5f5f5',
-            border: '1px solid #f0f0f0',
-            color: 'rgba(0, 0, 0, 0.45)',
-            display: 'flex',
-            height: 56,
-            justifyContent: 'center',
-            width: 56,
-          }}
-        >
-          无图
-        </div>
-        <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{record.itemName}</Typography.Text>
-          <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
-          {record.warehouse ? (
-            <Typography.Text type="secondary">
-              {record.warehouse}
-            </Typography.Text>
-          ) : null}
-        </Space>
-      </Space>
-    ),
-  },
-  {
-    title: '数量',
-    dataIndex: 'qty',
-    align: 'right' as const,
-    width: 100,
-  },
-  {
-    title: '已收数量',
-    dataIndex: 'receivedQty',
-    align: 'right' as const,
-    width: 110,
-  },
-  {
-    title: '待收数量',
-    dataIndex: 'pendingReceiptQty',
-    align: 'right' as const,
-    width: 110,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      Math.max(toQty(record.qty) - toQty(record.receivedQty), 0),
-  },
-  {
-    title: '单位',
-    dataIndex: 'uom',
-    width: 90,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      resolveDisplayUom(record.uom, record.uomDisplay),
-  },
-  {
-    title: '单价',
-    dataIndex: 'rate',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.rate),
-  },
-  {
-    title: '金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.amount),
-  },
-];
+const itemColumns = buildTransactionItemColumns<PurchaseDocumentItem>({
+  completedQtyKey: 'receivedQty',
+  completedTitle: '已收数量',
+  pendingTitle: '待收数量',
+});
+
+function readMutationName(data: unknown, key: string) {
+  if (!data || typeof data !== 'object') {
+    return '';
+  }
+  const value = (data as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : '';
+}
 
 const PurchaseOrderDetailPage: React.FC = () => {
   const params = useParams();
   const orderName = decodeURIComponent(String(params.name ?? ''));
   const [actionLoading, setActionLoading] = useState<string>();
-  const [paymentDraft, setPaymentDraft] = useState<InvoicePaymentDraft>({
-    amount: 0,
-    modeOfPayment: '',
-    referenceName: '',
-  });
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const paymentModal = useInvoicePaymentModal();
   const [rollbackModalOpen, setRollbackModalOpen] = useState(false);
   const [rollbackConfirmOpen, setRollbackConfirmOpen] = useState(false);
   const [rollbackPaymentCancelling, setRollbackPaymentCancelling] = useState<
@@ -445,6 +334,143 @@ const PurchaseOrderDetailPage: React.FC = () => {
     });
   };
 
+  const confirmQuickBill = () => {
+    if (!data) {
+      return;
+    }
+
+    const shouldCreateReceipt = data.canReceive;
+    const steps = shouldCreateReceipt
+      ? '系统会先按当前待收数量创建采购收货单，再基于本次收货创建采购发票。'
+      : '系统会基于当前订单创建采购发票，不会重复创建采购收货单。';
+
+    const runQuickBill = async () => {
+      let purchaseReceiptName = '';
+      let purchaseInvoiceName = '';
+
+      if (shouldCreateReceipt) {
+        const receiptResult = await receivePurchaseOrder(data.name);
+        purchaseReceiptName = readMutationName(
+          receiptResult.data,
+          'purchase_receipt',
+        );
+        if (!purchaseReceiptName) {
+          throw new Error(
+            '采购收货单已创建，但接口未返回收货单号，已停止继续开票',
+          );
+        }
+      }
+
+      if (purchaseReceiptName) {
+        const invoiceResult =
+          await createPurchaseInvoiceFromReceipt(purchaseReceiptName);
+        purchaseInvoiceName = readMutationName(
+          invoiceResult.data,
+          'purchase_invoice',
+        );
+      } else {
+        const invoiceResult = await createPurchaseOrderInvoice(data.name);
+        purchaseInvoiceName = readMutationName(
+          invoiceResult.data,
+          'purchase_invoice',
+        );
+      }
+
+      refresh();
+
+      Modal.success({
+        content: (
+          <Space orientation="vertical" size={8}>
+            {purchaseReceiptName ? (
+              <span>
+                采购收货单：
+                <Link
+                  to={`/purchase/receipts/${encodeURIComponent(
+                    purchaseReceiptName,
+                  )}`}
+                >
+                  {purchaseReceiptName}
+                </Link>
+              </span>
+            ) : null}
+            {purchaseInvoiceName ? (
+              <span>
+                采购发票：
+                <Link
+                  to={`/purchase/invoices/${encodeURIComponent(
+                    purchaseInvoiceName,
+                  )}`}
+                >
+                  {purchaseInvoiceName}
+                </Link>
+              </span>
+            ) : (
+              <span>采购发票已生成，详情刷新后可查看。</span>
+            )}
+            <span>如需付款，可继续在订单或采购发票页面记录供应商付款。</span>
+          </Space>
+        ),
+        title: '一键开单成功',
+      });
+    };
+
+    Modal.confirm({
+      cancelText: '取消',
+      content: (
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+          <Alert
+            description="一键开单适合整单快速收货和结算。若需要部分收货、部分开票或调整明细数量，请继续使用分步的创建收货单和创建采购发票。"
+            showIcon
+            title={steps}
+            type="info"
+          />
+          <Descriptions
+            column={1}
+            items={[
+              {
+                key: 'order',
+                label: '采购订单',
+                children: data.name,
+              },
+              {
+                key: 'amount',
+                label: '订单金额',
+                children: formatCurrencyValue(data.amount, data.currency),
+              },
+              {
+                key: 'receipt',
+                label: '收货动作',
+                children: shouldCreateReceipt
+                  ? '创建采购收货单'
+                  : '跳过，当前无需创建收货单',
+              },
+              {
+                key: 'invoice',
+                label: '开票动作',
+                children: '创建采购发票',
+              },
+            ]}
+            size="small"
+          />
+        </Space>
+      ),
+      okText: shouldCreateReceipt ? '确认收货并开票' : '确认创建采购发票',
+      onOk: async () => {
+        setActionLoading('quick-bill');
+        try {
+          await runQuickBill();
+        } catch (caught) {
+          message.error(caught instanceof Error ? caught.message : '操作失败');
+          throw caught;
+        } finally {
+          setActionLoading(undefined);
+        }
+      },
+      title: `一键开单 ${data.name}`,
+      width: 640,
+    });
+  };
+
   const confirmReceivePurchaseOrder = () => {
     if (!data) {
       return;
@@ -452,8 +478,10 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
     let postingDate = dayjs().format('YYYY-MM-DD');
     let remarks = '';
-    let selectedRows = buildPurchaseActionRows(data.items, (item) =>
-      Math.max(toQty(item.qty) - toQty(item.receivedQty), 0),
+    let selectedRows = buildPurchaseActionRows(
+      data.items,
+      (item) => toQty(item.receivedQty),
+      (item) => Math.max(toQty(item.qty) - toQty(item.receivedQty), 0),
     );
 
     if (!selectedRows.length) {
@@ -523,12 +551,20 @@ const PurchaseOrderDetailPage: React.FC = () => {
     }
 
     let remarks = '';
-    let selectedRows = buildPurchaseActionRows(data.items, (item) =>
-      toQty(item.qty),
+    let selectedRows = buildPurchaseActionRows(
+      data.items,
+      (item) => toQty(item.billedQty),
+      (item) =>
+        Math.max(
+          toQty(
+            item.pendingBillingQty ?? toQty(item.qty) - toQty(item.billedQty),
+          ),
+          0,
+        ),
     );
 
     if (!selectedRows.length) {
-      message.warning('当前订单没有可开票的商品明细');
+      message.warning('当前订单已全部开票，没有可继续开票的商品明细');
       return;
     }
 
@@ -545,7 +581,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
           />
           <LineQtyEditor
             actionTitle="本次开票"
-            completedTitle="已收货"
+            completedTitle="已开票"
             onChange={(rows) => {
               selectedRows = rows;
             }}
@@ -591,38 +627,38 @@ const PurchaseOrderDetailPage: React.FC = () => {
       return;
     }
 
-    setPaymentDraft({
+    paymentModal.openWithDraft({
       amount: 0,
-      modeOfPayment: '',
       referenceName: invoiceNames[0],
     });
-    setPaymentModalOpen(true);
   };
 
   const submitRecordPayment = async () => {
-    const paymentAmount = Number(paymentDraft.amount ?? 0);
+    const paymentAmount = Number(paymentModal.draft.amount ?? 0);
     if (paymentAmount <= 0) {
       message.error('付款金额必须大于 0 且不能超过未付金额');
       throw new Error('Invalid payment amount');
     }
-    if (!paymentDraft.referenceName) {
+    if (!paymentModal.draft.referenceName) {
       message.error('请选择采购发票');
       throw new Error('Missing payment reference');
     }
 
-    setActionLoading('payment');
-    try {
-      await recordSupplierPayment(paymentDraft.referenceName, paymentAmount, {
-        modeOfPayment: paymentDraft.modeOfPayment,
+    await paymentModal
+      .runSubmit(async (paymentDraft) => {
+        setActionLoading('payment');
+        await recordSupplierPayment(paymentDraft.referenceName, paymentAmount, {
+          modeOfPayment: paymentDraft.modeOfPayment,
+        });
+        refresh();
+      })
+      .catch((caught) => {
+        message.error(caught instanceof Error ? caught.message : '操作失败');
+        throw caught;
+      })
+      .finally(() => {
+        setActionLoading(undefined);
       });
-      setPaymentModalOpen(false);
-      refresh();
-    } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
-      throw caught;
-    } finally {
-      setActionLoading(undefined);
-    }
   };
 
   const confirmQuickCancelDownstream = () => {
@@ -831,72 +867,24 @@ const PurchaseOrderDetailPage: React.FC = () => {
   const rollbackRequiresManualPaymentCleanup =
     (data?.paymentEntries.length ?? 0) > 1 && activeRollbackPayments.length > 0;
   const paymentColumns = [
-    {
-      title: '付款单',
-      dataIndex: 'paymentEntry',
-      ellipsis: true,
-      width: 190,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) => (
-        <Link to={paymentEntryPath(record.paymentEntry)}>
-          {record.paymentEntry}
-        </Link>
-      ),
-    },
-    {
-      title: '日期',
-      dataIndex: 'date',
+    ...buildPaymentEntryColumns<PurchaseOrderPaymentEntry>({
+      actualAmountKey: 'amount',
+      actualAmountTitle: '金额',
+      currency: data?.currency,
+      dateTitle: '日期',
+      entryTitle: '付款单',
+      extraColumns: [
+        purchaseInvoiceReferenceColumn<PurchaseOrderPaymentEntry>(),
+      ],
+      showAllocatedAmount: false,
+    }),
+    buildPaymentActionColumn<PurchaseOrderPaymentEntry>({
+      cancelText: '取消付款',
+      loading: (record) => rollbackPaymentCancelling === record.paymentEntry,
+      onCancelPayment: (record) =>
+        cancelRollbackPaymentEntry(record.paymentEntry),
       width: 110,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-        record.date || '-',
-    },
-    {
-      title: '方式',
-      dataIndex: 'modeOfPayment',
-      ellipsis: true,
-      width: 120,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-        record.modeOfPayment || '-',
-    },
-    {
-      title: '金额',
-      dataIndex: 'amount',
-      align: 'right' as const,
-      width: 115,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-        formatCurrencyValue(record.amount, data?.currency),
-    },
-    {
-      title: '采购发票',
-      dataIndex: 'referenceName',
-      ellipsis: true,
-      width: 170,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) =>
-        record.referenceName ? (
-          <Link
-            to={`/purchase/invoices/${encodeURIComponent(record.referenceName)}`}
-          >
-            {record.referenceName}
-          </Link>
-        ) : (
-          '-'
-        ),
-    },
-    {
-      title: '操作',
-      valueType: 'option' as const,
-      width: 110,
-      render: (_: unknown, record: PurchaseOrderPaymentEntry) => (
-        <Button
-          danger
-          loading={rollbackPaymentCancelling === record.paymentEntry}
-          onClick={() => cancelRollbackPaymentEntry(record.paymentEntry)}
-          size="small"
-          type="link"
-        >
-          取消付款
-        </Button>
-      ),
-    },
+    }),
   ];
   const editDisabledReason = purchaseOrderEditDisabledReason(data ?? null);
   const pageDescriptionItems: DescriptionsProps['items'] = data
@@ -955,6 +943,11 @@ const PurchaseOrderDetailPage: React.FC = () => {
           label: '供应商单号',
           children: data.supplierRef || '-',
         },
+        {
+          key: 'remarks',
+          label: '订单备注',
+          children: data.remarks || '-',
+        },
       ]
     : [];
   const referenceItems: DescriptionsProps['items'] = data
@@ -962,28 +955,42 @@ const PurchaseOrderDetailPage: React.FC = () => {
         {
           key: 'receipts',
           label: '采购收货单',
-          children: docLinks(data.purchaseReceipts, '/purchase/receipts'),
+          children: (
+            <DocumentLinks
+              basePath="/purchase/receipts"
+              names={data.purchaseReceipts}
+            />
+          ),
         },
         {
           key: 'invoices',
           label: '采购发票',
-          children: docLinks(data.purchaseInvoices, '/purchase/invoices'),
+          children: (
+            <DocumentLinks
+              basePath="/purchase/invoices"
+              names={data.purchaseInvoices}
+            />
+          ),
         },
         {
           key: 'payments',
           label: '供应商付款',
           children: timelineDocLinks(timelineEvents, 'payment_entry'),
         },
-        {
-          key: 'returns',
-          label: '采购退货',
-          children: timelineDocLinks(timelineEvents, 'purchase_return'),
-        },
-        {
-          key: 'refunds',
-          label: '供应商退款',
-          children: timelineDocLinks(timelineEvents, 'supplier_refund'),
-        },
+        ...(PURCHASE_RETURN_REFUND_ENTRY_ENABLED
+          ? [
+              {
+                key: 'returns',
+                label: '采购退货',
+                children: timelineDocLinks(timelineEvents, 'purchase_return'),
+              },
+              {
+                key: 'refunds',
+                label: '供应商退款',
+                children: timelineDocLinks(timelineEvents, 'supplier_refund'),
+              },
+            ]
+          : []),
       ]
     : [];
   const supplierItems: DescriptionsProps['items'] = data
@@ -1002,11 +1009,6 @@ const PurchaseOrderDetailPage: React.FC = () => {
           key: 'address',
           label: '供应商地址',
           children: data.supplierAddressDisplay || '-',
-        },
-        {
-          key: 'remarks',
-          label: '备注',
-          children: data.remarks || '-',
         },
       ]
     : [];
@@ -1065,76 +1067,18 @@ const PurchaseOrderDetailPage: React.FC = () => {
 
         {data ? (
           <>
-            <Card title="金额概览" variant="borderless">
-              <Row gutter={[24, 16]}>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{ content: { fontSize: 24, fontWeight: 600 } }}
-                    title="订单金额"
-                    value={formatCurrencyValue(data.amount, data.currency)}
-                  />
-                  <Typography.Text type="secondary">
-                    当前订单商品与税费合计
-                  </Typography.Text>
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{ content: { fontSize: 22, fontWeight: 600 } }}
-                    title="应付金额"
-                    value={formatCurrencyValue(data.amount, data.currency)}
-                  />
-                  <Typography.Text type="secondary">
-                    按订单/发票口径汇总
-                  </Typography.Text>
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{
-                      content: {
-                        color: '#389e0d',
-                        fontSize: 22,
-                        fontWeight: 600,
-                      },
-                    }}
-                    title="已付金额"
-                    value={formatCurrencyValue(data.paidAmount, data.currency)}
-                  />
-                  <Progress
-                    percent={toPercent(data.paidAmount, data.amount)}
-                    size="small"
-                    status="success"
-                  />
-                </Col>
-                <Col lg={6} sm={12} xs={24}>
-                  <Statistic
-                    styles={{
-                      content: {
-                        color:
-                          (data.outstandingAmount ?? 0) > 0
-                            ? '#cf1322'
-                            : '#389e0d',
-                        fontSize: 24,
-                        fontWeight: 700,
-                      },
-                    }}
-                    title="未付金额"
-                    value={formatCurrencyValue(
-                      data.outstandingAmount,
-                      data.currency,
-                    )}
-                  />
-                  <Typography.Text
-                    type={
-                      (data.outstandingAmount ?? 0) > 0 ? 'danger' : 'secondary'
-                    }
-                  >
-                    {(data.outstandingAmount ?? 0) > 0
-                      ? '仍需跟进付款'
-                      : '当前已结清'}
-                  </Typography.Text>
-                </Col>
-              </Row>
-            </Card>
+            <AmountOverview
+              amount={data.amount}
+              currency={data.currency}
+              outstandingAmount={data.outstandingAmount}
+              outstandingTitle="未付金额"
+              paidAmount={data.paidAmount}
+              paidTitle="已付金额"
+              payableAmount={data.amount}
+              payableTitle="应付金额"
+              settledText="当前已结清"
+              unsettledText="仍需跟进付款"
+            />
 
             <Row gutter={[16, 16]}>
               <Col lg={16} xs={24}>
@@ -1174,64 +1118,11 @@ const PurchaseOrderDetailPage: React.FC = () => {
                     />
                   </Card>
 
-                  <Card title="业务时间线" variant="borderless">
-                    {timelineEvents.length ? (
-                      <Timeline
-                        items={timelineEvents.map((event) => {
-                          const path = documentPath(
-                            event.doctype,
-                            event.docname,
-                          );
-                          const relatedPath = documentPath(
-                            event.relatedDoctype,
-                            event.relatedDocname,
-                          );
-                          return {
-                            color: timelineColor(event),
-                            content: (
-                              <Space orientation="vertical" size={4}>
-                                <Space wrap>
-                                  <Typography.Text strong>
-                                    {event.title || event.type}
-                                  </Typography.Text>
-                                  {path ? (
-                                    <Link to={path}>{event.docname}</Link>
-                                  ) : (
-                                    <Typography.Text>
-                                      {event.docname}
-                                    </Typography.Text>
-                                  )}
-                                  {event.status ? (
-                                    <StatusTag value={event.status} />
-                                  ) : null}
-                                </Space>
-                                <Typography.Text type="secondary">
-                                  {timelineEventDescription(
-                                    event,
-                                    data.currency,
-                                  )}
-                                </Typography.Text>
-                                {event.relatedDocname ? (
-                                  <Typography.Text type="secondary">
-                                    关联：
-                                    {relatedPath ? (
-                                      <Link to={relatedPath}>
-                                        {event.relatedDocname}
-                                      </Link>
-                                    ) : (
-                                      event.relatedDocname
-                                    )}
-                                  </Typography.Text>
-                                ) : null}
-                              </Space>
-                            ),
-                          };
-                        })}
-                      />
-                    ) : (
-                      <Empty description="暂无业务时间线" />
-                    )}
-                  </Card>
+                  <BusinessTimeline
+                    currency={data.currency}
+                    events={timelineEvents}
+                    getColor={timelineColor}
+                  />
 
                   <ProTable<PurchaseDocumentItem>
                     columns={itemColumns}
@@ -1296,6 +1187,18 @@ const PurchaseOrderDetailPage: React.FC = () => {
                           </Button>
                         </span>
                       </Tooltip>
+                      <Tooltip title={quickBillDisabledReason(data)}>
+                        <span>
+                          <Button
+                            disabled={!data.canCreateInvoice}
+                            loading={actionLoading === 'quick-bill'}
+                            onClick={confirmQuickBill}
+                            type="primary"
+                          >
+                            一键开单
+                          </Button>
+                        </span>
+                      </Tooltip>
                       <Tooltip title={paymentDisabledReason(data)}>
                         <span>
                           <Button
@@ -1310,38 +1213,42 @@ const PurchaseOrderDetailPage: React.FC = () => {
                           </Button>
                         </span>
                       </Tooltip>
-                      <Tooltip
-                        title={
-                          returnSourceOptions.length
-                            ? ''
-                            : '需要先完成收货或开票后再发起退货'
-                        }
-                      >
-                        <span>
-                          <Button
-                            disabled={!returnSourceOptions.length}
-                            onClick={openReturnSource}
+                      {PURCHASE_RETURN_REFUND_ENTRY_ENABLED ? (
+                        <>
+                          <Tooltip
+                            title={
+                              returnSourceOptions.length
+                                ? ''
+                                : '需要先完成收货或开票后再发起退货'
+                            }
                           >
-                            发起退货
-                          </Button>
-                        </span>
-                      </Tooltip>
-                      <Tooltip
-                        title={
-                          data.purchaseInvoices.length
-                            ? ''
-                            : '需要先创建退货发票后再核对退款'
-                        }
-                      >
-                        <span>
-                          <Button
-                            disabled={!data.purchaseInvoices.length}
-                            onClick={openRefundReview}
+                            <span>
+                              <Button
+                                disabled={!returnSourceOptions.length}
+                                onClick={openReturnSource}
+                              >
+                                发起退货
+                              </Button>
+                            </span>
+                          </Tooltip>
+                          <Tooltip
+                            title={
+                              data.purchaseInvoices.length
+                                ? ''
+                                : '需要先创建退货发票后再核对退款'
+                            }
                           >
-                            退款核对
-                          </Button>
-                        </span>
-                      </Tooltip>
+                            <span>
+                              <Button
+                                disabled={!data.purchaseInvoices.length}
+                                onClick={openRefundReview}
+                              >
+                                退款核对
+                              </Button>
+                            </span>
+                          </Tooltip>
+                        </>
+                      ) : null}
                       <Button
                         danger
                         disabled={
@@ -1399,16 +1306,16 @@ const PurchaseOrderDetailPage: React.FC = () => {
         ) : null}
       </Space>
       <Modal
-        confirmLoading={actionLoading === 'payment'}
+        confirmLoading={paymentModal.loading}
         destroyOnHidden
         okText="确认付款"
-        onCancel={() => setPaymentModalOpen(false)}
+        onCancel={paymentModal.close}
         onOk={submitRecordPayment}
-        open={paymentModalOpen}
+        open={paymentModal.open}
         title={
           (data?.purchaseInvoices?.length ?? 0) > 1
             ? `选择采购发票并记录付款 ${data?.name ?? ''}`
-            : `记录付款 ${paymentDraft.referenceName || ''}`
+            : `记录付款 ${paymentModal.draft.referenceName || ''}`
         }
       >
         <InvoicePaymentForm
@@ -1419,7 +1326,7 @@ const PurchaseOrderDetailPage: React.FC = () => {
             const invoice = await getPurchaseInvoiceDetail(invoiceName);
             return invoice?.outstandingAmount ?? 0;
           }}
-          onChange={setPaymentDraft}
+          onChange={paymentModal.setDraft}
         />
       </Modal>
       <Modal
