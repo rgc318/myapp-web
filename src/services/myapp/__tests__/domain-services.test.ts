@@ -70,6 +70,10 @@ import {
 import {
   fetchPrintFile,
   fetchPrintPreview,
+  fetchPrintTemplates,
+  listPrintJobs,
+  listPrintDoctypes,
+  recordPrintJob,
 } from '../printing';
 import {
   cancelPaymentEntry,
@@ -1313,6 +1317,194 @@ describe('myapp domain services', () => {
         remarks: 'monthly count',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
+    );
+  });
+
+  it('maps print template metadata', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          doctypes: [
+            {
+              capabilities: ['preview', 'download_pdf'],
+              default_template: 'standard',
+              doctype: 'Sales Order',
+              label: '销售订单',
+              module: 'sales',
+              templates: [
+                {
+                  category: 'standard',
+                  enabled: true,
+                  is_default: true,
+                  key: 'standard',
+                  label: '标准模板',
+                  orientation: 'Portrait',
+                  paper_size: 'A4',
+                  print_format: 'myapp Sales Order Standard',
+                  source: 'myapp',
+                  managed: true,
+                  template_hash: 'abcdef1234567890',
+                  template_version: 'abcdef123456',
+                },
+              ],
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          capabilities: ['preview', 'download_pdf', 'archive_pdf'],
+          default_template: 'standard',
+          doctype: 'Sales Order',
+          templates: [
+            {
+              category: 'standard',
+              description: '正式打印模板',
+              enabled: true,
+              is_default: true,
+              key: 'standard',
+              label: '标准模板',
+              orientation: 'Portrait',
+              paper_size: 'A4',
+              print_format: 'myapp Sales Order Standard',
+              source: 'myapp',
+              managed: true,
+              template_hash: 'abcdef1234567890',
+              template_version: 'abcdef123456',
+            },
+          ],
+        },
+      });
+
+    const doctypes = await listPrintDoctypes();
+    const templates = await fetchPrintTemplates({ doctype: 'Sales Order' });
+
+    expect(doctypes[0]).toMatchObject({
+      defaultTemplate: 'standard',
+      doctype: 'Sales Order',
+      label: '销售订单',
+      module: 'sales',
+    });
+    expect(templates.defaultTemplate).toBe('standard');
+    expect(templates.templates[0]).toMatchObject({
+      description: '正式打印模板',
+      managed: true,
+      paperSize: 'A4',
+      printFormat: 'myapp Sales Order Standard',
+      templateHash: 'abcdef1234567890',
+      templateVersion: 'abcdef123456',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'list_print_doctypes_v1',
+      {},
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'get_print_templates_v1',
+      {
+        doctype: 'Sales Order',
+      },
+    );
+  });
+
+  it('maps print job audit APIs', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          docname: 'SO-0001',
+          doctype: 'Sales Order',
+          job_id: 'PRN-JOB-001',
+          printed_at: '2026-07-09 10:30:00',
+          printed_by: 'test@example.com',
+          recorded: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          count: 1,
+          jobs: [
+            {
+              action: 'download',
+              docname: 'SO-0001',
+              doctype: 'Sales Order',
+              error: null,
+              file_url: null,
+              filename: 'SO-0001.pdf',
+              job_id: 'PRN-JOB-001',
+              metadata: { client: 'web' },
+              output: 'pdf',
+              printed_at: '2026-07-09 10:30:00',
+              printed_by: 'test@example.com',
+              status: 'success',
+              template: {
+                key: 'standard',
+                label: '标准模板',
+                print_format: 'myapp Sales Order Standard',
+                template_hash: 'abcdef1234567890',
+                template_version: 'abcdef123456',
+              },
+            },
+          ],
+          table_ready: true,
+        },
+      });
+
+    const recorded = await recordPrintJob({
+      action: 'download',
+      docname: 'SO-0001',
+      doctype: 'Sales Order',
+      filename: 'SO-0001.pdf',
+      metadata: { client: 'web' },
+      output: 'pdf',
+      template: 'standard',
+    });
+    const jobs = await listPrintJobs({
+      action: 'download',
+      docname: 'SO-0001',
+      doctype: 'Sales Order',
+      limit: 5,
+      template: 'standard',
+    });
+
+    expect(recorded).toMatchObject({
+      jobId: 'PRN-JOB-001',
+      recorded: true,
+    });
+    expect(jobs.jobs[0]).toMatchObject({
+      action: 'download',
+      filename: 'SO-0001.pdf',
+      jobId: 'PRN-JOB-001',
+      metadata: { client: 'web' },
+      template: expect.objectContaining({
+        templateHash: 'abcdef1234567890',
+        templateVersion: 'abcdef123456',
+      }),
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'record_print_job_v1',
+      {
+        action: 'download',
+        docname: 'SO-0001',
+        doctype: 'Sales Order',
+        filename: 'SO-0001.pdf',
+        metadata: { client: 'web' },
+        output: 'pdf',
+        status: 'success',
+        template: 'standard',
+      },
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'list_print_jobs_v1',
+      {
+        action: 'download',
+        docname: 'SO-0001',
+        doctype: 'Sales Order',
+        limit: 5,
+        template: 'standard',
+      },
     );
   });
 
