@@ -37,6 +37,8 @@ export default {
   'menu.payments': 'Payment Ledger',
   'menu.payment-detail': 'Payment Detail',
   'menu.finance': 'Finance Overview',
+  'menu.printing-preview': 'Print Preview',
+  'menu.printing-settings': 'Print Settings',
   'menu.inventory': 'Inventory',
   'menu.inventory.stock': 'Stock',
   'menu.inventory.stock-detail': 'Stock Detail',

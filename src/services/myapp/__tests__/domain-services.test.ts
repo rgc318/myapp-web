@@ -68,12 +68,18 @@ import {
   updatePurchaseOrderV2,
 } from '../purchase';
 import {
+  cancelPrintBatch,
+  createPrintBatch,
   fetchPrintFile,
   fetchPrintPreview,
   fetchPrintTemplates,
+  getPrintBatch,
+  getPrintSettings,
   listPrintJobs,
   listPrintDoctypes,
   recordPrintJob,
+  retryPrintBatchFailed,
+  setPrintDefaultTemplate,
 } from '../printing';
 import {
   cancelPaymentEntry,
@@ -1584,6 +1590,107 @@ describe('myapp domain services', () => {
         docname: 'SO-0001',
       },
     );
+  });
+
+  it('maps print settings and batch lifecycle APIs', async () => {
+    const batchPayload = {
+      batch_id: 'PRN-BATCH-001',
+      completed_at: null,
+      done_count: 1,
+      failed_count: 0,
+      items: [{ docname: 'SO-0001', doctype: 'Sales Order' }],
+      progress: 1,
+      requested_at: '2026-07-10 10:00:00',
+      requested_by: 'test@example.com',
+      results: [
+        {
+          docname: 'SO-0001',
+          doctype: 'Sales Order',
+          file_size: 2048,
+          file_url: '/private/files/SO-0001.pdf',
+          filename: 'SO-0001.pdf',
+          status: 'success',
+          template: 'standard',
+        },
+      ],
+      skipped_count: 0,
+      status: 'completed',
+      success_count: 1,
+      table_ready: true,
+      total_count: 1,
+    };
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          settings: [
+            {
+              default_template: 'standard',
+              doctype: 'Sales Order',
+              enabled: true,
+              modified: '2026-07-10 09:00:00',
+              modified_by: 'admin@example.com',
+              name: 'PRINT-SETTING-Sales Order',
+            },
+          ],
+          table_ready: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          default_template: 'external',
+          doctype: 'Sales Order',
+          enabled: true,
+          saved: true,
+          template: { key: 'external', label: '客户确认版' },
+        },
+      })
+      .mockResolvedValueOnce({ data: batchPayload })
+      .mockResolvedValueOnce({ data: batchPayload })
+      .mockResolvedValueOnce({
+        data: {
+          batch_id: 'PRN-BATCH-001',
+          cancel_requested: false,
+          canceled: true,
+          status: 'canceled',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...batchPayload,
+          batch_id: 'PRN-BATCH-002',
+          retry_of: 'PRN-BATCH-001',
+          status: 'queued',
+        },
+      });
+
+    const settings = await getPrintSettings();
+    const saved = await setPrintDefaultTemplate({
+      doctype: 'Sales Order',
+      template: 'external',
+    });
+    const created = await createPrintBatch({
+      documents: [{ docname: 'SO-0001', doctype: 'Sales Order' }],
+      template: 'standard',
+    });
+    const fetched = await getPrintBatch('PRN-BATCH-001');
+    const canceled = await cancelPrintBatch('PRN-BATCH-001');
+    const retried = await retryPrintBatchFailed('PRN-BATCH-001');
+
+    expect(settings.settings[0]).toMatchObject({
+      defaultTemplate: 'standard',
+      modifiedBy: 'admin@example.com',
+    });
+    expect(saved).toMatchObject({ defaultTemplate: 'external', saved: true });
+    expect(created.results[0]).toMatchObject({
+      fileSize: 2048,
+      status: 'success',
+    });
+    expect(fetched.status).toBe('completed');
+    expect(canceled.canceled).toBe(true);
+    expect(retried).toMatchObject({
+      batch: { batchId: 'PRN-BATCH-002', status: 'queued' },
+      retryOf: 'PRN-BATCH-001',
+    });
   });
 
   it('runs item image mutations through gateway', async () => {

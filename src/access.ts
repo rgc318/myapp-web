@@ -36,6 +36,19 @@ export default function access(
           'Stock Manager',
         ),
     ),
+    canViewPrinting: Boolean(
+      isAdmin ||
+        hasRole(
+          'Accounts Manager',
+          'Accounts User',
+          'Purchase Manager',
+          'Purchase User',
+          'Sales Manager',
+          'Sales User',
+          'Stock Manager',
+          'Stock User',
+        ),
+    ),
     canViewPurchase: Boolean(
       isAdmin || hasRole('Purchase Manager', 'Purchase User'),
     ),

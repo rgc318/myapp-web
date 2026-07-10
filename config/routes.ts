@@ -195,6 +195,20 @@ export default [
     hideInMenu: true,
   },
   {
+    path: '/printing/preview',
+    name: 'printing-preview',
+    access: 'canViewPrinting',
+    component: './Printing/Preview',
+    hideInMenu: true,
+  },
+  {
+    path: '/printing/settings',
+    name: 'printing-settings',
+    icon: 'printer',
+    access: 'canAdmin',
+    component: './Printing/Settings',
+  },
+  {
     path: '/finance',
     name: 'finance',
     icon: 'accountBook',

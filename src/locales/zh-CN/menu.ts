@@ -38,6 +38,8 @@ export default {
   'menu.payments': '收付款流水',
   'menu.payment-detail': '收付款详情',
   'menu.finance': '财务概览',
+  'menu.printing-preview': '打印预览',
+  'menu.printing-settings': '打印设置',
   'menu.inventory': '库存',
   'menu.inventory.stock': '商品库存',
   'menu.inventory.stock-detail': '商品库存详情',

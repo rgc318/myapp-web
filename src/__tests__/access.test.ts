@@ -15,8 +15,10 @@ describe('access', () => {
     expect(result.canViewInventory).toBe(true);
     expect(result.canViewMasterData).toBe(true);
     expect(result.canViewPurchase).toBe(true);
+    expect(result.canViewPrinting).toBe(true);
     expect(result.canViewReports).toBe(true);
     expect(result.canViewSales).toBe(true);
+    expect(result.canViewPrinting).toBe(true);
   });
 
   it('grants domain-specific permissions by role', () => {

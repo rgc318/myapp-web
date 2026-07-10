@@ -25,6 +25,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { PrintBatchAction } from '@/components/printing/PrintBatchAction';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
@@ -847,6 +848,13 @@ const SalesOrdersPage: React.FC = () => {
             }
           >
             <Button onClick={copySelectedOrderNames}>复制订单号</Button>
+            <PrintBatchAction
+              documents={selectedRows.map((row) => ({
+                docname: row.name,
+                doctype: 'Sales Order',
+              }))}
+              sourcePage="sales_orders"
+            />
             <Button onClick={exportSelectedOrders} type="primary">
               导出选中 CSV
             </Button>

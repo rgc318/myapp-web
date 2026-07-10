@@ -3,6 +3,7 @@ import { buildMyAppApiUrl } from './api-base';
 import { getMyAppAuthHeaders } from './auth-storage';
 
 export type PrintTemplateOption = {
+  allowedRoles: string[];
   category: string;
   description: string | null;
   enabled: boolean;
@@ -12,10 +13,66 @@ export type PrintTemplateOption = {
   orientation: string;
   paperSize: string;
   printFormat: string | null;
+  restricted: boolean;
   isDefault: boolean;
   source: string;
   templateHash: string | null;
   templateVersion: string | null;
+};
+
+export type PrintSetting = {
+  defaultTemplate: string | null;
+  doctype: string;
+  enabled: boolean;
+  metadata: unknown;
+  modified: string | null;
+  modifiedBy: string | null;
+  name: string | null;
+};
+
+export type PrintBatchStatus =
+  | 'queued'
+  | 'processing'
+  | 'cancel_requested'
+  | 'canceled'
+  | 'completed'
+  | 'partial_failed'
+  | 'failed';
+
+export type PrintBatchDocument = {
+  docname: string;
+  doctype: string;
+  filename?: string | null;
+  template?: string | null;
+};
+
+export type PrintBatchResult = PrintBatchDocument & {
+  error: string | null;
+  fileSize: number;
+  fileUrl: string | null;
+  status: 'success' | 'failed' | 'skipped';
+};
+
+export type PrintBatch = {
+  batchId: string;
+  completedAt: string | null;
+  doneCount: number;
+  enqueueJobId: string | null;
+  error: string | null;
+  failedCount: number;
+  items: PrintBatchDocument[];
+  metadata: unknown;
+  output: 'pdf';
+  progress: number;
+  requestedAt: string | null;
+  requestedBy: string | null;
+  results: PrintBatchResult[];
+  skippedCount: number;
+  startedAt: string | null;
+  status: PrintBatchStatus;
+  successCount: number;
+  tableReady: boolean;
+  totalCount: number;
 };
 
 export type PrintTemplatesData = {
@@ -86,6 +143,11 @@ function mapTemplateOption(value: unknown): PrintTemplateOption | null {
   }
 
   return {
+    allowedRoles: Array.isArray(row.allowed_roles)
+      ? row.allowed_roles.filter(
+          (item): item is string => typeof item === 'string',
+        )
+      : [],
     category: typeof row.category === 'string' ? row.category : 'standard',
     description:
       typeof row.description === 'string' ? row.description : null,
@@ -99,6 +161,7 @@ function mapTemplateOption(value: unknown): PrintTemplateOption | null {
     paperSize: typeof row.paper_size === 'string' ? row.paper_size : 'A4',
     printFormat:
       typeof row.print_format === 'string' ? row.print_format : null,
+    restricted: Boolean(row.restricted),
     source: typeof row.source === 'string' ? row.source : 'unknown',
     templateHash:
       typeof row.template_hash === 'string' ? row.template_hash : null,
@@ -117,6 +180,7 @@ function mapTemplateList(value: unknown) {
 
 function fallbackTemplate(): PrintTemplateOption {
   return {
+    allowedRoles: [],
     category: 'standard',
     description: null,
     enabled: true,
@@ -127,9 +191,125 @@ function fallbackTemplate(): PrintTemplateOption {
     orientation: 'Portrait',
     paperSize: 'A4',
     printFormat: null,
+    restricted: false,
     source: 'fallback',
     templateHash: null,
     templateVersion: null,
+  };
+}
+
+function mapPrintSetting(value: unknown): PrintSetting | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const doctype = typeof row.doctype === 'string' ? row.doctype : '';
+  if (!doctype) {
+    return null;
+  }
+  return {
+    defaultTemplate:
+      typeof row.default_template === 'string' ? row.default_template : null,
+    doctype,
+    enabled: row.enabled !== false,
+    metadata: row.metadata ?? null,
+    modified: typeof row.modified === 'string' ? row.modified : null,
+    modifiedBy:
+      typeof row.modified_by === 'string' ? row.modified_by : null,
+    name: typeof row.name === 'string' ? row.name : null,
+  };
+}
+
+function mapBatchDocument(value: unknown): PrintBatchDocument | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const doctype = typeof row.doctype === 'string' ? row.doctype : '';
+  const docname =
+    typeof row.docname === 'string'
+      ? row.docname
+      : typeof row.name === 'string'
+        ? row.name
+        : '';
+  if (!doctype || !docname) {
+    return null;
+  }
+  return {
+    docname,
+    doctype,
+    filename: typeof row.filename === 'string' ? row.filename : null,
+    template: typeof row.template === 'string' ? row.template : null,
+  };
+}
+
+function mapPrintBatchResult(value: unknown): PrintBatchResult | null {
+  const document = mapBatchDocument(value);
+  if (!document || !value || typeof value !== 'object') {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const status =
+    row.status === 'success' ||
+    row.status === 'failed' ||
+    row.status === 'skipped'
+      ? row.status
+      : 'failed';
+  return {
+    ...document,
+    error: typeof row.error === 'string' ? row.error : null,
+    fileSize: typeof row.file_size === 'number' ? row.file_size : 0,
+    fileUrl: typeof row.file_url === 'string' ? row.file_url : null,
+    status,
+  };
+}
+
+function mapPrintBatch(value: Record<string, unknown>): PrintBatch {
+  const status: PrintBatchStatus =
+    value.status === 'processing' ||
+    value.status === 'cancel_requested' ||
+    value.status === 'canceled' ||
+    value.status === 'completed' ||
+    value.status === 'partial_failed' ||
+    value.status === 'failed'
+      ? value.status
+      : 'queued';
+  return {
+    batchId: typeof value.batch_id === 'string' ? value.batch_id : '',
+    completedAt:
+      typeof value.completed_at === 'string' ? value.completed_at : null,
+    doneCount: typeof value.done_count === 'number' ? value.done_count : 0,
+    enqueueJobId:
+      typeof value.enqueue_job_id === 'string' ? value.enqueue_job_id : null,
+    error: typeof value.error === 'string' ? value.error : null,
+    failedCount:
+      typeof value.failed_count === 'number' ? value.failed_count : 0,
+    items: Array.isArray(value.items)
+      ? value.items
+          .map(mapBatchDocument)
+          .filter((item): item is PrintBatchDocument => Boolean(item))
+      : [],
+    metadata: value.metadata ?? null,
+    output: 'pdf',
+    progress: typeof value.progress === 'number' ? value.progress : 0,
+    requestedAt:
+      typeof value.requested_at === 'string' ? value.requested_at : null,
+    requestedBy:
+      typeof value.requested_by === 'string' ? value.requested_by : null,
+    results: Array.isArray(value.results)
+      ? value.results
+          .map(mapPrintBatchResult)
+          .filter((item): item is PrintBatchResult => Boolean(item))
+      : [],
+    skippedCount:
+      typeof value.skipped_count === 'number' ? value.skipped_count : 0,
+    startedAt:
+      typeof value.started_at === 'string' ? value.started_at : null,
+    status,
+    successCount:
+      typeof value.success_count === 'number' ? value.success_count : 0,
+    tableReady: value.table_ready !== false,
+    totalCount: typeof value.total_count === 'number' ? value.total_count : 0,
   };
 }
 
@@ -215,6 +395,113 @@ export async function listPrintDoctypes() {
         .map(mapPrintDoctypeOption)
         .filter((item): item is PrintDoctypeOption => Boolean(item))
     : [];
+}
+
+export async function getPrintSettings() {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'get_print_settings_v1',
+    {},
+  );
+  const data = result.data ?? {};
+  return {
+    settings: Array.isArray(data.settings)
+      ? data.settings
+          .map(mapPrintSetting)
+          .filter((item): item is PrintSetting => Boolean(item))
+      : [],
+    tableReady: data.table_ready !== false,
+  };
+}
+
+export async function setPrintDefaultTemplate(params: {
+  doctype: string;
+  enabled?: boolean;
+  metadata?: Record<string, unknown> | null;
+  template: string;
+}) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'set_print_default_template_v1',
+    {
+      doctype: params.doctype,
+      enabled: params.enabled ?? true,
+      metadata: params.metadata ?? undefined,
+      template: params.template,
+    },
+  );
+  const data = result.data ?? {};
+  return {
+    defaultTemplate:
+      typeof data.default_template === 'string'
+        ? data.default_template
+        : params.template,
+    doctype: typeof data.doctype === 'string' ? data.doctype : params.doctype,
+    enabled: data.enabled !== false,
+    saved: Boolean(data.saved),
+    template: mapTemplateOption(data.template),
+  };
+}
+
+export async function createPrintBatch(params: {
+  documents: PrintBatchDocument[];
+  metadata?: Record<string, unknown> | null;
+  template?: string | null;
+}) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'create_print_batch_v1',
+    {
+      documents: params.documents.map((item) => ({
+        docname: item.docname,
+        doctype: item.doctype,
+        filename: item.filename ?? undefined,
+        template: item.template ?? undefined,
+      })),
+      metadata: params.metadata ?? undefined,
+      output: 'pdf',
+      run_async: 1,
+      template: params.template ?? undefined,
+    },
+  );
+  return mapPrintBatch(result.data ?? {});
+}
+
+export async function getPrintBatch(batchId: string) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'get_print_batch_v1',
+    { batch_id: batchId },
+  );
+  return mapPrintBatch(result.data ?? {});
+}
+
+export async function cancelPrintBatch(batchId: string) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'cancel_print_batch_v1',
+    { batch_id: batchId },
+  );
+  const data = result.data ?? {};
+  return {
+    batchId: typeof data.batch_id === 'string' ? data.batch_id : batchId,
+    cancelRequested: Boolean(data.cancel_requested),
+    canceled: Boolean(data.canceled),
+    status: typeof data.status === 'string' ? data.status : null,
+  };
+}
+
+export async function retryPrintBatchFailed(batchId: string) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'retry_print_batch_failed_v1',
+    {
+      batch_id: batchId,
+      metadata: { client: 'web' },
+      run_async: 1,
+    },
+  );
+  return {
+    batch: mapPrintBatch(result.data ?? {}),
+    retryOf:
+      typeof result.data?.retry_of === 'string'
+        ? result.data.retry_of
+        : batchId,
+  };
 }
 
 export async function fetchPrintTemplates(params: {
@@ -409,11 +696,31 @@ export async function downloadPrintFile(params: {
     },
   );
 
-  if (!response.ok) {
-    throw new Error('下载打印文件失败');
-  }
+  return readDownloadResponse(response, '下载打印文件失败');
+}
 
-  return response.blob();
+export async function downloadPrintBatchArchive(params: {
+  batchId: string;
+  filename?: string | null;
+}) {
+  const response = await fetch(
+    buildMyAppApiUrl(
+      '/api/method/myapp.api.gateway.download_print_batch_archive_v1',
+    ),
+    {
+      body: JSON.stringify({
+        batch_id: params.batchId,
+        filename: params.filename ?? undefined,
+      }),
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getMyAppAuthHeaders() ?? {}),
+      },
+      method: 'POST',
+    },
+  );
+  return readDownloadResponse(response, '下载批量打印 ZIP 失败');
 }
 
 export function openHtmlPreviewWindow(preview: PrintPreviewData) {
@@ -435,4 +742,25 @@ export function saveBlobAsFile(blob: Blob, filename: string) {
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+}
+
+async function readDownloadResponse(response: Response, fallback: string) {
+  if (response.ok) {
+    return response.blob();
+  }
+  try {
+    const payload = (await response.json()) as Record<string, unknown>;
+    const messageValue =
+      typeof payload.message === 'string'
+        ? payload.message
+        : payload.message && typeof payload.message === 'object'
+          ? (payload.message as Record<string, unknown>).message
+          : null;
+    throw new Error(typeof messageValue === 'string' ? messageValue : fallback);
+  } catch (caught) {
+    if (caught instanceof Error && caught.message !== 'Unexpected end of JSON input') {
+      throw caught;
+    }
+    throw new Error(fallback);
+  }
 }

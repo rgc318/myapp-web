@@ -1,5 +1,10 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
-import { PageContainer, ProCard, ProTable } from '@ant-design/pro-components';
+import {
+  FooterToolbar,
+  PageContainer,
+  ProCard,
+  ProTable,
+} from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
 import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
@@ -12,6 +17,7 @@ import {
   listBusinessDocuments,
 } from '@/services/myapp/documents';
 import { formatCurrencyValue, StatusTag } from '@/utils/myapp-display';
+import { PrintBatchAction } from './printing/PrintBatchAction';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
 
 const PAGE_SIZE = 20;
@@ -185,6 +191,9 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
 }) => {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [totalCount, setTotalCount] = useState(0);
+  const [selectedRows, setSelectedRows] = useState<BusinessDocumentSummary[]>(
+    [],
+  );
   const { defaultCompany } = useWorkspacePreferences();
   const columns = buildColumns(defaultCompany, partyLabel, searchPlaceholder);
 
@@ -230,6 +239,7 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
             });
 
             setTotalCount(result.summary.visibleCount);
+            setSelectedRows([]);
 
             return {
               data: result.items,
@@ -238,15 +248,40 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
             };
           }}
           rowKey="name"
+          rowSelection={{
+            onChange: (_, rows) => setSelectedRows(rows),
+            selectedRowKeys: selectedRows.map((row) => row.name),
+          }}
           search={{
             defaultCollapsed: false,
             labelWidth: 88,
           }}
           toolBarRender={false}
         />
+        {selectedRows.length ? (
+          <FooterToolbar
+            extra={
+              <span>
+                已选 <strong>{selectedRows.length}</strong> 项
+              </span>
+            }
+          >
+            <PrintBatchAction
+              documents={selectedRows.map((row) => ({
+                docname: row.name,
+                doctype,
+              }))}
+              sourcePage={rowSourcePage(doctype)}
+            />
+          </FooterToolbar>
+        ) : null}
       </Space>
     </PageContainer>
   );
 };
+
+function rowSourcePage(doctype: BusinessDocumentDoctype) {
+  return `business_documents:${doctype}`;
+}
 
 export default BusinessDocumentsTablePage;

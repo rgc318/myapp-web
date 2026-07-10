@@ -14,10 +14,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   downloadPrintFile,
   fetchPrintFile,
-  fetchPrintPreview,
   fetchPrintTemplates,
   listPrintJobs,
-  openHtmlPreviewWindow,
   type PrintJobRecord,
   type PrintTemplateOption,
   recordPrintJob,
@@ -38,38 +36,16 @@ export function PrintDocumentButton({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [printJobs, setPrintJobs] = useState<PrintJobRecord[]>([]);
   const [templates, setTemplates] = useState<PrintTemplateOption[]>([]);
+  const [defaultTemplate, setDefaultTemplate] = useState<string | null>(null);
   const [templatesLoaded, setTemplatesLoaded] = useState(false);
 
   useEffect(() => {
     setHistoryOpen(false);
     setPrintJobs([]);
     setTemplates([]);
+    setDefaultTemplate(null);
     setTemplatesLoaded(false);
   }, [docname, doctype]);
-
-  const effectiveTemplates = useMemo(
-    () =>
-      templates.length
-        ? templates
-        : [
-            {
-              category: 'standard',
-              description: null,
-              enabled: true,
-              isDefault: true,
-              key: 'standard',
-              label: '标准模板',
-              managed: false,
-              orientation: 'Portrait',
-              paperSize: 'A4',
-              printFormat: null,
-              source: 'fallback',
-              templateHash: null,
-              templateVersion: null,
-            },
-          ],
-    [templates],
-  );
 
   const loadTemplates = async () => {
     if (templatesLoaded || disabled) {
@@ -80,6 +56,7 @@ export function PrintDocumentButton({
     try {
       const result = await fetchPrintTemplates({ doctype });
       setTemplates(result.templates);
+      setDefaultTemplate(result.defaultTemplate);
       setTemplatesLoaded(true);
     } catch (caught) {
       message.error(
@@ -92,21 +69,23 @@ export function PrintDocumentButton({
 
   const runPrintAction = async (
     mode: 'preview' | 'download',
-    template: string,
+    template?: string | null,
   ) => {
+    if (mode === 'preview') {
+      const params = new URLSearchParams({ docname, doctype });
+      if (template) {
+        params.set('template', template);
+      }
+      window.open(
+        `/printing/preview?${params.toString()}`,
+        '_blank',
+        'noopener,noreferrer',
+      );
+      return;
+    }
+
     setLoading(true);
     try {
-      if (mode === 'preview') {
-        const preview = await fetchPrintPreview({ docname, doctype, template });
-        openHtmlPreviewWindow(preview);
-        void recordPrintAction({
-          action: 'preview',
-          output: 'html',
-          template: preview.template.key,
-        });
-        return;
-      }
-
       const file = await fetchPrintFile({ docname, doctype, template });
       const blob = await downloadPrintFile({
         docname,
@@ -180,17 +159,20 @@ export function PrintDocumentButton({
       { key: 'history', label: '打印历史' },
     ];
 
-    if (effectiveTemplates.length <= 1) {
-      const template = effectiveTemplates[0]?.key ?? 'standard';
-      return [
-        { key: `preview:${template}`, label: '打印预览' },
-        { key: `download:${template}`, label: '下载 PDF' },
-        ...historyItems,
-      ];
+    const defaultItems: MenuProps['items'] = [
+      { key: `preview:${defaultTemplate ?? ''}`, label: '打印预览' },
+      { key: `download:${defaultTemplate ?? ''}`, label: '下载 PDF' },
+    ];
+    const secondaryTemplates = templates.filter(
+      (template) => template.key !== defaultTemplate,
+    );
+    if (!secondaryTemplates.length) {
+      return [...defaultItems, ...historyItems];
     }
-
     return [
-      ...effectiveTemplates.flatMap((template) => [
+      ...defaultItems,
+      { type: 'divider' },
+      ...secondaryTemplates.flatMap((template) => [
         {
           key: `preview:${template.key}`,
           label: renderTemplateMenuLabel('预览', template),
@@ -202,7 +184,7 @@ export function PrintDocumentButton({
       ]),
       ...historyItems,
     ];
-  }, [effectiveTemplates]);
+  }, [defaultTemplate, templates]);
 
   return (
     <>
@@ -218,7 +200,7 @@ export function PrintDocumentButton({
             const [mode, template] = String(key).split(':');
             void runPrintAction(
               mode === 'download' ? 'download' : 'preview',
-              template || 'standard',
+              template || null,
             );
           },
         }}
