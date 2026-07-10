@@ -193,11 +193,11 @@ export function PrintDocumentButton({
       ...effectiveTemplates.flatMap((template) => [
         {
           key: `preview:${template.key}`,
-          label: `预览 - ${template.label}`,
+          label: renderTemplateMenuLabel('预览', template),
         },
         {
           key: `download:${template.key}`,
-          label: `下载 PDF - ${template.label}`,
+          label: renderTemplateMenuLabel('下载 PDF', template),
         },
       ]),
       ...historyItems,
@@ -290,4 +290,45 @@ function printActionColor(action: string) {
     share: 'cyan',
   };
   return colors[action] ?? 'default';
+}
+
+function renderTemplateMenuLabel(
+  action: string,
+  template: PrintTemplateOption,
+) {
+  return (
+    <Space direction="vertical" size={0}>
+      <Space size={6}>
+        <span>{`${action} - ${template.label}`}</span>
+        <Tag color={printTemplateCategoryColor(template.category)}>
+          {printTemplateCategoryLabel(template.category)}
+        </Tag>
+      </Space>
+      {template.description ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {template.description}
+        </Typography.Text>
+      ) : null}
+    </Space>
+  );
+}
+
+function printTemplateCategoryLabel(category: string) {
+  const labels: Record<string, string> = {
+    external: '对外',
+    finance: '财务',
+    standard: '标准',
+    warehouse: '仓库',
+  };
+  return labels[category] ?? category;
+}
+
+function printTemplateCategoryColor(category: string) {
+  const colors: Record<string, string> = {
+    external: 'blue',
+    finance: 'gold',
+    standard: 'default',
+    warehouse: 'green',
+  };
+  return colors[category] ?? 'default';
 }

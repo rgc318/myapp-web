@@ -495,6 +495,8 @@ Web 端已新增 `src/services/myapp/printing.ts` 和 `src/components/PrintDocum
 - 打印预览调用 `myapp.api.gateway.get_print_preview_v1`，由后端返回 HTML 内容，前端打开独立预览窗口。
 - PDF 下载先调用 `myapp.api.gateway.get_print_file_v1` 获取文件元数据，再通过 `myapp.api.gateway.download_print_file_v1` 下载真实文件流。
 - 当前已接入 `Sales Order`、`Delivery Note`、`Sales Invoice`、`Purchase Order`、`Purchase Receipt`、`Purchase Invoice` 六类单据详情页。
+- 通用打印按钮会在下拉展开时调用 `get_print_templates_v1`，按后端返回的模板分类、说明和默认模板展示菜单；页面层只传 `doctype` 和 `docname`，不要硬编码模板列表。
+- 当前 6 类核心单据均已有第二模板变体：发票 `finance`、订单 `external`、发货 / 收货 `warehouse`。这些变体已可选择和记录历史，打印内容当前复用对应标准模板基础 HTML，并显示模板名和标题差异，后续由后端模板替换为更完整的独立版式。
 - 打印 / 下载属于读取和文件下载动作，不使用 `runGatewayMutation`；写操作幂等规则不适用于该类动作。
 - 前端不直接拼 Frappe 打印 URL，不绕过 gateway 调用 `/printview` 或 `/api/resource`。
 
