@@ -57,6 +57,8 @@ export type PrintBatch = {
   batchId: string;
   completedAt: string | null;
   doneCount: number;
+  doctypes: string[];
+  documentNames: string[];
   enqueueJobId: string | null;
   error: string | null;
   failedCount: number;
@@ -279,6 +281,14 @@ function mapPrintBatch(value: Record<string, unknown>): PrintBatch {
     completedAt:
       typeof value.completed_at === 'string' ? value.completed_at : null,
     doneCount: typeof value.done_count === 'number' ? value.done_count : 0,
+    doctypes: Array.isArray(value.doctypes)
+      ? value.doctypes.filter((item): item is string => typeof item === 'string')
+      : [],
+    documentNames: Array.isArray(value.document_names)
+      ? value.document_names.filter(
+          (item): item is string => typeof item === 'string',
+        )
+      : [],
     enqueueJobId:
       typeof value.enqueue_job_id === 'string' ? value.enqueue_job_id : null,
     error: typeof value.error === 'string' ? value.error : null,
@@ -472,6 +482,41 @@ export async function getPrintBatch(batchId: string) {
   return mapPrintBatch(result.data ?? {});
 }
 
+export async function listPrintBatches(params: {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  limit?: number;
+  requestedBy?: string | null;
+  start?: number;
+  status?: PrintBatchStatus | null;
+}) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_print_batches_v1',
+    {
+      date_from: params.dateFrom ?? undefined,
+      date_to: params.dateTo ?? undefined,
+      limit: params.limit ?? 20,
+      requested_by: params.requestedBy ?? undefined,
+      start: params.start ?? 0,
+      status: params.status ?? undefined,
+    },
+  );
+  const data = result.data ?? {};
+  return {
+    batches: Array.isArray(data.batches)
+      ? data.batches.map((item) =>
+          mapPrintBatch(
+            item && typeof item === 'object'
+              ? (item as Record<string, unknown>)
+              : {},
+          ),
+        )
+      : [],
+    tableReady: data.table_ready !== false,
+    total: typeof data.total === 'number' ? data.total : 0,
+  };
+}
+
 export async function cancelPrintBatch(batchId: string) {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'cancel_print_batch_v1',
@@ -600,6 +645,45 @@ export async function listPrintJobs(params: {
           .filter((item): item is PrintJobRecord => Boolean(item))
       : [],
     tableReady: data.table_ready !== false,
+  };
+}
+
+export async function listPrintJobsGlobal(params: {
+  action?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  docname?: string | null;
+  doctype?: string | null;
+  limit?: number;
+  start?: number;
+  status?: string | null;
+  template?: string | null;
+  user?: string | null;
+}) {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_print_jobs_v2',
+    {
+      action: params.action ?? undefined,
+      date_from: params.dateFrom ?? undefined,
+      date_to: params.dateTo ?? undefined,
+      docname: params.docname ?? undefined,
+      doctype: params.doctype ?? undefined,
+      limit: params.limit ?? 20,
+      start: params.start ?? 0,
+      status: params.status ?? undefined,
+      template: params.template ?? undefined,
+      user: params.user ?? undefined,
+    },
+  );
+  const data = result.data ?? {};
+  return {
+    jobs: Array.isArray(data.jobs)
+      ? data.jobs
+          .map(mapPrintJob)
+          .filter((item): item is PrintJobRecord => Boolean(item))
+      : [],
+    tableReady: data.table_ready !== false,
+    total: typeof data.total === 'number' ? data.total : 0,
   };
 }
 

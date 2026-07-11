@@ -76,6 +76,8 @@ import {
   getPrintBatch,
   getPrintSettings,
   listPrintJobs,
+  listPrintBatches,
+  listPrintJobsGlobal,
   listPrintDoctypes,
   recordPrintJob,
   retryPrintBatchFailed,
@@ -1691,6 +1693,90 @@ describe('myapp domain services', () => {
       batch: { batchId: 'PRN-BATCH-002', status: 'queued' },
       retryOf: 'PRN-BATCH-001',
     });
+  });
+
+  it('maps paginated print center lists', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: {
+          batches: [
+            {
+              batch_id: 'PRN-BATCH-001',
+              document_names: ['SO-0001'],
+              doctypes: ['Sales Order'],
+              progress: 0.5,
+              requested_by: 'test@example.com',
+              status: 'processing',
+              success_count: 1,
+              total_count: 2,
+            },
+          ],
+          table_ready: true,
+          total: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          jobs: [
+            {
+              action: 'print',
+              docname: 'SO-0001',
+              doctype: 'Sales Order',
+              job_id: 'PRN-JOB-001',
+              output: 'html',
+              printed_at: '2026-07-10 10:00:00',
+              printed_by: 'test@example.com',
+              status: 'success',
+              template: { key: 'standard', label: '标准模板' },
+            },
+          ],
+          table_ready: true,
+          total: 1,
+        },
+      });
+
+    const batches = await listPrintBatches({
+      limit: 20,
+      start: 0,
+      status: 'processing',
+    });
+    const jobs = await listPrintJobsGlobal({
+      doctype: 'Sales Order',
+      limit: 20,
+      start: 0,
+    });
+
+    expect(batches.batches[0]).toMatchObject({
+      batchId: 'PRN-BATCH-001',
+      documentNames: ['SO-0001'],
+      doctypes: ['Sales Order'],
+      status: 'processing',
+    });
+    expect(jobs.jobs[0]).toMatchObject({
+      docname: 'SO-0001',
+      jobId: 'PRN-JOB-001',
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'list_print_batches_v1',
+      {
+        date_from: undefined,
+        date_to: undefined,
+        limit: 20,
+        requested_by: undefined,
+        start: 0,
+        status: 'processing',
+      },
+    );
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'list_print_jobs_v2',
+      expect.objectContaining({
+        doctype: 'Sales Order',
+        limit: 20,
+        start: 0,
+      }),
+    );
   });
 
   it('runs item image mutations through gateway', async () => {

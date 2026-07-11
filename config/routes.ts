@@ -195,18 +195,38 @@ export default [
     hideInMenu: true,
   },
   {
-    path: '/printing/preview',
-    name: 'printing-preview',
-    access: 'canViewPrinting',
-    component: './Printing/Preview',
-    hideInMenu: true,
-  },
-  {
-    path: '/printing/settings',
-    name: 'printing-settings',
+    path: '/printing',
+    name: 'printing',
     icon: 'printer',
-    access: 'canAdmin',
-    component: './Printing/Settings',
+    access: 'canViewPrinting',
+    routes: [
+      {
+        path: '/printing',
+        redirect: '/printing/batches',
+      },
+      {
+        path: '/printing/batches',
+        name: 'batches',
+        component: './Printing/Batches',
+      },
+      {
+        path: '/printing/history',
+        name: 'history',
+        component: './Printing/History',
+      },
+      {
+        path: '/printing/settings',
+        name: 'settings',
+        access: 'canAdmin',
+        component: './Printing/Settings',
+      },
+      {
+        path: '/printing/preview',
+        name: 'preview',
+        component: './Printing/Preview',
+        hideInMenu: true,
+      },
+    ],
   },
   {
     path: '/finance',
