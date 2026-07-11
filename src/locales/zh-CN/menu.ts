@@ -1,4 +1,8 @@
 export default {
+  'menu.administration': '系统管理',
+  'menu.administration.users': '用户管理',
+  'menu.administration.user-detail': '用户详情',
+  'menu.administration.roles': '角色目录',
   'menu.welcome': '模板欢迎页',
   'menu.more-blocks': '更多区块',
   'menu.home': '首页',

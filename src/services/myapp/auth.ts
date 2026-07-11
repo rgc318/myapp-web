@@ -11,9 +11,14 @@ type FrappeMethodResponse<T> = {
 };
 
 type TokenUser = {
+  email?: string;
   full_name?: string;
+  location?: string;
+  mobile_no?: string;
+  phone?: string;
   roles?: string[];
   user?: string;
+  user_image?: string;
 };
 
 type LoginMessage = {
@@ -45,8 +50,11 @@ export type MyAppLoginParams = {
 };
 
 export type MyAppCurrentUser = {
+  avatar?: string;
   email?: string;
   fullName: string;
+  location?: string;
+  phone?: string;
   roles: string[];
   user: string;
 };
@@ -64,8 +72,11 @@ class MyAppAuthError extends Error {
 function mapCurrentUser(value: (TokenUser & { email?: string }) | undefined) {
   const user = value?.user || value?.email || '';
   return {
+    avatar: value?.user_image,
     email: value?.email || (user.includes('@') ? user : undefined),
     fullName: value?.full_name || user,
+    location: value?.location,
+    phone: value?.mobile_no || value?.phone,
     roles: value?.roles ?? [],
     user,
   } satisfies MyAppCurrentUser;
@@ -82,8 +93,11 @@ export function mapMyAppUserToCurrentUser(
   return {
     ...fallback,
     access: user.roles.includes('System Manager') ? 'admin' : fallback?.access,
+    avatar: user.avatar || fallback?.avatar,
     email: user.email,
     name: user.fullName,
+    phone: user.phone,
+    address: user.location,
     roles: user.roles,
     userid: user.user,
   } satisfies API.CurrentUser;

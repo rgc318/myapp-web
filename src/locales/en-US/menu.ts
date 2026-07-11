@@ -1,4 +1,8 @@
 export default {
+  'menu.administration': 'Administration',
+  'menu.administration.users': 'Users',
+  'menu.administration.user-detail': 'User Detail',
+  'menu.administration.roles': 'Roles',
   'menu.welcome': 'Welcome',
   'menu.more-blocks': 'More Blocks',
   'menu.home': 'Home',

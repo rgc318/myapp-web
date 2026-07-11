@@ -29,6 +29,23 @@ export default [
     component: './Dashboard',
   },
   {
+    path: '/account',
+    name: 'account',
+    hideInMenu: true,
+    routes: [
+      {
+        path: '/account/center',
+        name: 'center',
+        component: './Account/Center',
+      },
+      {
+        path: '/account/settings',
+        name: 'settings',
+        component: './Account/Settings',
+      },
+    ],
+  },
+  {
     path: '/pending-confirmations',
     name: 'pending-confirmations',
     icon: 'checkCircle',
@@ -336,20 +353,30 @@ export default [
     hideInMenu: true,
   },
   {
-    path: '/admin',
-    name: 'admin',
-    icon: 'crown',
+    path: '/administration',
+    name: 'administration',
+    icon: 'team',
     access: 'canAdmin',
-    hideInMenu: true,
     routes: [
       {
-        path: '/admin',
-        redirect: '/admin/sub-page',
+        path: '/administration',
+        redirect: '/administration/users',
       },
       {
-        path: '/admin/sub-page',
-        name: 'sub-page',
-        component: './Admin',
+        path: '/administration/users',
+        name: 'users',
+        component: './Administration/Users',
+      },
+      {
+        path: '/administration/users/:user',
+        name: 'user-detail',
+        component: './Administration/Users/Detail',
+        hideInMenu: true,
+      },
+      {
+        path: '/administration/roles',
+        name: 'roles',
+        component: './Administration/Roles',
       },
     ],
   },

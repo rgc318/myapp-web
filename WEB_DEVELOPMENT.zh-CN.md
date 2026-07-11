@@ -1477,3 +1477,20 @@ c4258c4 feat: localize app chrome
 4. 登录后确认 `/master-data/products`、`/master-data/customers`、`/master-data/suppliers`、`/master-data/uoms` 能显示列表或明确错误态。
 5. 做真实浏览器联调，验证销售 / 采购创建下游单据、登记收付款、取消订单和取消下游单据后的后端单据状态刷新。
 6. 继续补业务增强：主数据轻量编辑、报表图表和钻取。
+
+## 12. 用户与权限模块
+
+Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在页面解析后端蛇形字段。
+
+个人页面：
+
+- `/account/center`：个人身份、角色、工作偏好、数据可见范围和最近活动。
+- `/account/settings`：个人资料、工作偏好和密码修改。
+
+系统管理页面（仅 `canAdmin` / `System Manager`）：
+
+- `/administration/users`：用户服务端分页、筛选、创建和启停。
+- `/administration/users/:user`：主档编辑、角色整体分配、User Permission 数据范围和变更审计。
+- `/administration/roles`：角色目录、Desk 访问和使用人数。
+
+前端 `access.ts` 只负责菜单与按钮体验，所有用户、角色和数据权限操作必须由后端再次鉴权。账号不提供硬删除操作；退出使用停用状态，以保留历史单据和审计主体。
