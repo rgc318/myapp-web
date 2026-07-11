@@ -1,5 +1,6 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import {
+  FooterToolbar,
   PageContainer,
   ProTable,
   StatisticCard,
@@ -8,6 +9,7 @@ import { Link, useLocation, useRequest } from '@umijs/max';
 import { Button, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { PrintBatchAction } from '@/components/printing/PrintBatchAction';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
@@ -176,6 +178,7 @@ const PaymentsPage: React.FC = () => {
   const initialSearchKey =
     new URLSearchParams(location.search).get('search') ?? '';
   const columns = buildColumns(defaultCompany, initialSearchKey);
+  const [selectedRows, setSelectedRows] = useState<CashflowEntry[]>([]);
   const [activeReportFilter, setActiveReportFilter] = useState<ReportFilter>({
     company: defaultCompany,
   });
@@ -259,6 +262,7 @@ const PaymentsPage: React.FC = () => {
               pageSize,
               searchKey: toOptionalText(params.searchKey),
             });
+            setSelectedRows([]);
 
             return {
               data: result.items,
@@ -277,12 +281,46 @@ const PaymentsPage: React.FC = () => {
               .filter(Boolean)
               .join('-')
           }
+          rowSelection={{
+            getCheckboxProps: (record) => ({ disabled: !record.name }),
+            onChange: (_, rows) => setSelectedRows(rows),
+            selectedRowKeys: selectedRows.map((record) =>
+              [
+                record.name,
+                record.postingDate,
+                record.party,
+                record.referenceNo,
+                record.amount,
+              ]
+                .filter(Boolean)
+                .join('-'),
+            ),
+          }}
           search={{
             defaultCollapsed: false,
             labelWidth: 88,
           }}
           toolBarRender={false}
         />
+        {selectedRows.length ? (
+          <FooterToolbar
+            extra={
+              <span>
+                已选 <strong>{selectedRows.length}</strong> 笔收付款
+              </span>
+            }
+          >
+            <PrintBatchAction
+              documents={selectedRows
+                .filter((row) => row.name)
+                .map((row) => ({
+                  docname: row.name || '',
+                  doctype: 'Payment Entry',
+                }))}
+              sourcePage="payments"
+            />
+          </FooterToolbar>
+        ) : null}
       </Space>
     </PageContainer>
   );

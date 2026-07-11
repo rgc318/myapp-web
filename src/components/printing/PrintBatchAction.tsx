@@ -17,6 +17,7 @@ import {
   cancelPrintBatch,
   createPrintBatch,
   downloadPrintBatchArchive,
+  downloadPrintBatchMergedPdf,
   fetchPrintTemplates,
   getPrintBatch,
   type PrintBatch,
@@ -183,6 +184,23 @@ export function PrintBatchAction({
     }
   };
 
+  const downloadMergedPdf = async () => {
+    if (!batch) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const blob = await downloadPrintBatchMergedPdf({
+        batchId: batch.batchId,
+      });
+      saveBlobAsFile(blob, `${batch.batchId}-merged.pdf`);
+    } catch (caught) {
+      messageApi.error(caught instanceof Error ? caught.message : '下载失败');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <>
       {messageContext}
@@ -244,13 +262,21 @@ export function PrintBatchAction({
               </Button>
             ) : null}
             {batch?.successCount ? (
-              <Button
-                loading={actionLoading}
-                onClick={() => void downloadArchive()}
-                type="primary"
-              >
-                下载 ZIP
-              </Button>
+              <>
+                <Button
+                  loading={actionLoading}
+                  onClick={() => void downloadMergedPdf()}
+                >
+                  合并 PDF
+                </Button>
+                <Button
+                  loading={actionLoading}
+                  onClick={() => void downloadArchive()}
+                  type="primary"
+                >
+                  下载 ZIP
+                </Button>
+              </>
             ) : null}
           </Space>
         }

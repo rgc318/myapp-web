@@ -1,4 +1,4 @@
-import { callGatewayMethod } from './api-client';
+import { callGatewayMethod, createIdempotencyKey } from './api-client';
 import { buildMyAppApiUrl } from './api-base';
 import { getMyAppAuthHeaders } from './auth-storage';
 
@@ -68,6 +68,7 @@ export type PrintBatch = {
   progress: number;
   requestedAt: string | null;
   requestedBy: string | null;
+  requestId: string | null;
   results: PrintBatchResult[];
   skippedCount: number;
   startedAt: string | null;
@@ -306,6 +307,8 @@ function mapPrintBatch(value: Record<string, unknown>): PrintBatch {
       typeof value.requested_at === 'string' ? value.requested_at : null,
     requestedBy:
       typeof value.requested_by === 'string' ? value.requested_by : null,
+    requestId:
+      typeof value.request_id === 'string' ? value.request_id : null,
     results: Array.isArray(value.results)
       ? value.results
           .map(mapPrintBatchResult)
@@ -454,8 +457,11 @@ export async function setPrintDefaultTemplate(params: {
 export async function createPrintBatch(params: {
   documents: PrintBatchDocument[];
   metadata?: Record<string, unknown> | null;
+  requestId?: string | null;
   template?: string | null;
 }) {
+  const requestId =
+    params.requestId ?? createIdempotencyKey('web-create-print-batch');
   const result = await callGatewayMethod<Record<string, unknown>>(
     'create_print_batch_v1',
     {
@@ -467,6 +473,7 @@ export async function createPrintBatch(params: {
       })),
       metadata: params.metadata ?? undefined,
       output: 'pdf',
+      request_id: requestId,
       run_async: 1,
       template: params.template ?? undefined,
     },
@@ -805,6 +812,30 @@ export async function downloadPrintBatchArchive(params: {
     },
   );
   return readDownloadResponse(response, '下载批量打印 ZIP 失败');
+}
+
+export async function downloadPrintBatchMergedPdf(params: {
+  batchId: string;
+  filename?: string | null;
+}) {
+  const response = await fetch(
+    buildMyAppApiUrl(
+      '/api/method/myapp.api.gateway.download_print_batch_merged_pdf_v1',
+    ),
+    {
+      body: JSON.stringify({
+        batch_id: params.batchId,
+        filename: params.filename ?? undefined,
+      }),
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getMyAppAuthHeaders() ?? {}),
+      },
+      method: 'POST',
+    },
+  );
+  return readDownloadResponse(response, '下载合并 PDF 失败');
 }
 
 export function openHtmlPreviewWindow(preview: PrintPreviewData) {

@@ -1693,6 +1693,11 @@ describe('myapp domain services', () => {
       batch: { batchId: 'PRN-BATCH-002', status: 'queued' },
       retryOf: 'PRN-BATCH-001',
     });
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      3,
+      'create_print_batch_v1',
+      expect.objectContaining({ request_id: 'web-test-key' }),
+    );
   });
 
   it('maps paginated print center lists', async () => {

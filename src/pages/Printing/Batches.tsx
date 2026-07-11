@@ -15,6 +15,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   cancelPrintBatch,
   downloadPrintBatchArchive,
+  downloadPrintBatchMergedPdf,
   getPrintBatch,
   listPrintBatches,
   type PrintBatch,
@@ -73,7 +74,9 @@ const PrintBatchesPage: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [batch?.status, selectedBatchId]);
 
-  const runBatchAction = async (action: 'cancel' | 'retry' | 'download') => {
+  const runBatchAction = async (
+    action: 'cancel' | 'retry' | 'download' | 'merge',
+  ) => {
     if (!batch) {
       return;
     }
@@ -86,11 +89,16 @@ const PrintBatchesPage: React.FC = () => {
         const result = await retryPrintBatchFailed(batch.batchId);
         setSelectedBatchId(result.batch.batchId);
         messageApi.success(`已创建重试批次 ${result.batch.batchId}`);
-      } else {
+      } else if (action === 'download') {
         const blob = await downloadPrintBatchArchive({
           batchId: batch.batchId,
         });
         saveBlobAsFile(blob, `${batch.batchId}.zip`);
+      } else {
+        const blob = await downloadPrintBatchMergedPdf({
+          batchId: batch.batchId,
+        });
+        saveBlobAsFile(blob, `${batch.batchId}-merged.pdf`);
       }
       actionRef.current?.reload();
     } catch (caught) {
@@ -236,13 +244,21 @@ const PrintBatchesPage: React.FC = () => {
                 </Button>
               ) : null}
               {batch.successCount ? (
-                <Button
-                  loading={detailLoading}
-                  onClick={() => void runBatchAction('download')}
-                  type="primary"
-                >
-                  下载 ZIP
-                </Button>
+                <>
+                  <Button
+                    loading={detailLoading}
+                    onClick={() => void runBatchAction('merge')}
+                  >
+                    合并 PDF
+                  </Button>
+                  <Button
+                    loading={detailLoading}
+                    onClick={() => void runBatchAction('download')}
+                    type="primary"
+                  >
+                    下载 ZIP
+                  </Button>
+                </>
               ) : null}
             </Space>
           ) : null

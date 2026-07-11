@@ -19,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import React from 'react';
+import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import {
   cancelPaymentEntry,
   getPaymentEntryDetail,
@@ -319,6 +320,12 @@ const PaymentEntryDetailPage: React.FC = () => {
     <PageContainer
       title={paymentEntryName || '收付款详情'}
       extra={[
+        <PrintDocumentButton
+          disabled={!data}
+          docname={paymentEntryName}
+          doctype="Payment Entry"
+          key="print"
+        />,
         <Button key="list" onClick={() => history.push('/payments')}>
           返回资金流水
         </Button>,

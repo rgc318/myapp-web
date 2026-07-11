@@ -212,6 +212,7 @@ function documentPath(doctype: string, docname: string) {
     'Purchase Invoice': '/purchase/invoices',
     'Purchase Order': '/purchase/orders',
     'Purchase Receipt': '/purchase/receipts',
+    'Payment Entry': '/payments',
     'Sales Invoice': '/sales/invoices',
     'Sales Order': '/sales/orders',
   };
