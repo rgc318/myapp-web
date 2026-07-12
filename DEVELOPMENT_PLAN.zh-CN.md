@@ -2,6 +2,8 @@
 
 本文档记录 Web 端从模板项目进入业务开发的实施计划。当前阶段目标是先建立稳定接入骨架，再逐步实现查询和报表页面。
 
+> 当前基线（2026-07-12）：本文中的阶段内容保留为 Web 从模板演进到业务系统的实施记录，不代表所有条目仍是待办。当前跨模块完成度、真实缺口和实施优先级以父仓库 `docs/codex/PROJECT_GAP_ROADMAP.zh-CN.md` 为准；临时工作区和最新验证状态以 `docs/codex/CURRENT_HANDOFF.zh-CN.md` 为准。
+
 ## 阶段 0：模板清理与接入骨架
 
 目标：
@@ -466,13 +468,7 @@ UI 规范：
 
 阶段 7 已完成第一批高频写操作：销售 / 采购订单详情可按明细行填写本次数量创建发货 / 收货单、创建发票，选择具体发票后按金额和付款方式登记收付款并取消订单；付款方式已接入 `Mode of Payment` 选择器；订单详情登记收付款已接入 `InvoicePaymentForm`，可在多张销售 / 采购发票场景选择具体发票，并按该发票未结金额填写收付款金额；快捷回退遇到多下游单据时已接入 `DownstreamRollbackGuide`，展示可点击的发票和发货 / 收货单分步处理路径；销售发货单、销售发票、采购收货单、采购发票详情可取消单据；销售 / 采购发票详情可取消最近收款 / 付款；采购发票详情可按未付金额登记供应商付款；采购收货单详情可基于收货单创建采购发票；销售订单新建页已接入 `create_order_v2` 和 `quick_create_order_v2`；采购订单新建页已接入 `create_purchase_order` 和 `quick_create_purchase_order_v2`；销售订单编辑页已接入 `update_order_v2` 和 `update_order_items_v2`；采购订单编辑页已接入 `update_purchase_order_v2` 和 `update_purchase_order_items_v2`；销售订单详情已接入 `quick_cancel_order_v2` 快捷回退下游单据；采购订单详情已接入 `quick_cancel_purchase_order_v2` 快捷回退下游单据；销售退货页已接入 `get_return_source_context_v2` 和 `process_sales_return`；采购退货页已接入 `get_return_source_context_v2` 和 `process_purchase_return`；销售退款核对页已接入来源发票收款状态核对和最近收款回退；采购退款核对页已接入来源采购发票付款状态核对和最近付款回退；销售订单、销售发货单、销售发票、采购订单、采购收货单和采购发票详情页已接入打印预览和 PDF 下载；销售发货单、销售发票、采购收货单和采购发票列表已通过受限 `list_business_documents_v1` 网关接入；`/pending-confirmations` 已接入草稿业务单据待处理确认工作台，并通过 `confirm_pending_document` 提交正式单据。后续阶段 7 仍可继续补真实浏览器联调缺口。
 
-当前交接摘要：
-
-- 前端 `main` 当前有本地 ahead 提交和未推送的销售新建开发提交，推送前应确认本轮提交已通过测试。
-- 后端 `apps/myapp` 在 `develop`，新增 `search_link_options_v1` 供 Web 通过 JWT 查询付款方式等 Link 选项。
-- 后端已新增受限单据列表网关 `list_business_documents_v1`，供 Web 查询销售发货单、销售发票、采购收货单和采购发票列表。
-- 本轮完整验证已通过：Jest 关键测试、`npm run tsc`、`npm run biome:lint`、`npm run build`。
-- 下一会话优先确认是否推送前端 ahead 提交，然后做浏览器联调销售退货和退款核对流程。
+当前交接摘要不在计划文档中固定记录分支 ahead 数、提交号或临时服务状态，以免快速过期。请查阅父仓库 `docs/codex/CURRENT_HANDOFF.zh-CN.md`；长期差距和下一阶段优先级请查阅 `docs/codex/PROJECT_GAP_ROADMAP.zh-CN.md`。
 
 ## 当前骨架完成状态
 
@@ -480,7 +476,7 @@ UI 规范：
 
 - Web JWT 登录链路：`login_v1`、`me_v1`、`refresh_v1`、`logout_v1`。
 - 应用标题、PWA 名称、菜单、登录页标题和页脚已改为中文业务后台文案。
-- 模板路由 `/welcome`、`/admin`、`/list` 暂时保留但已从菜单隐藏。
+- 模板路由 `/welcome`、`/list` 暂时保留但已从菜单隐藏；原 `/admin` 已由真实的 `/administration` 用户治理路由替换。
 - 认证接口改为原生 `fetch`，避免 Umi request 运行时循环依赖导致页面卡在 `正在加载资源`。
 - 统一 token 存储和请求注入：业务页面和 domain service 不需要手动拼 `Authorization`。
 - 统一 API base：默认同域 `/api/method/...`，生产或跨域部署可用 `MYAPP_WEB_API_BASE_URL`。
@@ -511,9 +507,9 @@ UI 规范：
 未完成但不阻塞继续开发：
 
 - Ant Design Pro 模板页面、模板服务和模板视觉元素尚未系统清理。
-- 手机号登录、第三方登录图标仍保留模板视觉占位，当前真实登录只走账号密码 JWT。
+- 手机号登录、第三方登录图标仍保留模板视觉占位；当前真实登录走账号密码 JWT，并支持 Frappe 2FA OTP 二次挑战。
 - Web 端第一批写操作已接入；销售 / 采购下游单据已支持明细行本次数量，采购订单新建、编辑和退货已接入，商品、客户、供应商、仓库和计量单位常用治理已接入，商品图片上传 / 替换 / 删除已接入，库存目标数量调整、库存转仓和批量盘点已接入，销售 / 采购核心单据打印预览和 PDF 下载已接入，待处理确认已接入；批量盘点草稿 / 确认 / 作废生命周期尚未接入。
-- 销售订单新建、编辑、快捷回退、退货和退款核对已接入；独立客户退款打款接口后端暂未提供，当前不在 Web 中伪造完成状态。
+- 销售订单新建、编辑、快捷回退、退货和退款核对已接入；后端已提供 `create_customer_refund` 和 `create_supplier_refund`。当前重点是恢复销售退货入口前的真实业务验收，以及多发票、多收付款和部分退货组合回归。
 - 真实权限策略仍按 ERPNext 常见角色宽松匹配，后续需要按实际角色清单收紧。
 - 跨域生产部署未实测，第一阶段推荐同域反向代理。
 
