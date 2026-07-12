@@ -238,6 +238,14 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
       .runSubmit(async (paymentDraft) => {
         await recordSupplierPayment(invoiceName, paymentAmount, {
           modeOfPayment: paymentDraft.modeOfPayment,
+          referenceDate: paymentDraft.referenceDate,
+          referenceNo: paymentDraft.referenceNo,
+          settlementMode:
+            paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
+          writeoffReason:
+            paymentDraft.settlementMode === 'writeoff'
+              ? 'Web 端采购差额核销结清'
+              : undefined,
         });
         refresh();
       })
@@ -744,6 +752,8 @@ const PurchaseInvoiceDetailPage: React.FC = () => {
           label="采购发票"
           loadOutstandingAmount={async () => data?.outstandingAmount ?? 0}
           onChange={paymentModal.setDraft}
+          showReferenceFields
+          showSettlementMode
         />
       </Modal>
       <Modal

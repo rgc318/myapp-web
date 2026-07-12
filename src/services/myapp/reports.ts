@@ -13,6 +13,10 @@ export type ReportFilter = {
   dateFrom?: string | null;
   dateTo?: string | null;
   limit?: number;
+  modeOfPayment?: string | null;
+  party?: string | null;
+  partyType?: string | null;
+  paymentType?: 'Receive' | 'Pay' | 'Internal Transfer' | null;
   searchKey?: string | null;
 };
 
@@ -171,6 +175,10 @@ function buildPayload(filter: ReportFilter = {}) {
     date_from: toOptionalText(filter.dateFrom),
     date_to: toOptionalText(filter.dateTo),
     limit: filter.limit,
+    mode_of_payment: toOptionalText(filter.modeOfPayment),
+    party: toOptionalText(filter.party),
+    party_type: toOptionalText(filter.partyType),
+    payment_type: toOptionalText(filter.paymentType),
   });
 }
 

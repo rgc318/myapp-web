@@ -6,7 +6,7 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { Link, useLocation, useRequest } from '@umijs/max';
-import { Button, Space, Tag, Typography } from 'antd';
+import { Button, Input, Select, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { PrintBatchAction } from '@/components/printing/PrintBatchAction';
@@ -41,6 +41,12 @@ function buildReportFilter(params: Record<string, any>): ReportFilter {
     company: toOptionalText(params.company),
     dateFrom: dateRange[0] ? String(dateRange[0]) : undefined,
     dateTo: dateRange[1] ? String(dateRange[1]) : undefined,
+    modeOfPayment: toOptionalText(params.modeOfPayment),
+    party: toOptionalText(params.party),
+    partyType: toOptionalText(params.partyType),
+    paymentType: toOptionalText(
+      params.paymentType,
+    ) as ReportFilter['paymentType'],
   };
 }
 
@@ -49,6 +55,10 @@ function reportFilterKey(filter: ReportFilter) {
     company: filter.company ?? '',
     dateFrom: filter.dateFrom ?? '',
     dateTo: filter.dateTo ?? '',
+    modeOfPayment: filter.modeOfPayment ?? '',
+    party: filter.party ?? '',
+    partyType: filter.partyType ?? '',
+    paymentType: filter.paymentType ?? '',
   });
 }
 
@@ -94,6 +104,58 @@ function buildColumns(
       dataIndex: 'dateRange',
       valueType: 'dateRange',
       hideInTable: true,
+    },
+    {
+      title: '方向',
+      dataIndex: 'paymentType',
+      hideInTable: true,
+      valueType: 'select',
+      fieldProps: {
+        allowClear: true,
+        options: [
+          { label: '收款', value: 'Receive' },
+          { label: '付款', value: 'Pay' },
+          { label: '内部转账', value: 'Internal Transfer' },
+        ],
+        placeholder: '全部方向',
+      },
+    },
+    {
+      title: '付款方式',
+      dataIndex: 'modeOfPayment',
+      hideInTable: true,
+      formItemRender: (_, { onChange, value }) => (
+        <RemoteLinkSelect
+          doctype="Mode of Payment"
+          onChange={onChange}
+          placeholder="全部付款方式"
+          style={{ width: '100%' }}
+          value={toOptionalText(value)}
+        />
+      ),
+    },
+    {
+      title: '往来方类型',
+      dataIndex: 'partyType',
+      hideInTable: true,
+      formItemRender: () => (
+        <Select
+          allowClear
+          options={[
+            { label: '客户', value: 'Customer' },
+            { label: '供应商', value: 'Supplier' },
+            { label: '员工', value: 'Employee' },
+            { label: '股东', value: 'Shareholder' },
+          ]}
+          placeholder="全部类型"
+        />
+      ),
+    },
+    {
+      title: '往来方',
+      dataIndex: 'party',
+      hideInTable: true,
+      formItemRender: () => <Input allowClear placeholder="往来方名称" />,
     },
     {
       title: '日期',

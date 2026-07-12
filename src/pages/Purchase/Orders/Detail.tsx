@@ -649,6 +649,14 @@ const PurchaseOrderDetailPage: React.FC = () => {
         setActionLoading('payment');
         await recordSupplierPayment(paymentDraft.referenceName, paymentAmount, {
           modeOfPayment: paymentDraft.modeOfPayment,
+          referenceDate: paymentDraft.referenceDate,
+          referenceNo: paymentDraft.referenceNo,
+          settlementMode:
+            paymentDraft.settlementMode === 'writeoff' ? 'writeoff' : 'partial',
+          writeoffReason:
+            paymentDraft.settlementMode === 'writeoff'
+              ? 'Web 端采购差额核销结清'
+              : undefined,
         });
         refresh();
       })
@@ -1327,6 +1335,8 @@ const PurchaseOrderDetailPage: React.FC = () => {
             return invoice?.outstandingAmount ?? 0;
           }}
           onChange={paymentModal.setDraft}
+          showReferenceFields
+          showSettlementMode
         />
       </Modal>
       <Modal

@@ -26,6 +26,7 @@ import {
   Tag,
 } from 'antd';
 import React, { useState } from 'react';
+import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
@@ -1027,21 +1028,21 @@ const ProductDetailPage: React.FC = () => {
               rules={[{ required: true, message: '请选择库存单位' }]}
               style={{ minWidth: 200 }}
             >
-              <UomSelect />
+              <UomSelect displayValue={data?.stockUomDisplay} />
             </Form.Item>
             <Form.Item
               label="批发默认单位"
               name="wholesaleDefaultUom"
               style={{ minWidth: 200 }}
             >
-              <UomSelect />
+              <UomSelect displayValue={data?.wholesaleDefaultUomDisplay} />
             </Form.Item>
             <Form.Item
               label="零售默认单位"
               name="retailDefaultUom"
               style={{ minWidth: 200 }}
             >
-              <UomSelect />
+              <UomSelect displayValue={data?.retailDefaultUomDisplay} />
             </Form.Item>
           </Space>
           <Space size={16} style={{ width: '100%' }}>
@@ -1083,7 +1084,7 @@ const ProductDetailPage: React.FC = () => {
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item label="币种" name="currency" style={{ minWidth: 120 }}>
-              <Input placeholder="CNY" />
+              <CurrencySelect />
             </Form.Item>
           </Space>
           <Form.Item label="描述" name="description">

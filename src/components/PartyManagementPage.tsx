@@ -30,6 +30,7 @@ import {
   Upload,
 } from 'antd';
 import React, { useRef, useState } from 'react';
+import { CurrencySelect } from '@/components/CurrencySelect';
 import type { PageResult } from '@/services/myapp/api-utils';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import type {
@@ -1050,7 +1051,7 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
               name="defaultCurrency"
               style={{ flex: 1 }}
             >
-              <Input placeholder="例如 CNY" />
+              <CurrencySelect placeholder="选择默认币种" />
             </Form.Item>
           </Space>
           <Space size={16} style={{ width: '100%' }}>

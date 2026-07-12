@@ -6,6 +6,7 @@
  * 布局组件
  */
 
+import { CurrencySelect } from './CurrencySelect';
 import {
   PurchaseRollbackGuide,
   SalesRollbackGuide,
@@ -28,6 +29,7 @@ import { WorkspacePreferenceButton } from './WorkspacePreferenceButton';
 export {
   AvatarDropdown,
   AvatarName,
+  CurrencySelect,
   Footer,
   InvoicePaymentForm,
   ItemImageUpload,

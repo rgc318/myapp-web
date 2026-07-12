@@ -1175,15 +1175,28 @@ export async function createPurchaseInvoiceFromReceipt(
 export async function recordSupplierPayment(
   referenceName: string,
   paidAmount: number,
-  options: { modeOfPayment?: string } = {},
+  options: {
+    modeOfPayment?: string;
+    referenceDate?: string;
+    referenceNo?: string;
+    settlementMode?: 'partial' | 'writeoff';
+    writeoffReason?: string;
+  } = {},
 ) {
   const modeOfPayment = options.modeOfPayment?.trim();
+  const referenceDate = options.referenceDate?.trim();
+  const referenceNo = options.referenceNo?.trim();
+  const writeoffReason = options.writeoffReason?.trim();
 
   return runGatewayMutation('record_supplier_payment', {
     payload: {
       ...(modeOfPayment ? { mode_of_payment: modeOfPayment } : {}),
       paid_amount: paidAmount,
       reference_name: referenceName,
+      ...(referenceDate ? { reference_date: referenceDate } : {}),
+      ...(referenceNo ? { reference_no: referenceNo } : {}),
+      ...(options.settlementMode ? { settlement_mode: options.settlementMode } : {}),
+      ...(writeoffReason ? { writeoff_reason: writeoffReason } : {}),
     },
     successMessage: '采购付款已记录',
   });

@@ -19,6 +19,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import {
+  CurrencySelect,
   ProductSelect,
   PurchaseOrderLinesTable,
   RemoteLinkSelect,
@@ -319,7 +320,7 @@ const PurchaseOrderNewPage: React.FC = () => {
                 />
               </Form.Item>
               <Form.Item label="币种" name="currency">
-                <Input placeholder="自动带出供应商默认币种" />
+                <CurrencySelect placeholder="自动带出供应商默认币种" />
               </Form.Item>
               <Form.Item label="默认取值模式" name="defaultPurchaseMode">
                 <Select

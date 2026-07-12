@@ -21,6 +21,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import {
+  CurrencySelect,
   ProductSelect,
   PurchaseOrderLinesTable,
   RemoteLinkSelect,
@@ -415,7 +416,7 @@ const PurchaseOrderEditPage: React.FC = () => {
                 />
               </Form.Item>
               <Form.Item label="币种" name="currency">
-                <Input disabled />
+                <CurrencySelect disabled />
               </Form.Item>
               <Form.Item label="默认取值模式" name="defaultPurchaseMode">
                 <Select
