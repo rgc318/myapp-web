@@ -12,6 +12,7 @@ export default {
   'menu.register': 'Register',
   'menu.register-result': 'Register Result',
   'menu.dashboard': 'Dashboard',
+  'menu.ai': 'AI Copilot',
   'menu.dashboard.analysis': 'Analysis',
   'menu.dashboard.monitor': 'Monitor',
   'menu.dashboard.workplace': 'Workplace',

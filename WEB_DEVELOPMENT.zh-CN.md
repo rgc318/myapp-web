@@ -1522,3 +1522,13 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 页面样式集中在 `src/pages/Account/styles.ts` 和 `src/pages/Administration/styles.ts`，使用 `antd-style` token，不硬编码整套主题颜色，也不引入第三方后台模板。
 
 前端 `access.ts` 只负责菜单与按钮体验，所有用户、角色和数据权限操作必须由后端再次鉴权。账号不提供硬删除操作；退出使用停用状态，以保留历史单据和审计主体。
+
+## 13. AI Copilot
+
+- `/ai` 是企业 AI 助手入口，当前处于只读试运行阶段。
+- 页面只调用 `src/services/myapp/ai.ts` 和 Frappe AI Gateway，不得直接访问 AI Orchestrator 或 LiteLLM。
+- 当前支持会话列表、历史消息加载、归档、Run 标识、POST + JWT SSE、增量消息、点赞/点踩反馈，以及商品/订单引用卡片。
+- 商品卡片来自 Frappe `search_product_v2`，订单卡片来自销售/采购工作台服务；页面不得根据模型文本自行猜测业务事实。
+- Web 使用 `fetch + ReadableStream` 消费 SSE，不使用无法携带 POST body 和 Authorization 的原生 `EventSource`。
+- 当前聊天页面展示安全边界、实际模型、Token 和警告；模型不具备正式单据写权限。报表真实工具仍未启用。
+- 后续商品搜索、订单查询、报表解释和单据草稿必须继续通过领域对象和业务卡片展示，不在页面解析供应商原始响应。

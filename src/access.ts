@@ -62,5 +62,6 @@ export default function access(
         ),
     ),
     canViewSales: Boolean(isAdmin || hasRole('Sales Manager', 'Sales User')),
+    canUseAI: Boolean(currentUser),
   };
 }

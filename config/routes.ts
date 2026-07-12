@@ -29,6 +29,13 @@ export default [
     component: './Dashboard',
   },
   {
+    path: '/ai',
+    name: 'ai',
+    icon: 'robot',
+    access: 'canUseAI',
+    component: './AI',
+  },
+  {
     path: '/account',
     name: 'account',
     hideInMenu: true,
