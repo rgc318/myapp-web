@@ -359,6 +359,14 @@ POST /api/method/myapp.api.gateway.search_sales_orders_v2
 
 业务服务默认通过 `api-client.ts` 设置 `skipErrorHandler: true`，由 `callGatewayMethod` 抛出 `MyAppApiError`，页面可在 `useRequest` 的 `error` 中展示明确业务错误。没有显式跳过全局错误处理的请求，也不会再被模板的 `success` 逻辑误判。
 
+写操作错误反馈补充约定：
+
+- `runGatewayMutation` 统一将业务错误显示为 Ant Design `notification.error`，根据 `VALIDATION_ERROR`、`PERMISSION_DENIED`、`DUPLICATE_ENTRY` 等错误码生成标题。
+- 表单 `onFinish`、`Popconfirm onConfirm` 和 `Modal.confirm onOk` 必须捕获 Promise 异常，不能让失败只出现在浏览器控制台。
+- 密码、条码、编码等可以明确对应字段的错误，应使用 `FormInstance.setFields` 回填字段错误。
+- 页面再次调用 `notifyMutationError` 不会造成重复提示；错误对象通过 WeakSet 去重。
+- 完整示例和分层职责见 `REQUEST_RESULT_CONTRACT.zh-CN.md`。
+
 ### 4.5 Token 处理
 
 业务请求不需要页面手动携带 token。
@@ -1486,11 +1494,25 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 
 - `/account/center`：个人身份、角色、工作偏好、数据可见范围和最近活动。
 - `/account/settings`：个人资料、工作偏好和密码修改。
+- 个人设置头像使用真实文件上传，不再要求用户手填图片 URL。
+- 安全页展示 Frappe Session、JWT refresh 会话、2FA 状态，并支持注销全部设备。
+- 登录页支持 `JWT_TWO_FACTOR_REQUIRED` 挑战；收到挑战后保留账号密码并显示 6 位 OTP 输入，验证成功后再进入系统。
 
 系统管理页面（仅 `canAdmin` / `System Manager`）：
 
 - `/administration/users`：用户服务端分页、筛选、创建和启停。
 - `/administration/users/:user`：主档编辑、角色整体分配、User Permission 数据范围和变更审计。
+- 用户详情同时提供核心 DocType 权限快照和安全会话页，管理员可注销指定用户全部会话。
 - `/administration/roles`：角色目录、Desk 访问和使用人数。
+
+当前页面已按 Ant Design Pro 官方账号中心、设置页、列表和详情模式重构：
+
+- 个人中心采用身份卡、治理指标、账号工作空间、功能授权、数据范围和安全状态分区。
+- 设置页采用左侧导航 + 右侧内容工作区，并使用响应式栅格组织资料表单。
+- 用户列表增加用户治理指标、头像身份列、横向滚动和最多 100 人的批量启停。
+- 用户详情增加账号状态头和角色 / 数据权限 / 审计指标。
+- 角色目录增加权限规则、DocType 覆盖和可写范围摘要。
+
+页面样式集中在 `src/pages/Account/styles.ts` 和 `src/pages/Administration/styles.ts`，使用 `antd-style` token，不硬编码整套主题颜色，也不引入第三方后台模板。
 
 前端 `access.ts` 只负责菜单与按钮体验，所有用户、角色和数据权限操作必须由后端再次鉴权。账号不提供硬删除操作；退出使用停用状态，以保留历史单据和审计主体。

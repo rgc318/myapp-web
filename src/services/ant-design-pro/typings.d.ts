@@ -68,6 +68,7 @@ declare namespace API {
     password?: string;
     autoLogin?: boolean;
     type?: string;
+    otp?: string;
   };
 
   type ErrorResponse = {

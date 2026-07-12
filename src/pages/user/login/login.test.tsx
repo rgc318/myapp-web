@@ -43,6 +43,7 @@ jest.mock('@/services/myapp/auth', () => ({
     roles: user.roles,
     userid: user.user,
   })),
+  MyAppTwoFactorRequired: class MyAppTwoFactorRequired extends Error {},
 }));
 
 function renderLogin() {
@@ -91,6 +92,7 @@ describe('Login Page', () => {
 
     await waitFor(() => {
       expect(loginWithMyAppJwt).toHaveBeenCalledWith({
+        otp: undefined,
         password: 'secret',
         rememberMe: true,
         username: 'admin@example.com',
@@ -129,5 +131,28 @@ describe('Login Page', () => {
     fireEvent.click(screen.getByRole('button', { name: /登\s*录|Login/i }));
 
     expect(await screen.findByText('账号或密码错误')).toBeTruthy();
+  });
+
+  it('shows otp input when jwt login requires two-factor authentication', async () => {
+    const { MyAppTwoFactorRequired } = jest.requireMock(
+      '@/services/myapp/auth',
+    );
+    (loginWithMyAppJwt as jest.Mock).mockRejectedValue(
+      new MyAppTwoFactorRequired('请输入认证器验证码'),
+    );
+
+    renderLogin();
+    fireEvent.change(
+      await screen.findByPlaceholderText('用户名: admin or user'),
+      { target: { value: 'admin@example.com' } },
+    );
+    fireEvent.change(screen.getByPlaceholderText('密码: ant.design'), {
+      target: { value: 'secret' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /登\s*录|Login/i }));
+
+    expect(
+      await screen.findByPlaceholderText('请输入 6 位双因素验证码'),
+    ).toBeTruthy();
   });
 });

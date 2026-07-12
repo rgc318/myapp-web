@@ -2,6 +2,7 @@ import {
   AlipayCircleOutlined,
   LockOutlined,
   MobileOutlined,
+  SafetyCertificateOutlined,
   TaobaoCircleOutlined,
   UserOutlined,
   WeiboCircleOutlined,
@@ -22,6 +23,7 @@ import { login } from '@/services/ant-design-pro/api';
 import { getFakeCaptcha } from '@/services/ant-design-pro/login';
 import {
   loginWithMyAppJwt,
+  MyAppTwoFactorRequired,
   mapMyAppUserToCurrentUser,
 } from '@/services/myapp/auth';
 import Settings from '../../../../config/defaultSettings';
@@ -114,6 +116,7 @@ const LoginMessage: React.FC<{
 const Login: React.FC = () => {
   const [userLoginState, setUserLoginState] = useState<API.LoginResult>({});
   const [type, setType] = useState<string>('account');
+  const [twoFactorPrompt, setTwoFactorPrompt] = useState<string>();
   const { initialState, setInitialState } = useModel('@@initialState');
   const { styles } = useStyles();
   const { message } = App.useApp();
@@ -137,6 +140,7 @@ const Login: React.FC = () => {
         const currentUser = await loginWithMyAppJwt({
           username: values.username?.trim() || '',
           password: values.password || '',
+          otp: values.otp,
           rememberMe: Boolean(values.autoLogin),
         });
 
@@ -173,6 +177,11 @@ const Login: React.FC = () => {
       // 如果失败去设置用户错误信息
       setUserLoginState(msg);
     } catch (error) {
+      if (error instanceof MyAppTwoFactorRequired) {
+        setTwoFactorPrompt(error.message);
+        message.info(error.message);
+        return;
+      }
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -319,6 +328,31 @@ const Login: React.FC = () => {
                   },
                 ]}
               />
+              {twoFactorPrompt ? (
+                <>
+                  <Alert
+                    title={twoFactorPrompt}
+                    type="info"
+                    showIcon
+                    style={{ marginBottom: 24 }}
+                  />
+                  <ProFormText
+                    name="otp"
+                    fieldProps={{
+                      autoComplete: 'one-time-code',
+                      inputMode: 'numeric',
+                      maxLength: 6,
+                      size: 'large',
+                      prefix: <SafetyCertificateOutlined />,
+                    }}
+                    placeholder="请输入 6 位双因素验证码"
+                    rules={[
+                      { required: true, message: '请输入双因素认证验证码' },
+                      { pattern: /^\d{6}$/, message: '验证码应为 6 位数字' },
+                    ]}
+                  />
+                </>
+              ) : null}
             </>
           )}
 

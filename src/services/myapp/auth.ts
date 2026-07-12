@@ -31,6 +31,9 @@ type LoginMessage = {
     token_type?: string;
     expires_in?: number;
     refresh_expires_in?: number;
+    requires_two_factor?: boolean;
+    method?: string;
+    prompt?: string;
     user?: TokenUser;
   };
 };
@@ -44,10 +47,21 @@ type MeMessage = {
 };
 
 export type MyAppLoginParams = {
+  otp?: string;
   password: string;
   rememberMe?: boolean;
   username: string;
 };
+
+export class MyAppTwoFactorRequired extends Error {
+  method?: string;
+
+  constructor(message: string, method?: string) {
+    super(message);
+    this.name = 'MyAppTwoFactorRequired';
+    this.method = method;
+  }
+}
 
 export type MyAppCurrentUser = {
   avatar?: string;
@@ -157,6 +171,7 @@ export async function loginWithMyAppJwt(params: MyAppLoginParams) {
     {
       data: {
         password: params.password,
+        otp: params.otp,
         remember_me: params.rememberMe ? 1 : 0,
         username: params.username,
       },
@@ -164,6 +179,12 @@ export async function loginWithMyAppJwt(params: MyAppLoginParams) {
   );
 
   const data = response.message?.data;
+  if (data?.requires_two_factor) {
+    throw new MyAppTwoFactorRequired(
+      data.prompt || response.message?.message || '请输入双因素认证验证码。',
+      data.method,
+    );
+  }
   if (!data?.access_token || !data.refresh_token) {
     throw new Error(response.message?.message || '登录失败，请检查账号密码。');
   }
