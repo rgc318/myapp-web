@@ -11,7 +11,8 @@ export type AiScenario =
   | 'order_query'
   | 'report_summary'
   | 'sales_order_draft'
-  | 'purchase_order_draft';
+  | 'purchase_order_draft'
+  | 'inventory_adjustment_draft';
 
 export type AiSalesOrderDraft = {
   name: string;
@@ -294,6 +295,25 @@ export async function generateAiPurchaseOrderDraft(payload: {
       content: payload.content,
       company: payload.company,
       ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
+    },
+  );
+  const data = readObject(result.data);
+  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+}
+
+export async function generateAiInventoryAdjustmentDraft(payload: {
+  content: string;
+  conversationId?: string | null;
+  company: string;
+}): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'generate_ai_inventory_adjustment_draft_v1',
+    {
+      content: payload.content,
+      company: payload.company,
+      ...(payload.conversationId
+        ? { conversation_id: payload.conversationId }
+        : {}),
     },
   );
   const data = readObject(result.data);

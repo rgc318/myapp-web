@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '../api-client';
 import {
+  generateAiInventoryAdjustmentDraft,
   getAiConversation,
   listAiConversations,
   sendAiChatMessage,
@@ -97,6 +98,43 @@ describe('AI domain service', () => {
 
     expect(result.total).toBe(1);
     expect(result.items[0].messageCount).toBe(2);
+  });
+
+  it('generates an inventory adjustment draft through the domain service', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        conversation: 'AI-CONV-INV',
+        run_id: 'AI-RUN-INV',
+        message: { role: 'assistant', content: '已生成库存调整草稿' },
+        draft: {
+          name: 'AI-DRAFT-INV',
+          title: '库存调整',
+          status: 'draft',
+          draft_type: 'inventory_adjustment',
+          payload: { warehouse: 'Stores - RD' },
+          validation: { ready_for_handoff: true, errors: [], warnings: [] },
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await generateAiInventoryAdjustmentDraft({
+      company: 'rgc (Demo)',
+      content: '把 SKU010 库存调整到 8 个',
+      conversationId: 'AI-CONV-INV',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'generate_ai_inventory_adjustment_draft_v1',
+      {
+        company: 'rgc (Demo)',
+        content: '把 SKU010 库存调整到 8 个',
+        conversation_id: 'AI-CONV-INV',
+      },
+    );
+    expect(result.draft.name).toBe('AI-DRAFT-INV');
+    expect(result.draft.validation.readyForHandoff).toBe(true);
   });
 
   it('maps persisted conversation messages and citations', async () => {

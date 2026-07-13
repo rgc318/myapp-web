@@ -1,5 +1,5 @@
 import { PageContainer, ProCard } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
+import { history, useLocation } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -17,7 +17,10 @@ import React, { useState } from 'react';
 import { ProductSelect, RemoteLinkSelect, UomSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { adjustInventoryStock } from '@/services/myapp/inventory';
-import type { ProductSummary } from '@/services/myapp/master-data';
+import {
+  getProductDetail,
+  type ProductSummary,
+} from '@/services/myapp/master-data';
 import { resolveDisplayUom } from '@/utils/myapp-display';
 
 type FormValues = {
@@ -40,6 +43,8 @@ function formatQty(value: number | null | undefined) {
 
 const InventoryAdjustmentPage: React.FC = () => {
   const [form] = Form.useForm<FormValues>();
+  const location = useLocation();
+  const appliedAiDraftRef = React.useRef<string | null>(null);
   const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const [selectedProduct, setSelectedProduct] = useState<ProductSummary | null>(
     null,
@@ -55,6 +60,61 @@ const InventoryAdjustmentPage: React.FC = () => {
       warehouse: form.getFieldValue('warehouse') || defaultWarehouse,
     });
   }, [defaultCompany, defaultWarehouse, form]);
+
+  React.useEffect(() => {
+    const draftId = new URLSearchParams(location.search).get('ai_draft');
+    if (!draftId || appliedAiDraftRef.current === draftId) return;
+    const storageKey = `myapp:ai-inventory-adjustment-draft:${draftId}`;
+    const stored = sessionStorage.getItem(storageKey);
+    if (!stored) {
+      message.warning(
+        'AI 库存调整草稿交接数据已失效，请返回 AI 工作台重新交接。',
+      );
+      return;
+    }
+    try {
+      const payload = JSON.parse(stored) as Record<string, unknown>;
+      const itemCode = String(payload.item_code ?? '');
+      const companyValue = String(payload.company ?? defaultCompany ?? '');
+      const warehouseValue = String(
+        payload.warehouse ?? defaultWarehouse ?? '',
+      );
+      appliedAiDraftRef.current = draftId;
+      form.setFieldsValue({
+        company: companyValue,
+        itemCode,
+        itemName: String(payload.item_name ?? itemCode),
+        postingDate: dayjs(
+          String(payload.posting_date ?? dayjs().format('YYYY-MM-DD')),
+        ),
+        remarks: String(payload.remarks ?? payload.reason ?? '') || undefined,
+        targetQty: Number(payload.target_qty ?? 0),
+        uom: String(payload.uom ?? '') || undefined,
+        valuationRate:
+          payload.valuation_rate === null ||
+          payload.valuation_rate === undefined
+            ? undefined
+            : Number(payload.valuation_rate),
+        warehouse: warehouseValue,
+      });
+      sessionStorage.removeItem(storageKey);
+      if (itemCode) {
+        void getProductDetail(itemCode, {
+          company: companyValue,
+          warehouse: warehouseValue,
+        })
+          .then((product) => setSelectedProduct(product))
+          .catch(() => {
+            message.warning('商品实时详情加载失败，请重新选择商品后再提交。');
+          });
+      }
+      message.success(
+        'AI 库存调整草稿已载入，请复核实时库存后再提交正式调整。',
+      );
+    } catch {
+      message.error('AI 库存调整草稿交接数据格式不正确。');
+    }
+  }, [defaultCompany, defaultWarehouse, form, location.search]);
 
   const handleProductSelect = (product: ProductSummary) => {
     setSelectedProduct(product);
@@ -136,7 +196,11 @@ const InventoryAdjustmentPage: React.FC = () => {
           showIcon
           style={{ marginBottom: 16 }}
           type="info"
-          message="库存调整会生成正式库存单据，将所选仓库库存调整到目标数量。"
+          message={
+            new URLSearchParams(location.search).has('ai_draft')
+              ? '当前内容来自 AI 库存调整草稿。请重新核对商品、仓库、实时库存、目标数量、单位、估值价和调整原因。'
+              : '库存调整会生成正式库存单据，将所选仓库库存调整到目标数量。'
+          }
         />
         <Form<FormValues> form={form} layout="vertical" onFinish={handleSubmit}>
           <Space size={16} style={{ width: '100%' }}>
@@ -231,7 +295,14 @@ const InventoryAdjustmentPage: React.FC = () => {
             <Button loading={submitting} type="primary" htmlType="submit">
               提交调整
             </Button>
-            <Button onClick={() => form.resetFields()}>重置</Button>
+            <Button
+              onClick={() => {
+                form.resetFields();
+                setSelectedProduct(null);
+              }}
+            >
+              重置
+            </Button>
           </Space>
         </Form>
       </ProCard>
