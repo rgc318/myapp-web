@@ -50,15 +50,25 @@ const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
     content: '帮我找蓝色包装、适合整箱销售的饮料。',
     scenario: 'product_search',
   },
-  { content: '解释销售订单草稿和正式开单的区别。', scenario: 'general' },
+  { content: '解释本月销售表现和主要客户。', scenario: 'report_summary' },
 ];
 
 const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
   { label: '通用对话', value: 'general' },
   { label: '商品搜索', value: 'product_search' },
   { label: '订单查询', value: 'order_query' },
-  { label: '报表解释（准备中）', value: 'report_summary' },
+  { label: '报表解释', value: 'report_summary' },
 ];
+
+const REPORT_METRIC_LABELS: Record<string, string> = {
+  sales_amount_total: '销售额',
+  purchase_amount_total: '采购额',
+  received_amount_total: '实收',
+  paid_amount_total: '实付',
+  net_cashflow_total: '净现金流',
+  receivable_outstanding_total: '应收未结',
+  payable_outstanding_total: '应付未结',
+};
 
 function createMessage(
   role: AiChatMessage['role'],
@@ -409,7 +419,9 @@ export default function AiPage() {
                                   >
                                     {citation.type === 'product'
                                       ? '查看商品'
-                                      : '查看订单'}
+                                      : citation.type === 'business_report'
+                                        ? '查看报表'
+                                        : '查看订单'}
                                   </Button>
                                 ) : null
                               }
@@ -435,6 +447,22 @@ export default function AiPage() {
                                   <Typography.Text>
                                     参考价 {Number(citation.data.price ?? 0)}
                                   </Typography.Text>
+                                </Space>
+                              ) : citation.type === 'business_report' ? (
+                                <Space size={[8, 4]} wrap>
+                                  {Object.entries(
+                                    (citation.data.overview as Record<
+                                      string,
+                                      unknown
+                                    >) ?? {},
+                                  ).map(([key, value]) => (
+                                    <Tag key={key}>
+                                      {REPORT_METRIC_LABELS[key] ?? key}:{' '}
+                                      {Number(value ?? 0).toLocaleString(
+                                        'zh-CN',
+                                      )}
+                                    </Tag>
+                                  ))}
                                 </Space>
                               ) : (
                                 <Space size={[8, 4]} wrap>
@@ -545,7 +573,7 @@ export default function AiPage() {
             <Alert
               showIcon
               title="当前安全边界"
-              description="AI 只开放受控商品和订单读取工具，不能创建、提交、取消、付款或调整库存。业务卡片来自后端真实查询；正式动作仍由用户执行。"
+              description="AI 只开放受控商品、订单和经营报表读取工具，不能创建、提交、取消、付款或调整库存。业务卡片来自后端真实查询；正式动作仍由用户执行。"
               type="info"
             />
             <ProCard title="运行信息">
