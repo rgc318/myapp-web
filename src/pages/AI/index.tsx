@@ -33,6 +33,7 @@ import {
   type AiConversation,
   type AiScenario,
   archiveAiConversation,
+  discardAiDraft,
   generateAiSalesOrderDraft,
   getAiConversation,
   listAiConversations,
@@ -295,6 +296,25 @@ export default function AiPage() {
     }
   };
 
+  const discardDraft = async (draftId: string) => {
+    try {
+      await discardAiDraft(draftId);
+      setMessages((current) =>
+        current.map((item) => ({
+          ...item,
+          citations: item.citations?.map((citation) =>
+            citation.id === draftId
+              ? { ...citation, data: { ...citation.data, status: 'discarded' } }
+              : citation,
+          ),
+        })),
+      );
+      message.success('AI 草稿已放弃');
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '草稿放弃失败');
+    }
+  };
+
   const resetConversation = () => {
     setConversationId(null);
     setMessages([]);
@@ -516,6 +536,7 @@ export default function AiPage() {
                                   </Typography.Text>
                                   <Button
                                     disabled={
+                                      citation.data.status === 'discarded' ||
                                       !(
                                         citation.data.validation as Record<
                                           string,
@@ -531,6 +552,21 @@ export default function AiPage() {
                                     type="primary"
                                   >
                                     在销售订单编辑器中继续
+                                  </Button>
+                                  <Button
+                                    danger
+                                    disabled={
+                                      citation.data.status === 'discarded'
+                                    }
+                                    onClick={() =>
+                                      void discardDraft(
+                                        String(citation.id ?? ''),
+                                      )
+                                    }
+                                  >
+                                    {citation.data.status === 'discarded'
+                                      ? '已放弃'
+                                      : '放弃草稿'}
                                   </Button>
                                 </Space>
                               ) : citation.type === 'business_report' ? (

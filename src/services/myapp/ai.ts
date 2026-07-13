@@ -292,6 +292,10 @@ export async function prepareAiDraftHandoff(
   return readObject(readObject(result.data).payload);
 }
 
+export async function discardAiDraft(draftId: string): Promise<void> {
+  await callGatewayMethod('discard_ai_draft_v1', { draft_id: draftId });
+}
+
 export async function streamAiChatMessage(
   payload: {
     content: string;
