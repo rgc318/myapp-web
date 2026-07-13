@@ -4,7 +4,7 @@ import {
   PageContainer,
   ProCard,
 } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
+import { history, useLocation } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -84,10 +84,12 @@ type FormValues = {
 };
 
 const PurchaseOrderNewPage: React.FC = () => {
+  const location = useLocation();
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<PurchaseOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [lastSupplier, setLastSupplier] = useState('');
+  const appliedAiDraftRef = React.useRef<string | null>(null);
   const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const defaultPurchaseMode =
     Form.useWatch('defaultPurchaseMode', form) ?? 'wholesale';
@@ -115,6 +117,92 @@ const PurchaseOrderNewPage: React.FC = () => {
       warehouse: currentWarehouse || defaultWarehouse,
     });
   }, [defaultCompany, defaultWarehouse, form]);
+
+  React.useEffect(() => {
+    const draftId = new URLSearchParams(location.search).get('ai_draft');
+    if (!draftId || appliedAiDraftRef.current === draftId) return;
+    const stored = sessionStorage.getItem(`myapp:ai-purchase-draft:${draftId}`);
+    if (!stored) {
+      message.warning('AI 采购草稿交接数据已失效，请返回 AI 工作台重新交接。');
+      return;
+    }
+    try {
+      const payload = JSON.parse(stored) as Record<string, any>;
+      appliedAiDraftRef.current = draftId;
+      form.setFieldsValue({
+        company: String(payload.company ?? defaultCompany),
+        supplier: String(payload.supplier ?? ''),
+        currency:
+          typeof payload.currency === 'string' ? payload.currency : undefined,
+        defaultPurchaseMode:
+          payload.default_purchase_mode === 'retail' ? 'retail' : 'wholesale',
+        remarks:
+          typeof payload.remarks === 'string' ? payload.remarks : undefined,
+        scheduleDate: dayjs(
+          String(payload.schedule_date ?? today.format('YYYY-MM-DD')),
+        ),
+        supplierRef:
+          typeof payload.supplier_ref === 'string'
+            ? payload.supplier_ref
+            : undefined,
+        transactionDate: dayjs(
+          String(payload.transaction_date ?? today.format('YYYY-MM-DD')),
+        ),
+        warehouse:
+          typeof payload.warehouse === 'string'
+            ? payload.warehouse
+            : defaultWarehouse,
+      });
+      setLines(
+        (Array.isArray(payload.items) ? payload.items : []).map(
+          (row: Record<string, any>, index: number) => {
+            const uom = String(row.uom ?? '');
+            const price = Number(row.price ?? 0);
+            const qty = Number(row.qty ?? 0);
+            return {
+              allUomDisplays: uom
+                ? { [uom]: String(row.uom_display ?? uom) }
+                : {},
+              allUoms: uom ? [uom] : [],
+              amount: qty * price,
+              itemCode: String(row.item_code ?? ''),
+              itemName: String(row.item_name ?? row.item_code ?? ''),
+              key: `ai:${draftId}:${index}`,
+              modeDefaults: {
+                retail: { uom: uom || null },
+                wholesale: { uom: uom || null },
+              },
+              price,
+              qty,
+              standardBuyingRate: price,
+              specification: '',
+              stockQty: null,
+              stockUom: String(row.stock_uom ?? uom) || null,
+              stockUomDisplay:
+                String(row.stock_uom_display ?? row.uom_display ?? uom) || null,
+              totalQty: null,
+              uom: uom || null,
+              uomConversions: uom
+                ? [
+                    {
+                      conversionFactor: Number(row.conversion_factor ?? 1),
+                      uom,
+                    },
+                  ]
+                : [],
+              uomDisplay: String(row.uom_display ?? uom) || null,
+              warehouse: String(row.warehouse ?? payload.warehouse ?? ''),
+              warehouseStockDetails: [],
+            } satisfies PurchaseOrderEditorLine;
+          },
+        ),
+      );
+      sessionStorage.removeItem(`myapp:ai-purchase-draft:${draftId}`);
+      message.success('AI 采购订单草稿已载入，请复核后再创建正式采购单。');
+    } catch {
+      message.error('AI 采购草稿交接数据格式不正确。');
+    }
+  }, [defaultCompany, defaultWarehouse, form, location.search]);
 
   React.useEffect(() => {
     if (!supplier || supplier === lastSupplier) {
@@ -264,7 +352,11 @@ const PurchaseOrderNewPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          message="当前已接入采购订单创建接口；快捷采购会同时创建采购收货和采购发票。"
+          message={
+            new URLSearchParams(location.search).has('ai_draft')
+              ? '当前内容来自 AI 采购草稿。请重新核对供应商、商品、采购单位、价格、币种和收货仓库。'
+              : '当前已接入采购订单创建接口；快捷采购会同时创建采购收货和采购发票。'
+          }
           showIcon
           type="info"
         />

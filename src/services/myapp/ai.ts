@@ -10,7 +10,8 @@ export type AiScenario =
   | 'product_search'
   | 'order_query'
   | 'report_summary'
-  | 'sales_order_draft';
+  | 'sales_order_draft'
+  | 'purchase_order_draft';
 
 export type AiSalesOrderDraft = {
   name: string;
@@ -282,18 +283,69 @@ export async function generateAiSalesOrderDraft(payload: {
   return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
 }
 
+export async function generateAiPurchaseOrderDraft(payload: {
+  content: string;
+  conversationId?: string | null;
+  company: string;
+}): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'generate_ai_purchase_order_draft_v1',
+    {
+      content: payload.content,
+      company: payload.company,
+      ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
+    },
+  );
+  const data = readObject(result.data);
+  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+}
+
 export async function prepareAiDraftHandoff(
   draftId: string,
-): Promise<Record<string, unknown>> {
+): Promise<{ draftType: string; payload: Record<string, unknown> }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'prepare_ai_draft_handoff_v1',
     { draft_id: draftId },
   );
-  return readObject(readObject(result.data).payload);
+  const data = readObject(result.data);
+  return { draftType: String(data.draft_type ?? ''), payload: readObject(data.payload) };
 }
 
 export async function discardAiDraft(draftId: string): Promise<void> {
   await callGatewayMethod('discard_ai_draft_v1', { draft_id: draftId });
+}
+
+export async function updateAiDraft(
+  draftId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'update_ai_draft_v1',
+    { draft_id: draftId, payload },
+  );
+  return readObject(result.data);
+}
+
+export async function listAiDraftVersions(
+  draftId: string,
+): Promise<Record<string, unknown>[]> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_ai_draft_versions_v1',
+    { draft_id: draftId },
+  );
+  const data = readObject(result.data);
+  return Array.isArray(data.items) ? data.items.map(readObject) : [];
+}
+
+export async function restoreAiDraftVersion(
+  draftId: string,
+  version: number,
+): Promise<Record<string, unknown>> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'restore_ai_draft_version_v1',
+    { draft_id: draftId, version },
+  );
+  return readObject(result.data);
 }
 
 export async function streamAiChatMessage(
