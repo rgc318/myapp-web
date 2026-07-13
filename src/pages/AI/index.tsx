@@ -8,6 +8,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
+import { history } from '@umijs/max';
 import {
   Alert,
   Avatar,
@@ -32,8 +33,10 @@ import {
   type AiConversation,
   type AiScenario,
   archiveAiConversation,
+  generateAiSalesOrderDraft,
   getAiConversation,
   listAiConversations,
+  prepareAiDraftHandoff,
   streamAiChatMessage,
   submitAiFeedback,
 } from '@/services/myapp/ai';
@@ -51,6 +54,10 @@ const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
     scenario: 'product_search',
   },
   { content: '解释本月销售表现和主要客户。', scenario: 'report_summary' },
+  {
+    content: '给客户A开2箱数码相机销售订单草稿。',
+    scenario: 'sales_order_draft',
+  },
 ];
 
 const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
@@ -58,6 +65,7 @@ const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
   { label: '商品搜索', value: 'product_search' },
   { label: '订单查询', value: 'order_query' },
   { label: '报表解释', value: 'report_summary' },
+  { label: '销售订单草稿', value: 'sales_order_draft' },
 ];
 
 const REPORT_METRIC_LABELS: Record<string, string> = {
@@ -151,8 +159,16 @@ export default function AiPage() {
     if (!content || loading) {
       return;
     }
-    if (resolvedScenario === 'product_search' && !defaultCompany) {
-      message.warning('请先在工作偏好中选择默认公司，再搜索商品。');
+    if (
+      [
+        'product_search',
+        'order_query',
+        'report_summary',
+        'sales_order_draft',
+      ].includes(resolvedScenario) &&
+      !defaultCompany
+    ) {
+      message.warning('请先在工作偏好中选择默认公司。');
       return;
     }
 
@@ -163,6 +179,29 @@ export default function AiPage() {
     setScenario(resolvedScenario);
     setLoading(true);
     try {
+      if (resolvedScenario === 'sales_order_draft') {
+        const result = await generateAiSalesOrderDraft({
+          company: defaultCompany as string,
+          content,
+          conversationId,
+        });
+        setConversationId(result.conversationId);
+        setLastResult(result);
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? {
+                  ...item,
+                  content: result.message.content,
+                  citations: result.message.citations,
+                  runId: result.runId,
+                }
+              : item,
+          ),
+        );
+        await refreshConversations();
+        return;
+      }
       const result = await streamAiChatMessage(
         {
           company: defaultCompany,
@@ -240,6 +279,19 @@ export default function AiPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handoffDraft = async (draftId: string) => {
+    try {
+      const payload = await prepareAiDraftHandoff(draftId);
+      sessionStorage.setItem(
+        `myapp:ai-sales-draft:${draftId}`,
+        JSON.stringify(payload),
+      );
+      history.push(`/sales/orders/new?ai_draft=${encodeURIComponent(draftId)}`);
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '草稿交接失败');
     }
   };
 
@@ -419,9 +471,11 @@ export default function AiPage() {
                                   >
                                     {citation.type === 'product'
                                       ? '查看商品'
-                                      : citation.type === 'business_report'
-                                        ? '查看报表'
-                                        : '查看订单'}
+                                      : citation.type === 'ai_draft'
+                                        ? '草稿详情'
+                                        : citation.type === 'business_report'
+                                          ? '查看报表'
+                                          : '查看订单'}
                                   </Button>
                                 ) : null
                               }
@@ -447,6 +501,37 @@ export default function AiPage() {
                                   <Typography.Text>
                                     参考价 {Number(citation.data.price ?? 0)}
                                   </Typography.Text>
+                                </Space>
+                              ) : citation.type === 'ai_draft' ? (
+                                <Space orientation="vertical" size={8}>
+                                  <Typography.Text>
+                                    {(
+                                      citation.data.validation as Record<
+                                        string,
+                                        unknown
+                                      >
+                                    )?.ready_for_handoff
+                                      ? '草稿已通过后端校验，可进入销售订单编辑器复核。'
+                                      : '草稿仍有客户、商品、数量、单位或仓库需要人工确认。'}
+                                  </Typography.Text>
+                                  <Button
+                                    disabled={
+                                      !(
+                                        citation.data.validation as Record<
+                                          string,
+                                          unknown
+                                        >
+                                      )?.ready_for_handoff
+                                    }
+                                    onClick={() =>
+                                      void handoffDraft(
+                                        String(citation.id ?? ''),
+                                      )
+                                    }
+                                    type="primary"
+                                  >
+                                    在销售订单编辑器中继续
+                                  </Button>
                                 </Space>
                               ) : citation.type === 'business_report' ? (
                                 <Space size={[8, 4]} wrap>
@@ -573,7 +658,7 @@ export default function AiPage() {
             <Alert
               showIcon
               title="当前安全边界"
-              description="AI 只开放受控商品、订单和经营报表读取工具，不能创建、提交、取消、付款或调整库存。业务卡片来自后端真实查询；正式动作仍由用户执行。"
+              description="AI 可使用受控商品、订单和经营报表读取工具，并生成销售订单草稿；AI 不能创建、提交、取消、付款或调整库存。正式订单只能由用户在业务编辑器中复核后创建。"
               type="info"
             />
             <ProCard title="运行信息">

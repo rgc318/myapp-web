@@ -4,7 +4,7 @@ import {
   PageContainer,
   ProCard,
 } from '@ant-design/pro-components';
-import { history } from '@umijs/max';
+import { history, useLocation } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -94,10 +94,12 @@ type FormValues = {
 };
 
 const SalesOrderNewPage: React.FC = () => {
+  const location = useLocation();
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<SalesOrderEditorLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const customerContextRequestRef = React.useRef(0);
+  const appliedAiDraftRef = React.useRef<string | null>(null);
   const { defaultCompany, defaultWarehouse } = useWorkspacePreferences();
   const defaultSalesMode =
     Form.useWatch('defaultSalesMode', form) ?? 'wholesale';
@@ -124,6 +126,92 @@ const SalesOrderNewPage: React.FC = () => {
       warehouse: currentWarehouse || defaultWarehouse,
     });
   }, [defaultCompany, defaultWarehouse, form]);
+
+  React.useEffect(() => {
+    const draftId = new URLSearchParams(location.search).get('ai_draft');
+    if (!draftId || appliedAiDraftRef.current === draftId) {
+      return;
+    }
+    const stored = sessionStorage.getItem(`myapp:ai-sales-draft:${draftId}`);
+    if (!stored) {
+      message.warning('AI 草稿交接数据已失效，请返回 AI 工作台重新交接。');
+      return;
+    }
+    try {
+      const payload = JSON.parse(stored) as Record<string, any>;
+      appliedAiDraftRef.current = draftId;
+      form.setFieldsValue({
+        company: String(payload.company ?? defaultCompany),
+        customer: String(payload.customer ?? ''),
+        defaultSalesMode:
+          payload.default_sales_mode === 'retail' ? 'retail' : 'wholesale',
+        deliveryDate: dayjs(
+          String(payload.delivery_date ?? today.format('YYYY-MM-DD')),
+        ),
+        remarks:
+          typeof payload.remarks === 'string' ? payload.remarks : undefined,
+        transactionDate: dayjs(
+          String(payload.transaction_date ?? today.format('YYYY-MM-DD')),
+        ),
+        warehouse:
+          typeof payload.warehouse === 'string'
+            ? payload.warehouse
+            : defaultWarehouse,
+      });
+      setLines(
+        (Array.isArray(payload.items) ? payload.items : []).map(
+          (row: Record<string, any>, index: number) => {
+            const uom = String(row.uom ?? '');
+            const price = Number(row.price ?? 0);
+            const qty = Number(row.qty ?? 0);
+            const warehouseName = String(
+              row.warehouse ?? payload.warehouse ?? '',
+            );
+            return {
+              allUomDisplays: uom
+                ? { [uom]: String(row.uom_display ?? uom) }
+                : {},
+              allUoms: uom ? [uom] : [],
+              amount: qty * price,
+              itemCode: String(row.item_code ?? ''),
+              itemName: String(row.item_name ?? row.item_code ?? ''),
+              key: `ai:${draftId}:${index}`,
+              modeDefaults: {
+                retail: { price, uom: uom || null },
+                wholesale: { price, uom: uom || null },
+              },
+              price,
+              qty,
+              salesMode:
+                payload.default_sales_mode === 'retail'
+                  ? 'retail'
+                  : 'wholesale',
+              specification: '',
+              stockQty: null,
+              stockUom: String(row.stock_uom ?? uom) || null,
+              stockUomDisplay:
+                String(row.stock_uom_display ?? row.uom_display ?? uom) || null,
+              uom: uom || null,
+              uomConversions: uom
+                ? [
+                    {
+                      conversionFactor: Number(row.conversion_factor ?? 1),
+                      uom,
+                    },
+                  ]
+                : [],
+              uomDisplay: String(row.uom_display ?? uom) || null,
+              warehouse: warehouseName,
+            } satisfies SalesOrderEditorLine;
+          },
+        ),
+      );
+      sessionStorage.removeItem(`myapp:ai-sales-draft:${draftId}`);
+      message.success('AI 销售订单草稿已载入，请复核后再创建正式订单。');
+    } catch {
+      message.error('AI 草稿交接数据格式不正确。');
+    }
+  }, [defaultCompany, defaultWarehouse, form, location.search]);
 
   const applyCustomerSalesContext = async (nextCustomer: string) => {
     const requestId = customerContextRequestRef.current + 1;
@@ -300,7 +388,11 @@ const SalesOrderNewPage: React.FC = () => {
     >
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <Alert
-          title="当前已接入销售订单 v2 创建接口；快捷下单会同时创建发货单和销售发票。"
+          title={
+            new URLSearchParams(location.search).has('ai_draft')
+              ? '当前内容来自 AI 草稿。请重新核对客户、商品、单位、价格、库存和仓库后再创建正式订单。'
+              : '当前已接入销售订单 v2 创建接口；快捷下单会同时创建发货单和销售发票。'
+          }
           showIcon
           type="info"
         />

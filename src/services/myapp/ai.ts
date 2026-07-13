@@ -9,7 +9,16 @@ export type AiScenario =
   | 'general'
   | 'product_search'
   | 'order_query'
-  | 'report_summary';
+  | 'report_summary'
+  | 'sales_order_draft';
+
+export type AiSalesOrderDraft = {
+  name: string;
+  title: string;
+  status: string;
+  validation: { readyForHandoff: boolean; errors: string[]; warnings: string[] };
+  payload: Record<string, unknown>;
+};
 
 export type AiCitation = {
   type: string;
@@ -107,6 +116,22 @@ function mapCitation(value: unknown): AiCitation {
     label: typeof row.label === 'string' ? row.label : '',
     href: typeof row.href === 'string' ? row.href : null,
     data: readObject(row.data),
+  };
+}
+
+function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
+  const row = readObject(value);
+  const validation = readObject(row.validation);
+  return {
+    name: String(row.name ?? ''),
+    title: String(row.title ?? '销售订单草稿'),
+    status: String(row.status ?? 'draft'),
+    payload: readObject(row.payload),
+    validation: {
+      readyForHandoff: Boolean(validation.ready_for_handoff),
+      errors: toStringList(validation.errors),
+      warnings: toStringList(validation.warnings),
+    },
   };
 }
 
@@ -236,6 +261,35 @@ export async function sendAiChatMessage(payload: {
     ...(payload.company ? { company: payload.company } : {}),
   });
   return mapChatResult(result.data);
+}
+
+export async function generateAiSalesOrderDraft(payload: {
+  content: string;
+  conversationId?: string | null;
+  company: string;
+}): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'generate_ai_sales_order_draft_v1',
+    {
+      content: payload.content,
+      company: payload.company,
+      ...(payload.conversationId
+        ? { conversation_id: payload.conversationId }
+        : {}),
+    },
+  );
+  const data = readObject(result.data);
+  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+}
+
+export async function prepareAiDraftHandoff(
+  draftId: string,
+): Promise<Record<string, unknown>> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'prepare_ai_draft_handoff_v1',
+    { draft_id: draftId },
+  );
+  return readObject(readObject(result.data).payload);
 }
 
 export async function streamAiChatMessage(
