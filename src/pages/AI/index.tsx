@@ -719,6 +719,29 @@ export default function AiPage() {
                                       {String(citation.data.specification)}
                                     </Tag>
                                   ) : null}
+                                  {citation.data.match_reason ? (
+                                    <Tag color="purple">
+                                      {String(citation.data.match_reason)}
+                                    </Tag>
+                                  ) : null}
+                                  {typeof citation.data.semantic_score ===
+                                  'number' ? (
+                                    <Tag color="geekblue">
+                                      语义相关度{' '}
+                                      {Math.max(
+                                        0,
+                                        Math.min(
+                                          100,
+                                          Math.round(
+                                            Number(
+                                              citation.data.semantic_score,
+                                            ) * 100,
+                                          ),
+                                        ),
+                                      )}
+                                      %
+                                    </Tag>
+                                  ) : null}
                                   <Typography.Text>
                                     库存 {Number(citation.data.qty ?? 0)}{' '}
                                     {String(
