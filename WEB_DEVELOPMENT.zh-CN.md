@@ -1532,3 +1532,12 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 - Web 使用 `fetch + ReadableStream` 消费 SSE，不使用无法携带 POST body 和 Authorization 的原生 `EventSource`。
 - 当前聊天页面展示安全边界、实际模型、Token 和警告；模型不具备正式单据写权限。报表真实工具仍未启用。
 - 后续商品搜索、订单查询、报表解释和单据草稿必须继续通过领域对象和业务卡片展示，不在页面解析供应商原始响应。
+
+### 13.1 AI 管理与数据治理工作台
+
+- `/administration/ai/models` 使用 `src/services/myapp/ai-governance.ts` 管理模型注册、场景策略、预算/用量、审批发布/回滚和 Embedding release；浏览器不接触 LiteLLM 管理密钥或供应商 Key。
+- `/administration/ai/data-tasks` 复用同一领域 service，提供服务端分页/筛选、缺失描述扫描、手工字段建议、前值/建议值/证据对比、审批/驳回、执行和回滚结果。
+- 页面只消费 service 映射后的 `AiDataTask` camelCase 对象，不解析 Frappe envelope 或 snake_case；所有写动作继续通过 `runGatewayMutation` 生成幂等键。
+- `access.ts` 对数据治理使用独立权限点：`canViewAiDataGovernance`、`canManageAiDataGovernance`、`canApproveAiDataGovernance`、`canRollbackAiDataGovernance`。前端权限只负责菜单与按钮体验，后端仍执行角色、状态和职责分离校验。
+- `AI Data Steward` 可查看、扫描、创建和执行；`AI Data Approver` 可查看和审批；`AI Auditor` 只读；System Manager 可执行全部动作并承担回滚权限。
+- 首期页面只暴露 Item 的商品名称、描述、品牌和商品组，不提供价格、库存、订单、发票或收付款字段。执行由后端调用既有商品服务，页面不得直接调用商品更新接口绕过任务状态机。

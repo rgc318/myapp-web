@@ -3,6 +3,8 @@ export default {
   'menu.administration.users': 'Users',
   'menu.administration.user-detail': 'User Detail',
   'menu.administration.roles': 'Roles',
+  'menu.administration.ai-models': 'AI Model Governance',
+  'menu.administration.ai-data-tasks': 'AI Data Governance',
   'menu.welcome': 'Welcome',
   'menu.more-blocks': 'More Blocks',
   'menu.home': 'Home',
