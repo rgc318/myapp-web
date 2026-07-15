@@ -26,7 +26,6 @@ import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { PrintBatchAction } from '@/components/printing/PrintBatchAction';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   exportSalesOrders,
@@ -207,7 +206,7 @@ function buildSalesOrdersCsvRows(rows: SalesOrderSummary[]) {
   ];
 }
 
-function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
+function buildColumns(): ProColumns<SalesOrderSummary>[] {
   return [
     {
       title: '关键词',
@@ -254,7 +253,6 @@ function buildColumns(defaultCompany: string): ProColumns<SalesOrderSummary>[] {
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -466,12 +464,10 @@ const SalesOrdersPage: React.FC = () => {
   const [selectedRows, setSelectedRows] = useState<SalesOrderSummary[]>([]);
   const [exporting, setExporting] = useState(false);
   const [summary, setSummary] = useState<SalesOrderSearchSummary>();
-  const { defaultCompany } = useWorkspacePreferences();
   const [activeFilters, setActiveFilters] = useState<SalesOrderListFilters>({
-    company: defaultCompany,
     ...DEFAULT_LIST_FILTERS,
   });
-  const columns = buildColumns(defaultCompany);
+  const columns = buildColumns();
   const pendingCount =
     (summary?.deliveryCount ?? 0) + (summary?.paymentCount ?? 0);
   const activeViewTitle = resolveViewTitle(activeFilters);
@@ -737,7 +733,6 @@ const SalesOrdersPage: React.FC = () => {
           actionRef={actionRef}
           columns={columns}
           formRef={formRef}
-          key={defaultCompany}
           locale={{
             emptyText: (
               <Empty

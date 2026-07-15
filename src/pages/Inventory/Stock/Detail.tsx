@@ -8,7 +8,6 @@ import {
 import { history, Link, useLocation, useParams, useRequest } from '@umijs/max';
 import { Alert, Button, Empty, Image, Skeleton, Space, Table } from 'antd';
 import React from 'react';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -135,10 +134,9 @@ const recentLedgerColumns = [
 const InventoryStockDetailPage: React.FC = () => {
   const params = useParams();
   const location = useLocation();
-  const { defaultCompany } = useWorkspacePreferences();
   const query = new URLSearchParams(location.search);
   const itemCode = decodeURIComponent(String(params.itemCode ?? ''));
-  const company = query.get('company') || defaultCompany;
+  const company = query.get('company') || undefined;
   const warehouse = query.get('warehouse') || undefined;
 
   const { data, error, loading, refresh } = useRequest(

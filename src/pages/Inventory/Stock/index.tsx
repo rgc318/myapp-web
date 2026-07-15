@@ -2,9 +2,8 @@ import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, Link } from '@umijs/max';
 import { Button, Image, Space, Table, Tag } from 'antd';
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   listProducts,
@@ -98,7 +97,7 @@ function warehouseStockTable(
   );
 }
 
-function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
+function buildColumns(activeCompany?: string): ProColumns<ProductSummary>[] {
   return [
     {
       title: '关键词',
@@ -113,7 +112,6 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -170,11 +168,7 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
       width: 160,
       render: (_, record) => (
         <Link
-          to={stockDetailPath(
-            record.itemCode,
-            defaultCompany,
-            record.warehouse,
-          )}
+          to={stockDetailPath(record.itemCode, activeCompany, record.warehouse)}
         >
           {record.itemCode}
         </Link>
@@ -250,11 +244,7 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
       render: (_, record) => [
         <Link
           key="detail"
-          to={stockDetailPath(
-            record.itemCode,
-            defaultCompany,
-            record.warehouse,
-          )}
+          to={stockDetailPath(record.itemCode, activeCompany, record.warehouse)}
         >
           详情
         </Link>,
@@ -268,8 +258,8 @@ function buildColumns(defaultCompany: string): ProColumns<ProductSummary>[] {
 
 const InventoryStockPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
-  const { defaultCompany } = useWorkspacePreferences();
-  const columns = buildColumns(defaultCompany);
+  const [activeCompany, setActiveCompany] = useState<string>();
+  const columns = buildColumns(activeCompany);
 
   return (
     <PageContainer
@@ -305,7 +295,6 @@ const InventoryStockPage: React.FC = () => {
       <ProTable<ProductSummary>
         actionRef={actionRef}
         columns={columns}
-        key={defaultCompany}
         expandable={{
           expandedRowRender: (record) => (
             <Space orientation="vertical" size={12} style={{ width: '100%' }}>
@@ -324,8 +313,9 @@ const InventoryStockPage: React.FC = () => {
         request={async (params) => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
+          const company = toOptionalText(params.company);
           const result = await listProducts({
-            company: toOptionalText(params.company),
+            company,
             disabled: 0,
             inStockOnly: params.inStockOnly === 'in_stock',
             limit: pageSize,
@@ -333,6 +323,7 @@ const InventoryStockPage: React.FC = () => {
             start: (current - 1) * pageSize,
             warehouse: String(params.warehouse ?? ''),
           });
+          setActiveCompany(company);
 
           return {
             data: result.items,

@@ -382,7 +382,6 @@ const WarehousesPage: React.FC = () => {
   const [importRows, setImportRows] = useState<WarehouseImportRow[]>([]);
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [lastQuery, setLastQuery] = useState<WarehouseListQuery>({
-    company: defaultCompany,
     disabledFilter: 'active',
     groupFilter: 'all',
     searchKey: '',
@@ -661,7 +660,6 @@ const WarehousesPage: React.FC = () => {
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, formRef) => (
         <RemoteLinkSelect
           doctype="Company"

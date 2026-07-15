@@ -13,10 +13,6 @@ import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
-import {
-  FALLBACK_COMPANY,
-  useWorkspacePreferences,
-} from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessReport,
@@ -98,19 +94,10 @@ const columns: ProColumns<PartySummaryRow>[] = [
 ];
 
 const FinancePage: React.FC = () => {
-  const { defaultCompany } = useWorkspacePreferences();
   const [mode, setMode] = useState<FinanceMode>('receivable');
   const [filters, setFilters] = useState<FinanceFilters>({
-    company: defaultCompany,
     dateRange: currentMonthRange(),
   });
-  React.useEffect(() => {
-    setFilters((current) => ({
-      ...current,
-      company:
-        current.company === FALLBACK_COMPANY ? defaultCompany : current.company,
-    }));
-  }, [defaultCompany]);
   const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
   const { data, error, loading, refresh } = useRequest(
     () => fetchReceivablePayableReport(requestFilters),
@@ -147,7 +134,6 @@ const FinancePage: React.FC = () => {
         <ProCard>
           <ProForm<FinanceFilters>
             initialValues={filters}
-            key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
               setFilters({

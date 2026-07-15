@@ -4,7 +4,6 @@ import { history, Link } from '@umijs/max';
 import { Alert, Button, Modal, message, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   confirmPendingDocument,
@@ -31,7 +30,6 @@ function doctypeTag(doctype: string) {
 }
 
 function buildColumns(
-  defaultCompany: string,
   onConfirm: (record: PendingConfirmationItem) => void,
 ): ProColumns<PendingConfirmationItem>[] {
   return [
@@ -48,7 +46,6 @@ function buildColumns(
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -165,7 +162,6 @@ function buildColumns(
 
 const PendingConfirmationsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
-  const { defaultCompany } = useWorkspacePreferences();
   const [confirmingKey, setConfirmingKey] = useState<string | null>(null);
 
   const handleConfirm = (record: PendingConfirmationItem) => {
@@ -194,7 +190,7 @@ const PendingConfirmationsPage: React.FC = () => {
     });
   };
 
-  const columns = buildColumns(defaultCompany, handleConfirm);
+  const columns = buildColumns(handleConfirm);
 
   return (
     <PageContainer

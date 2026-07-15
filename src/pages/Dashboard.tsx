@@ -28,10 +28,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { createStyles } from 'antd-style';
 import dayjs, { type Dayjs } from 'dayjs';
 import React, { useMemo, useState } from 'react';
-import {
-  FALLBACK_COMPANY,
-  useWorkspacePreferences,
-} from '@/hooks/useWorkspacePreferences';
 import { listInventoryStockSummary } from '@/services/myapp/inventory';
 import {
   type BusinessReport,
@@ -363,7 +359,6 @@ const focusColumns: ColumnsType<FocusRow> = [
 
 const Dashboard: React.FC = () => {
   const { styles } = useStyles();
-  const { defaultCompany } = useWorkspacePreferences();
   const [activeTab, setActiveTab] = useState('sales');
   const [rangePickerValue, setRangePickerValue] = useState<RangePickerValue>(
     getTimeDistance('year'),
@@ -371,15 +366,9 @@ const Dashboard: React.FC = () => {
 
   const dateFrom = rangePickerValue?.[0]?.format('YYYY-MM-DD');
   const dateTo = rangePickerValue?.[1]?.format('YYYY-MM-DD');
-  const company =
-    defaultCompany && defaultCompany !== FALLBACK_COMPANY
-      ? defaultCompany
-      : undefined;
-
   const { data, error, loading, refresh } = useRequest(
     async () => {
       const filter = {
-        company,
         dateFrom,
         dateTo,
         limit: DEFAULT_LIMIT,
@@ -419,7 +408,7 @@ const Dashboard: React.FC = () => {
     },
     {
       formatResult: (result) => result,
-      refreshDeps: [company, dateFrom, dateTo],
+      refreshDeps: [dateFrom, dateTo],
     },
   );
 
@@ -430,7 +419,6 @@ const Dashboard: React.FC = () => {
   } = useRequest(
     () =>
       listInventoryStockSummary({
-        company,
         lowStockThreshold: 10,
         page: 1,
         pageSize: 5,
@@ -438,7 +426,7 @@ const Dashboard: React.FC = () => {
       }),
     {
       formatResult: (result) => result,
-      refreshDeps: [company],
+      refreshDeps: [],
     },
   );
 

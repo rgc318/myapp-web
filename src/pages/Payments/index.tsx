@@ -10,7 +10,6 @@ import { Button, Input, Select, Space, Tag, Typography } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { PrintBatchAction } from '@/components/printing/PrintBatchAction';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type CashflowEntry,
@@ -62,10 +61,7 @@ function reportFilterKey(filter: ReportFilter) {
   });
 }
 
-function buildColumns(
-  defaultCompany: string,
-  initialSearchKey: string,
-): ProColumns<CashflowEntry>[] {
+function buildColumns(initialSearchKey: string): ProColumns<CashflowEntry>[] {
   return [
     {
       title: '关键词',
@@ -81,7 +77,6 @@ function buildColumns(
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -236,14 +231,13 @@ function buildColumns(
 const PaymentsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const location = useLocation();
-  const { defaultCompany } = useWorkspacePreferences();
   const initialSearchKey =
     new URLSearchParams(location.search).get('search') ?? '';
-  const columns = buildColumns(defaultCompany, initialSearchKey);
+  const columns = buildColumns(initialSearchKey);
   const [selectedRows, setSelectedRows] = useState<CashflowEntry[]>([]);
-  const [activeReportFilter, setActiveReportFilter] = useState<ReportFilter>({
-    company: defaultCompany,
-  });
+  const [activeReportFilter, setActiveReportFilter] = useState<ReportFilter>(
+    {},
+  );
   const activeReportFilterKey = reportFilterKey(activeReportFilter);
   const activeReportFilterKeyRef = useRef(activeReportFilterKey);
   const {
@@ -304,7 +298,7 @@ const PaymentsPage: React.FC = () => {
         <ProTable<CashflowEntry>
           actionRef={actionRef}
           columns={columns}
-          key={`${defaultCompany}-${initialSearchKey}`}
+          key={initialSearchKey}
           pagination={{
             defaultPageSize: PAGE_SIZE,
             showSizeChanger: false,

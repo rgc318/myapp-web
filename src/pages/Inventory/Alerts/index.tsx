@@ -9,7 +9,6 @@ import { history, Link } from '@umijs/max';
 import { Button, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type InventoryStockStatus,
@@ -59,9 +58,7 @@ function ledgerPath(itemCode: string, warehouse: string) {
   return `/inventory/ledger?${params.toString()}`;
 }
 
-function buildColumns(
-  defaultCompany: string,
-): ProColumns<InventoryStockSummaryRow>[] {
+function buildColumns(): ProColumns<InventoryStockSummaryRow>[] {
   return [
     {
       title: '关键词',
@@ -76,7 +73,6 @@ function buildColumns(
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -230,8 +226,7 @@ function buildColumns(
 const InventoryAlertsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [summary, setSummary] = useState<InventoryStockSummary>(emptySummary());
-  const { defaultCompany } = useWorkspacePreferences();
-  const columns = buildColumns(defaultCompany);
+  const columns = buildColumns();
 
   return (
     <PageContainer
@@ -298,7 +293,6 @@ const InventoryAlertsPage: React.FC = () => {
       <ProTable<InventoryStockSummaryRow>
         actionRef={actionRef}
         columns={columns}
-        key={defaultCompany}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,

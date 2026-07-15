@@ -9,7 +9,6 @@ import { Link } from '@umijs/max';
 import { Button, Space, Statistic } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef, useState } from 'react';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessDocumentDoctype,
@@ -30,7 +29,6 @@ type Props = {
 };
 
 function buildColumns(
-  defaultCompany: string,
   partyLabel: string,
   searchPlaceholder: string,
 ): ProColumns<BusinessDocumentSummary>[] {
@@ -74,7 +72,6 @@ function buildColumns(
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -194,8 +191,7 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
   const [selectedRows, setSelectedRows] = useState<BusinessDocumentSummary[]>(
     [],
   );
-  const { defaultCompany } = useWorkspacePreferences();
-  const columns = buildColumns(defaultCompany, partyLabel, searchPlaceholder);
+  const columns = buildColumns(partyLabel, searchPlaceholder);
 
   return (
     <PageContainer
@@ -214,7 +210,7 @@ const BusinessDocumentsTablePage: React.FC<Props> = ({
         <ProTable<BusinessDocumentSummary>
           actionRef={actionRef}
           columns={columns}
-          key={`${doctype}-${defaultCompany}`}
+          key={doctype}
           pagination={{
             defaultPageSize: PAGE_SIZE,
             showSizeChanger: false,

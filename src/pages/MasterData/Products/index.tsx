@@ -31,7 +31,6 @@ import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   bulkSetProductsDisabled,
@@ -414,12 +413,10 @@ function downloadCsv(filename: string, rows: string[][]) {
 }
 
 function buildColumns({
-  defaultCompany,
   onEdit,
   onToggleDisabled,
   togglingProduct,
 }: {
-  defaultCompany: string;
   onEdit: (record: ProductSummary) => void;
   onToggleDisabled: (record: ProductSummary) => void;
   togglingProduct?: string;
@@ -438,7 +435,6 @@ function buildColumns({
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -726,7 +722,6 @@ const ProductsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [form] = Form.useForm<ProductFormValues>();
   const [bulkForm] = Form.useForm<ProductBulkFormValues>();
-  const { defaultCompany } = useWorkspacePreferences();
   const [editingProduct, setEditingProduct] = useState<ProductSummary | null>(
     null,
   );
@@ -1044,7 +1039,6 @@ const ProductsPage: React.FC = () => {
   };
 
   const columns = buildColumns({
-    defaultCompany,
     onEdit: openEditModal,
     onToggleDisabled: handleToggleDisabled,
     togglingProduct,
@@ -1090,7 +1084,6 @@ const ProductsPage: React.FC = () => {
             wholesaleRate: { show: false },
           },
         }}
-        key={defaultCompany}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,

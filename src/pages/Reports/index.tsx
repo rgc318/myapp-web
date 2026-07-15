@@ -13,10 +13,6 @@ import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
-import {
-  FALLBACK_COMPANY,
-  useWorkspacePreferences,
-} from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   type BusinessReport,
@@ -178,18 +174,9 @@ function MiniTable<T extends Record<string, any>>({
 }
 
 const ReportsPage: React.FC = () => {
-  const { defaultCompany } = useWorkspacePreferences();
   const [filters, setFilters] = useState<ReportFilters>({
-    company: defaultCompany,
     dateRange: currentMonthRange(),
   });
-  React.useEffect(() => {
-    setFilters((current) => ({
-      ...current,
-      company:
-        current.company === FALLBACK_COMPANY ? defaultCompany : current.company,
-    }));
-  }, [defaultCompany]);
   const requestFilters = useMemo(() => normalizeFilters(filters), [filters]);
   const { data, error, loading, refresh } = useRequest(
     () => fetchBusinessReportOverview(requestFilters),
@@ -221,7 +208,6 @@ const ReportsPage: React.FC = () => {
         <ProCard>
           <ProForm<ReportFilters>
             initialValues={filters}
-            key={defaultCompany}
             layout="inline"
             onFinish={async (values) => {
               setFilters({

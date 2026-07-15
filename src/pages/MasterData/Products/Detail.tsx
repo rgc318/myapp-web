@@ -30,7 +30,6 @@ import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -437,10 +436,9 @@ const ProductDetailPage: React.FC = () => {
   const location = useLocation();
   const [form] = Form.useForm<ProductFormValues>();
   const [barcodeForm] = Form.useForm<BarcodeFormValues>();
-  const { defaultCompany } = useWorkspacePreferences();
   const query = new URLSearchParams(location.search);
   const itemCode = decodeURIComponent(String(params.itemCode ?? ''));
-  const company = query.get('company') || defaultCompany;
+  const company = query.get('company') || undefined;
   const warehouse = query.get('warehouse') || undefined;
   const [editOpen, setEditOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);

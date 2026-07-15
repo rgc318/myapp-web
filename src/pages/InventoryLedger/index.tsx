@@ -5,7 +5,6 @@ import { Button, Tag } from 'antd';
 import dayjs from 'dayjs';
 import React, { useRef } from 'react';
 import { RemoteLinkSelect } from '@/components';
-import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   listStockLedgerEntries,
@@ -89,13 +88,12 @@ function voucherLink(record: StockLedgerEntry) {
   );
 }
 
-function buildColumns(defaultCompany: string): ProColumns<StockLedgerEntry>[] {
+function buildColumns(): ProColumns<StockLedgerEntry>[] {
   return [
     {
       title: '公司',
       dataIndex: 'company',
       hideInTable: true,
-      initialValue: defaultCompany,
       formItemRender: (_, { onChange, value }, form) => (
         <RemoteLinkSelect
           doctype="Company"
@@ -253,14 +251,13 @@ function buildColumns(defaultCompany: string): ProColumns<StockLedgerEntry>[] {
 
 const InventoryLedgerPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
-  const { defaultCompany } = useWorkspacePreferences();
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const initialItemCode = query.get('itemCode') ?? undefined;
   const initialWarehouse = query.get('warehouse') ?? undefined;
   const initialVoucherType = query.get('voucherType') ?? undefined;
   const initialVoucherNo = query.get('voucherNo') ?? undefined;
-  const tableColumns = buildColumns(defaultCompany).map((column) => {
+  const tableColumns = buildColumns().map((column) => {
     if (column.dataIndex === 'itemCode') {
       return { ...column, initialValue: initialItemCode };
     }
@@ -288,7 +285,7 @@ const InventoryLedgerPage: React.FC = () => {
       <ProTable<StockLedgerEntry>
         actionRef={actionRef}
         columns={tableColumns}
-        key={`${defaultCompany}:${initialItemCode ?? ''}:${initialWarehouse ?? ''}:${initialVoucherType ?? ''}:${initialVoucherNo ?? ''}`}
+        key={`${initialItemCode ?? ''}:${initialWarehouse ?? ''}:${initialVoucherType ?? ''}:${initialVoucherNo ?? ''}`}
         pagination={{
           defaultPageSize: PAGE_SIZE,
           showSizeChanger: false,
