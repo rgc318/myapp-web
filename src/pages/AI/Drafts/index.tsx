@@ -18,6 +18,7 @@ import {
   Drawer,
   Modal,
   Space,
+  Tabs,
   Tag,
   Typography,
 } from 'antd';
@@ -27,8 +28,16 @@ import {
   discardAiDraft,
   getAiDraft,
   listAiDrafts,
+  listAiDraftVersions,
   prepareAiDraftHandoff,
+  restoreAiDraftVersion,
 } from '@/services/myapp/ai';
+import { notifyMutationError } from '@/services/myapp/mutation';
+import {
+  AiDraftBusinessReview,
+  AiDraftRawPayload,
+  AiDraftVersionList,
+} from '../components/AiDraftReview';
 
 const DRAFT_TYPE: Record<AiDraft['draftType'], string> = {
   inventory_adjustment: '库存调整',
@@ -46,28 +55,65 @@ export default function AiDraftsPage() {
   const actionRef = useRef<ActionType | undefined>(undefined);
   const [detail, setDetail] = useState<AiDraft | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [versions, setVersions] = useState<Record<string, unknown>[]>([]);
+  const [versionLoading, setVersionLoading] = useState(false);
+  const [handoffLoading, setHandoffLoading] = useState(false);
+
+  const loadDraftReview = async (draftName: string) => {
+    const nextDetail = await getAiDraft(draftName);
+    setDetail(nextDetail);
+    try {
+      setVersions(await listAiDraftVersions(draftName));
+    } catch (error) {
+      setVersions([]);
+      notifyMutationError(error);
+    }
+    return nextDetail;
+  };
 
   const openDetail = async (draft: AiDraft) => {
     setDetail(draft);
     setDetailLoading(true);
     try {
-      setDetail(await getAiDraft(draft.name));
+      await loadDraftReview(draft.name);
+    } catch (error) {
+      notifyMutationError(error);
     } finally {
       setDetailLoading(false);
     }
   };
 
   const handoff = async (draft: AiDraft) => {
-    const { draftType, payload } = await prepareAiDraftHandoff(draft.name);
-    const isPurchase = draftType === 'purchase_order';
-    const isInventory = draftType === 'inventory_adjustment';
-    sessionStorage.setItem(
-      `myapp:ai-${isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draft.name}`,
-      JSON.stringify(payload),
-    );
-    history.push(
-      `${isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draft.name)}`,
-    );
+    setHandoffLoading(true);
+    try {
+      const { draftType, payload } = await prepareAiDraftHandoff(draft.name);
+      const isPurchase = draftType === 'purchase_order';
+      const isInventory = draftType === 'inventory_adjustment';
+      sessionStorage.setItem(
+        `myapp:ai-${isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draft.name}`,
+        JSON.stringify(payload),
+      );
+      history.push(
+        `${isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draft.name)}`,
+      );
+    } catch (error) {
+      notifyMutationError(error);
+    } finally {
+      setHandoffLoading(false);
+    }
+  };
+
+  const restoreVersion = async (version: number) => {
+    if (!detail) return;
+    setVersionLoading(true);
+    try {
+      await restoreAiDraftVersion(detail.name, version);
+      await loadDraftReview(detail.name);
+    } catch (error) {
+      notifyMutationError(error);
+    } finally {
+      setVersionLoading(false);
+    }
   };
 
   const discard = (draft: AiDraft) => {
@@ -76,9 +122,15 @@ export default function AiDraftsPage() {
       okButtonProps: { danger: true },
       okText: '确认放弃',
       onOk: async () => {
-        await discardAiDraft(draft.name);
-        setDetail(null);
-        actionRef.current?.reload();
+        try {
+          await discardAiDraft(draft.name);
+          setDetail(null);
+          setVersions([]);
+          actionRef.current?.reload();
+        } catch (error) {
+          notifyMutationError(error);
+          throw error;
+        }
       },
       title: `放弃草稿 ${draft.name}？`,
     });
@@ -218,6 +270,7 @@ export default function AiDraftsPage() {
               detail.validation.readyForHandoff ? (
                 <Button
                   icon={<SendOutlined />}
+                  loading={handoffLoading}
                   onClick={() => void handoff(detail)}
                   type="primary"
                 >
@@ -237,7 +290,10 @@ export default function AiDraftsPage() {
           ) : null
         }
         loading={detailLoading}
-        onClose={() => setDetail(null)}
+        onClose={() => {
+          setDetail(null);
+          setVersions([]);
+        }}
         open={Boolean(detail)}
         title={detail?.title ?? 'AI 草稿详情'}
         width={880}
@@ -268,16 +324,37 @@ export default function AiDraftsPage() {
                 </Typography.Text>
               </Descriptions.Item>
             </Descriptions>
-            {detail.validation.errors.map((error) => (
-              <Alert key={error} showIcon title={error} type="error" />
-            ))}
-            {detail.validation.warnings.map((warning) => (
-              <Alert key={warning} showIcon title={warning} type="warning" />
-            ))}
-            <Typography.Title level={5}>结构化载荷</Typography.Title>
-            <Typography.Paragraph code copyable>
-              {JSON.stringify(detail.payload, null, 2)}
-            </Typography.Paragraph>
+            <Tabs
+              items={[
+                {
+                  children: <AiDraftBusinessReview draft={detail} />,
+                  key: 'business',
+                  label: '业务复核',
+                },
+                {
+                  children: (
+                    <div style={{ opacity: versionLoading ? 0.55 : 1 }}>
+                      <AiDraftVersionList
+                        currentVersion={detail.version}
+                        onRestore={
+                          detail.status === 'draft'
+                            ? (version) => void restoreVersion(version)
+                            : undefined
+                        }
+                        versions={versions}
+                      />
+                    </div>
+                  ),
+                  key: 'versions',
+                  label: `版本历史 (${versions.length})`,
+                },
+                {
+                  children: <AiDraftRawPayload payload={detail.payload} />,
+                  key: 'raw',
+                  label: '原始数据',
+                },
+              ]}
+            />
           </Space>
         ) : null}
       </Drawer>

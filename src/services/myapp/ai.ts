@@ -67,15 +67,23 @@ export type AiConversationMessage = AiChatMessage & {
   creation: string | null;
 };
 
+export type AiTokenUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  reasoningTokens: number;
+};
+
 export type AiRunSummary = {
   error: string | null;
   errorCode: string | null;
+  firstTokenMs: number | null;
   latencyMs: number;
   model: string | null;
   modelAlias: string | null;
   status: string;
   traceId: string | null;
-  usage: AiChatResult['usage'];
+  usage: AiTokenUsage;
 };
 
 export type AiPersistedFeedback = {
@@ -96,12 +104,8 @@ export type AiChatResult = {
   model: string | null;
   modelAlias: string | null;
   traceId: string | null;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    reasoningTokens: number;
-  };
+  run: AiRunSummary;
+  usage: AiTokenUsage;
   warnings: string[];
   events: AiEvent[];
 };
@@ -110,6 +114,7 @@ function mapChatResult(value: unknown): AiChatResult {
   const data = readObject(value);
   const responseMessage = readObject(data.message);
   const usage = readObject(data.usage);
+  const run = readObject(data.run);
   return {
     conversationId: String(data.conversation ?? ''),
     runId: typeof data.run_id === 'string' ? data.run_id : null,
@@ -125,6 +130,27 @@ function mapChatResult(value: unknown): AiChatResult {
     model: typeof data.model === 'string' ? data.model : null,
     modelAlias: typeof data.model_alias === 'string' ? data.model_alias : null,
     traceId: typeof data.trace_id === 'string' ? data.trace_id : null,
+    run: {
+      error: typeof run.error === 'string' ? run.error : null,
+      errorCode:
+        typeof run.error_code === 'string' ? run.error_code : null,
+      firstTokenMs:
+        run.first_token_ms === null || run.first_token_ms === undefined
+          ? null
+          : toNumber(run.first_token_ms),
+      latencyMs: toNumber(run.latency_ms),
+      model: typeof data.model === 'string' ? data.model : null,
+      modelAlias:
+        typeof data.model_alias === 'string' ? data.model_alias : null,
+      status: String(run.status ?? 'completed'),
+      traceId: typeof data.trace_id === 'string' ? data.trace_id : null,
+      usage: {
+        promptTokens: toNumber(usage.prompt_tokens),
+        completionTokens: toNumber(usage.completion_tokens),
+        totalTokens: toNumber(usage.total_tokens),
+        reasoningTokens: toNumber(usage.reasoning_tokens),
+      },
+    },
     usage: {
       promptTokens: toNumber(usage.prompt_tokens),
       completionTokens: toNumber(usage.completion_tokens),
@@ -300,6 +326,11 @@ export async function getAiConversation(
                 error: typeof run.error === 'string' ? run.error : null,
                 errorCode:
                   typeof run.error_code === 'string' ? run.error_code : null,
+                firstTokenMs:
+                  run.first_token_ms === null ||
+                  run.first_token_ms === undefined
+                    ? null
+                    : toNumber(run.first_token_ms),
                 latencyMs: toNumber(run.latency_ms),
                 model: typeof run.model === 'string' ? run.model : null,
                 modelAlias:

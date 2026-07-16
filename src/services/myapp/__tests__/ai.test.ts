@@ -44,6 +44,11 @@ describe('AI domain service', () => {
         model: 'gpt-5.5',
         model_alias: 'erp-fast-chat',
         trace_id: 'trace-1',
+        run: {
+          status: 'completed',
+          latency_ms: 920,
+          first_token_ms: 180,
+        },
         usage: {
           prompt_tokens: 10,
           completion_tokens: 2,
@@ -74,6 +79,11 @@ describe('AI domain service', () => {
     expect(result.runId).toBe('AI-RUN-1');
     expect(result.message.citations?.[0].id).toBe('ITEM-001');
     expect(result.usage.reasoningTokens).toBe(0);
+    expect(result.run).toMatchObject({
+      firstTokenMs: 180,
+      latencyMs: 920,
+      status: 'completed',
+    });
     expect(result.events).toEqual([{ type: 'completed' }]);
   });
 
@@ -211,6 +221,7 @@ describe('AI domain service', () => {
               model: 'provider-model',
               trace_id: 'trace-1',
               latency_ms: 900,
+              first_token_ms: 220,
               usage: { total_tokens: 12, reasoning_tokens: 0 },
             },
             feedback: { rating: 'positive', category: 'helpful' },
@@ -227,6 +238,7 @@ describe('AI domain service', () => {
     expect(result.messages[0].citations?.[0].id).toBe('ITEM-001');
     expect(result.messages[0].run).toMatchObject({
       modelAlias: 'erp-fast-chat',
+      firstTokenMs: 220,
       latencyMs: 900,
       usage: { totalTokens: 12 },
     });
@@ -238,7 +250,7 @@ describe('AI domain service', () => {
       'data: {"type":"run_started","conversation":"AI-CONV-1","run_id":"AI-RUN-1"}\n\n',
       'data: {"type":"message_delta","delta":"连接"}\n\n',
       'data: {"type":"message_delta","delta":"成功"}\n\n',
-      'data: {"type":"completed","conversation":"AI-CONV-1","run_id":"AI-RUN-1","message":{"role":"assistant","content":"连接成功"},"model":"opencode-deepseek-v4-flash","model_alias":"opencode-deepseek-v4-flash","usage":{"total_tokens":10},"warnings":[]}\n\n',
+      'data: {"type":"completed","conversation":"AI-CONV-1","run_id":"AI-RUN-1","message":{"role":"assistant","content":"连接成功"},"model":"opencode-deepseek-v4-flash","model_alias":"opencode-deepseek-v4-flash","run":{"status":"completed","latency_ms":760,"first_token_ms":120},"usage":{"total_tokens":10},"warnings":[]}\n\n',
     ].map((value) => new Uint8Array(Buffer.from(value)));
     let index = 0;
     const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -269,6 +281,7 @@ describe('AI domain service', () => {
     expect(result.conversationId).toBe('AI-CONV-1');
     expect(result.message.content).toBe('连接成功');
     expect(result.model).toBe('opencode-deepseek-v4-flash');
+    expect(result.run).toMatchObject({ latencyMs: 760, firstTokenMs: 120 });
     fetchMock.mockRestore();
   });
 

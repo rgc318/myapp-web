@@ -27,7 +27,6 @@ import {
   Form,
   Input,
   InputNumber,
-  List,
   Modal,
   message,
   Select,
@@ -59,10 +58,16 @@ import {
   submitAiFeedback,
   updateAiDraft,
 } from '@/services/myapp/ai';
+import { AiDraftVersionList } from './components/AiDraftReview';
 import {
   AiMessageContent,
   type AiMessageRow,
 } from './components/AiMessageContent';
+import {
+  type AiRunDisplayStatus,
+  AiRunInspector,
+  type AiToolProgress,
+} from './components/AiRunInspector';
 import { useAiWorkspaceStyles } from './styles';
 
 type ChatRow = AiMessageRow;
@@ -134,8 +139,20 @@ export default function AiPage() {
     'active' | 'archived'
   >('active');
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationCompany, setConversationCompany] = useState<string | null>(
+    null,
+  );
   const [scenario, setScenario] = useState<AiScenario>('general');
   const [lastResult, setLastResult] = useState<AiChatResult | null>(null);
+  const [runStatus, setRunStatus] = useState<AiRunDisplayStatus>('idle');
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runWarnings, setRunWarnings] = useState<string[]>([]);
+  const [toolProgress, setToolProgress] = useState<AiToolProgress[]>([]);
+  const [retryRequest, setRetryRequest] = useState<{
+    content: string;
+    scenario: AiScenario;
+  } | null>(null);
   const [feedbackByRun, setFeedbackByRun] = useState<
     Record<string, 'positive' | 'negative'>
   >({});
@@ -153,6 +170,9 @@ export default function AiPage() {
   );
   const [versionLoading, setVersionLoading] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
+  const effectiveCompany = conversationId
+    ? conversationCompany || defaultCompany
+    : defaultCompany;
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -180,6 +200,7 @@ export default function AiPage() {
     try {
       const result = await getAiConversation(targetId);
       setConversationId(result.conversation.name);
+      setConversationCompany(result.conversation.company);
       const restoredMessages = result.messages.map((item) => ({
         id: item.name,
         role: item.role,
@@ -204,6 +225,17 @@ export default function AiPage() {
       const latestRunMessage = [...result.messages]
         .reverse()
         .find((item) => item.runId && item.run);
+      setActiveRunId(latestRunMessage?.runId ?? null);
+      setRunWarnings([]);
+      setToolProgress([]);
+      setRunError(latestRunMessage?.run?.error ?? null);
+      setRunStatus(
+        latestRunMessage?.run
+          ? latestRunMessage.run.status === 'failed'
+            ? 'failed'
+            : 'completed'
+          : 'idle',
+      );
       setLastResult(
         latestRunMessage?.run
           ? {
@@ -217,6 +249,7 @@ export default function AiPage() {
               model: latestRunMessage.run.model,
               modelAlias: latestRunMessage.run.modelAlias,
               runId: latestRunMessage.runId,
+              run: latestRunMessage.run,
               traceId: latestRunMessage.run.traceId,
               usage: latestRunMessage.run.usage,
               warnings: [],
@@ -256,7 +289,7 @@ export default function AiPage() {
         'purchase_order_draft',
         'inventory_adjustment_draft',
       ].includes(resolvedScenario) &&
-      !defaultCompany
+      !effectiveCompany
     ) {
       message.warning('请先在工作偏好中选择默认公司。');
       return;
@@ -267,6 +300,13 @@ export default function AiPage() {
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft('');
     setScenario(resolvedScenario);
+    setLastResult(null);
+    setActiveRunId(null);
+    setRunError(null);
+    setRunWarnings([]);
+    setToolProgress([]);
+    setRetryRequest(null);
+    setRunStatus('running');
     setLoading(true);
     try {
       if (
@@ -275,7 +315,7 @@ export default function AiPage() {
         resolvedScenario === 'inventory_adjustment_draft'
       ) {
         const draftPayload = {
-          company: defaultCompany as string,
+          company: effectiveCompany as string,
           content,
           conversationId,
         };
@@ -286,7 +326,13 @@ export default function AiPage() {
               ? await generateAiPurchaseOrderDraft(draftPayload)
               : await generateAiInventoryAdjustmentDraft(draftPayload);
         setConversationId(result.conversationId);
+        setConversationCompany((current) => current || effectiveCompany);
         setLastResult(result);
+        setActiveRunId(result.runId);
+        setRunWarnings(result.warnings);
+        setRunError(null);
+        setRetryRequest(null);
+        setRunStatus('completed');
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessage.id
@@ -306,7 +352,7 @@ export default function AiPage() {
       streamAbortRef.current = abortController;
       const result = await streamAiChatMessage(
         {
-          company: defaultCompany,
+          company: effectiveCompany,
           content,
           conversationId,
           scenario: resolvedScenario,
@@ -316,15 +362,46 @@ export default function AiPage() {
             const nextConversationId = String(event.conversation ?? '');
             if (nextConversationId) {
               setConversationId(nextConversationId);
+              setConversationCompany((current) => current || effectiveCompany);
             }
             const nextRunId = String(event.run_id ?? '');
             if (nextRunId) {
+              setActiveRunId(nextRunId);
               setMessages((current) =>
                 current.map((item) =>
                   item.id === assistantMessage.id
                     ? { ...item, runId: nextRunId }
                     : item,
                 ),
+              );
+            }
+          }
+          if (event.type === 'tool_started') {
+            const toolName = String(event.tool ?? '业务工具');
+            setToolProgress((current) => [
+              ...current.filter((item) => item.name !== toolName),
+              { name: toolName, status: 'running' },
+            ]);
+          }
+          if (event.type === 'tool_completed') {
+            const toolName = String(event.tool ?? '业务工具');
+            setToolProgress((current) => [
+              ...current.filter((item) => item.name !== toolName),
+              {
+                name: toolName,
+                resultCount:
+                  event.result_count === undefined
+                    ? undefined
+                    : Number(event.result_count),
+                status: 'completed',
+              },
+            ]);
+          }
+          if (event.type === 'warning') {
+            const warning = String(event.message ?? '').trim();
+            if (warning) {
+              setRunWarnings((current) =>
+                current.includes(warning) ? current : [...current, warning],
               );
             }
           }
@@ -359,7 +436,13 @@ export default function AiPage() {
         abortController.signal,
       );
       setConversationId(result.conversationId);
+      setConversationCompany((current) => current || effectiveCompany);
       setLastResult(result);
+      setActiveRunId(result.runId);
+      setRunWarnings(result.warnings);
+      setRunError(null);
+      setRetryRequest(null);
+      setRunStatus('completed');
       setMessages((current) =>
         current.map((item) =>
           item.id === assistantMessage.id
@@ -375,8 +458,15 @@ export default function AiPage() {
       await refreshConversations();
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === 'AbortError') {
+        setRunStatus('stopped');
+        setRetryRequest({ content, scenario: resolvedScenario });
         message.info('已停止本次生成，当前已接收内容会保留。');
       } else {
+        setRunStatus('failed');
+        setRunError(
+          caught instanceof Error ? caught.message : 'AI 服务调用失败',
+        );
+        setRetryRequest({ content, scenario: resolvedScenario });
         setMessages((current) =>
           current.filter((item) => item.id !== assistantMessage.id),
         );
@@ -593,8 +683,15 @@ export default function AiPage() {
 
   const resetConversation = () => {
     setConversationId(null);
+    setConversationCompany(null);
     setMessages([]);
     setLastResult(null);
+    setActiveRunId(null);
+    setRunError(null);
+    setRunWarnings([]);
+    setToolProgress([]);
+    setRetryRequest(null);
+    setRunStatus('idle');
     setDraft('');
     setScenario('general');
   };
@@ -799,7 +896,21 @@ export default function AiPage() {
                   options={SCENARIO_OPTIONS}
                   value={scenario}
                 />
-                {defaultCompany ? <Tag>{defaultCompany}</Tag> : null}
+                {effectiveCompany ? (
+                  <Tag
+                    color={
+                      conversationId &&
+                      conversationCompany &&
+                      defaultCompany &&
+                      conversationCompany !== defaultCompany
+                        ? 'gold'
+                        : undefined
+                    }
+                  >
+                    {conversationId ? '会话公司' : '默认公司'}：
+                    {effectiveCompany}
+                  </Tag>
+                ) : null}
               </Space>
               {conversationId ? (
                 <Button
@@ -872,27 +983,20 @@ export default function AiPage() {
                 title="安全边界"
                 type="info"
               />
-              <ProCard title="本次运行" variant="outlined">
-                <Space orientation="vertical" size={8}>
-                  <Typography.Text type="secondary">能力模型</Typography.Text>
-                  <Typography.Text>
-                    {lastResult?.modelAlias || '等待首次调用'}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">实际模型</Typography.Text>
-                  <Typography.Text>{lastResult?.model || '-'}</Typography.Text>
-                  <Typography.Text type="secondary">总 Token</Typography.Text>
-                  <Typography.Text>
-                    {lastResult?.usage.totalTokens ?? 0}
-                  </Typography.Text>
-                  <Typography.Text type="secondary">Run</Typography.Text>
-                  <Typography.Text copyable={Boolean(lastResult?.runId)}>
-                    {lastResult?.runId || '-'}
-                  </Typography.Text>
-                </Space>
-              </ProCard>
-              {lastResult?.warnings.map((warning) => (
-                <Alert key={warning} showIcon title={warning} type="warning" />
-              ))}
+              <AiRunInspector
+                activeRunId={activeRunId}
+                error={runError}
+                onRetry={
+                  retryRequest
+                    ? () =>
+                        void submit(retryRequest.content, retryRequest.scenario)
+                    : undefined
+                }
+                result={lastResult}
+                status={runStatus}
+                tools={toolProgress}
+                warnings={runWarnings}
+              />
             </Space>
           </aside>
         </div>
@@ -1189,78 +1293,10 @@ export default function AiPage() {
         title="草稿版本历史"
         width={820}
       >
-        <List
-          dataSource={draftVersions}
-          locale={{ emptyText: '暂无版本快照' }}
-          renderItem={(version) => {
-            const diff = version.diff as Record<string, unknown>;
-            const fieldChanges = Array.isArray(diff?.fields) ? diff.fields : [];
-            const itemChanges = Array.isArray(diff?.items) ? diff.items : [];
-            return (
-              <List.Item
-                actions={[
-                  <Button
-                    disabled={
-                      Number(version.version) ===
-                      Number(draftVersions[0]?.version)
-                    }
-                    key="restore"
-                    onClick={() => void restoreVersion(Number(version.version))}
-                  >
-                    恢复为新版本
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta
-                  title={
-                    <Space wrap>
-                      <Typography.Text strong>
-                        版本 {Number(version.version)}
-                      </Typography.Text>
-                      <Tag>{String(version.change_source ?? 'unknown')}</Tag>
-                      <Typography.Text type="secondary">
-                        {String(version.creation ?? '')}
-                      </Typography.Text>
-                    </Space>
-                  }
-                  description={
-                    <Space orientation="vertical" size={4}>
-                      <Typography.Text>
-                        字段变化 {fieldChanges.length} 项，商品行变化{' '}
-                        {itemChanges.length} 项
-                      </Typography.Text>
-                      {fieldChanges.map((change) => {
-                        const row = change as Record<string, unknown>;
-                        return (
-                          <Typography.Text
-                            key={String(row.field)}
-                            type="secondary"
-                          >
-                            {String(row.field)}：{String(row.before ?? '-')} →{' '}
-                            {String(row.after ?? '-')}
-                          </Typography.Text>
-                        );
-                      })}
-                      {itemChanges.map((change) => {
-                        const row = change as Record<string, unknown>;
-                        return (
-                          <Typography.Text
-                            key={`${String(row.key)}-${String(row.change)}-${JSON.stringify(row.fields ?? [])}`}
-                            type="secondary"
-                          >
-                            商品 {String(row.key)}：{String(row.change)}
-                            {Array.isArray(row.fields)
-                              ? `（${row.fields.join('、')}）`
-                              : ''}
-                          </Typography.Text>
-                        );
-                      })}
-                    </Space>
-                  }
-                />
-              </List.Item>
-            );
-          }}
+        <AiDraftVersionList
+          currentVersion={Number(draftVersions[0]?.version ?? 0)}
+          onRestore={(version) => void restoreVersion(version)}
+          versions={draftVersions}
         />
       </Modal>
     </PageContainer>
