@@ -14,13 +14,22 @@ export type AiScenario =
   | 'purchase_order_draft'
   | 'inventory_adjustment_draft';
 
-export type AiSalesOrderDraft = {
+export type AiDraft = {
+  company: string | null;
+  conversationId: string | null;
+  creation: string | null;
+  draftType: 'sales_order' | 'purchase_order' | 'inventory_adjustment';
+  modified: string | null;
   name: string;
   title: string;
   status: string;
+  sourceRun: string | null;
+  version: number;
   validation: { readyForHandoff: boolean; errors: string[]; warnings: string[] };
   payload: Record<string, unknown>;
 };
+
+export type AiSalesOrderDraft = AiDraft;
 
 export type AiCitation = {
   type: string;
@@ -53,7 +62,26 @@ export type AiConversationMessage = AiChatMessage & {
   scenario: AiScenario | null;
   runId: string | null;
   promptVersion: string | null;
+  run: AiRunSummary | null;
+  feedback: AiPersistedFeedback | null;
   creation: string | null;
+};
+
+export type AiRunSummary = {
+  error: string | null;
+  errorCode: string | null;
+  latencyMs: number;
+  model: string | null;
+  modelAlias: string | null;
+  status: string;
+  traceId: string | null;
+  usage: AiChatResult['usage'];
+};
+
+export type AiPersistedFeedback = {
+  category: string | null;
+  comment: string | null;
+  rating: 'positive' | 'negative';
 };
 
 export type AiEvent = {
@@ -125,15 +153,62 @@ function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
   const row = readObject(value);
   const validation = readObject(row.validation);
   return {
+    company: typeof row.company === 'string' ? row.company : null,
+    conversationId:
+      typeof row.conversation === 'string' ? row.conversation : null,
+    creation: typeof row.creation === 'string' ? row.creation : null,
+    draftType:
+      row.draft_type === 'purchase_order'
+        ? 'purchase_order'
+        : row.draft_type === 'inventory_adjustment'
+          ? 'inventory_adjustment'
+          : 'sales_order',
+    modified: typeof row.modified === 'string' ? row.modified : null,
     name: String(row.name ?? ''),
     title: String(row.title ?? '销售订单草稿'),
     status: String(row.status ?? 'draft'),
+    sourceRun: typeof row.source_run === 'string' ? row.source_run : null,
+    version: toNumber(row.version, 1),
     payload: readObject(row.payload),
     validation: {
       readyForHandoff: Boolean(validation.ready_for_handoff),
       errors: toStringList(validation.errors),
       warnings: toStringList(validation.warnings),
     },
+  };
+}
+
+export async function getAiDraft(draftId: string): Promise<AiDraft> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'get_ai_draft_v1',
+    { draft_id: draftId },
+  );
+  return mapSalesOrderDraft(result.data);
+}
+
+export async function listAiDrafts(params: {
+  current?: number;
+  draftType?: AiDraft['draftType'];
+  pageSize?: number;
+  status?: 'draft' | 'handed_off' | 'discarded' | 'all';
+} = {}): Promise<{ items: AiDraft[]; total: number }> {
+  const pageSize = params.pageSize ?? 20;
+  const start = Math.max(0, ((params.current ?? 1) - 1) * pageSize);
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_ai_drafts_v1',
+    {
+      draft_type: params.draftType,
+      limit: pageSize,
+      start,
+      status: params.status ?? 'draft',
+    },
+  );
+  const data = readObject(result.data);
+  return {
+    items: Array.isArray(data.items)
+      ? data.items.map(mapSalesOrderDraft)
+      : [],
+    total: toNumber(readObject(data.pagination).total),
   };
 }
 
@@ -217,6 +292,47 @@ export async function getAiConversation(
               typeof row.prompt_version === 'string'
                 ? row.prompt_version
                 : null,
+            run: (() => {
+              const run = readObject(row.run);
+              if (!Object.keys(run).length) return null;
+              const usage = readObject(run.usage);
+              return {
+                error: typeof run.error === 'string' ? run.error : null,
+                errorCode:
+                  typeof run.error_code === 'string' ? run.error_code : null,
+                latencyMs: toNumber(run.latency_ms),
+                model: typeof run.model === 'string' ? run.model : null,
+                modelAlias:
+                  typeof run.model_alias === 'string' ? run.model_alias : null,
+                status: String(run.status ?? ''),
+                traceId:
+                  typeof run.trace_id === 'string' ? run.trace_id : null,
+                usage: {
+                  promptTokens: toNumber(usage.prompt_tokens),
+                  completionTokens: toNumber(usage.completion_tokens),
+                  totalTokens: toNumber(usage.total_tokens),
+                  reasoningTokens: toNumber(usage.reasoning_tokens),
+                },
+              };
+            })(),
+            feedback: (() => {
+              const feedback = readObject(row.feedback);
+              if (
+                feedback.rating !== 'positive' &&
+                feedback.rating !== 'negative'
+              ) {
+                return null;
+              }
+              return {
+                category:
+                  typeof feedback.category === 'string'
+                    ? feedback.category
+                    : null,
+                comment:
+                  typeof feedback.comment === 'string' ? feedback.comment : null,
+                rating: feedback.rating,
+              };
+            })(),
             creation: typeof row.creation === 'string' ? row.creation : null,
           };
         })

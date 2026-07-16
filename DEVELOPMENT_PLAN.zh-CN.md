@@ -2,7 +2,7 @@
 
 本文档记录 Web 端从模板项目进入业务开发的实施计划。当前阶段目标是先建立稳定接入骨架，再逐步实现查询和报表页面。
 
-> 当前基线（2026-07-12）：本文中的阶段内容保留为 Web 从模板演进到业务系统的实施记录，不代表所有条目仍是待办。当前跨模块完成度、真实缺口和实施优先级以父仓库 `docs/codex/PROJECT_GAP_ROADMAP.zh-CN.md` 为准；临时工作区和最新验证状态以 `docs/codex/CURRENT_HANDOFF.zh-CN.md` 为准。
+> 当前基线（2026-07-16）：本文中的阶段内容保留为 Web 从模板演进到业务系统的实施记录，不代表所有条目仍是待办。当前跨模块完成度、真实缺口和实施优先级以父仓库 `docs/codex/PROJECT_GAP_ROADMAP.zh-CN.md` 为准；AI Web 的当前设计以 `AI_WEB_FRONTEND_DESIGN.zh-CN.md` 为准；临时工作区和最新验证状态以 `docs/codex/CURRENT_HANDOFF.zh-CN.md` 为准。
 
 ## 阶段 0：模板清理与接入骨架
 

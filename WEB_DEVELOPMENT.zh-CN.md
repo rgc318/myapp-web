@@ -1530,21 +1530,29 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 
 前端 `access.ts` 只负责菜单与按钮体验，所有用户、角色和数据权限操作必须由后端再次鉴权。账号不提供硬删除操作；退出使用停用状态，以保留历史单据和审计主体。
 
-## 13. AI Copilot
+## 13. AI 工作台
 
-- `/ai` 是企业 AI 助手入口，当前处于只读试运行阶段。
-- 页面只调用 `src/services/myapp/ai.ts` 和 Frappe AI Gateway，不得直接访问 AI Orchestrator 或 LiteLLM。
-- 当前支持会话列表、历史消息加载、归档、Run 标识、POST + JWT SSE、增量消息、点赞/点踩反馈，以及商品/订单引用卡片。
-- 商品卡片来自 Frappe `search_product_v2`，订单卡片来自销售/采购工作台服务；页面不得根据模型文本自行猜测业务事实。
-- Web 使用 `fetch + ReadableStream` 消费 SSE，不使用无法携带 POST body 和 Authorization 的原生 `EventSource`。
-- 当前聊天页面展示安全边界、实际模型、Token 和警告；模型不具备正式单据写权限。报表真实工具仍未启用。
-- 后续商品搜索、订单查询、报表解释和单据草稿必须继续通过领域对象和业务卡片展示，不在页面解析供应商原始响应。
+AI Web 的信息架构、组件选型、状态与数据流、权限边界、异常恢复和验收门禁统一记录在 `AI_WEB_FRONTEND_DESIGN.zh-CN.md`。本节保留当前实现约定，新增或调整 AI 页面时必须同步核对该设计文档和后端 `AI_TECH_DESIGN.zh-CN.md`。
+
+- `/ai` 使用 Ant Design Pro 官方 `@ant-design/x` 组件体系实现企业 AI 工作台：`Conversations` 管理活跃/归档会话，`Bubble` 展示消息，`Sender` 负责发送和停止生成，`Welcome` / `Prompts` 提供能力入口，`Sources` / `Actions` 展示业务来源和反馈。
+- AI 消息正文使用 `@ant-design/x-markdown`；商品、订单、报表和草稿事实继续由结构化 citation 组件展示，不从 Markdown 或模型文本猜测业务字段。
+- 页面只调用 `src/services/myapp/ai.ts` 和 Frappe AI Gateway，不得直接访问 AI Orchestrator、LiteLLM 或外部模型接口。官方 Chatbot 示例中的外部 Provider 配置不能复制到本项目运行代码。
+- Web 使用 `fetch + ReadableStream` 消费 POST + JWT SSE，不使用原生 `EventSource`。`Sender` 的停止按钮通过 `AbortController` 中断浏览器读取；中断后保留已接收内容，不自动重试以避免重复模型费用和重复 Run。
+- 会话重新打开后，后端会恢复受当前用户隔离的 Run 模型、Token、延迟、trace 和已提交反馈；页面不得只依赖最近一次内存状态。
+- 反馈支持有帮助，以及不准确、不完整、不安全和其他问题分类；反馈始终绑定当前用户自己的已完成 Run。
+- `/ai/drafts` 是当前用户草稿中心，支持销售订单、采购订单和库存调整草稿的筛选、详情、校验结果、来源会话、放弃和安全交接。草稿进入业务编辑器后仍需用户主动保存，AI 不创建或提交正式单据。
+- 商品、订单、经营报表和三类草稿能力均已接入；AI 安全边界仍保持不变：不能创建、提交、取消、收付款或直接修改库存。
 
 ### 13.1 AI 管理与数据治理工作台
 
-- `/administration/ai/models` 使用 `src/services/myapp/ai-governance.ts` 管理模型注册、场景策略、预算/用量、审批发布/回滚和 Embedding release；浏览器不接触 LiteLLM 管理密钥或供应商 Key。
+- AI 治理功能按可深链路由拆分：`/administration/ai/models`、`/administration/ai/policies`、`/administration/ai/usage`、`/administration/ai/vectors`、`/administration/ai/audit` 和 `/administration/ai/data-tasks`。
+- `src/services/myapp/ai-governance.ts` 负责模型、策略、用量、向量索引、Embedding release、审计和 Data Task 的 camelCase 映射；浏览器不接触 LiteLLM 管理密钥、供应商 Key 或 Orchestrator Service Token。
+- 模型治理顶部概览聚合 Orchestrator 可达性、近 7 日请求/错误/成本、模型/策略数量和向量状态；用量页面提供近 30 日请求、成功率、成本、p95 与趋势图。
+- 向量页面同时覆盖在线索引状态和不可变 Embedding 发布：System Manager 可查看待处理/失败/排除项，定向重建失败索引，并在 dry-run 后清理明确排除向量。清理操作固定证明 ERP Item 未修改。
+- 审计中心使用服务端分页，支持关键词、动作、对象类型、优先级和日期范围筛选，不再只展示最近 20 条内存数据。
 - `/administration/ai/data-tasks` 复用同一领域 service，提供服务端分页/筛选、缺失描述扫描、手工字段建议、前值/建议值/证据对比、审批/驳回、执行和回滚结果。
 - 页面只消费 service 映射后的 `AiDataTask` camelCase 对象，不解析 Frappe envelope 或 snake_case；所有写动作继续通过 `runGatewayMutation` 生成幂等键。
+- Data Task 操作按钮优先使用后端返回的 `actions.<action>.allowed/reason`，前端权限点只用于菜单与按钮体验，不复制职责分离和状态机判断。
 - `access.ts` 对数据治理使用独立权限点：`canViewAiDataGovernance`、`canManageAiDataGovernance`、`canApproveAiDataGovernance`、`canRollbackAiDataGovernance`。前端权限只负责菜单与按钮体验，后端仍执行角色、状态和职责分离校验。
 - `AI Data Steward` 可查看、扫描、创建和执行；`AI Data Approver` 可查看和审批；`AI Auditor` 只读；System Manager 可执行全部动作并承担回滚权限。
 - 首期页面只暴露 Item 的商品名称、描述、品牌和商品组，不提供价格、库存、订单、发票或收付款字段。执行由后端调用既有商品服务，页面不得直接调用商品更新接口绕过任务状态机。

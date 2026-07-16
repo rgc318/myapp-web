@@ -206,8 +206,7 @@ export default function AiDataTasksPage() {
       >
         详情
       </Button>
-      {task.status === 'review_required' &&
-      access.canApproveAiDataGovernance ? (
+      {task.actions.approve.allowed && access.canApproveAiDataGovernance ? (
         <>
           <Button
             icon={<CheckCircleOutlined />}
@@ -226,7 +225,7 @@ export default function AiDataTasksPage() {
           </Button>
         </>
       ) : null}
-      {task.status === 'approved' && access.canManageAiDataGovernance ? (
+      {task.actions.execute.allowed && access.canManageAiDataGovernance ? (
         <Button
           icon={<PlayCircleOutlined />}
           onClick={() => executeTask(task)}
@@ -235,7 +234,7 @@ export default function AiDataTasksPage() {
           执行
         </Button>
       ) : null}
-      {task.status === 'executed' && access.canRollbackAiDataGovernance ? (
+      {task.actions.rollback.allowed && access.canRollbackAiDataGovernance ? (
         <Button
           danger
           icon={<RollbackOutlined />}

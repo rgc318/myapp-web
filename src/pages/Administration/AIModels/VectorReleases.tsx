@@ -39,6 +39,7 @@ import {
   validateAiVectorRelease,
 } from '@/services/myapp/ai-governance';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import VectorIndexOperations from './VectorIndexOperations';
 
 const { Paragraph, Text } = Typography;
 
@@ -245,6 +246,7 @@ export default function VectorReleases({ access, models, onChanged }: Props) {
 
   return (
     <>
+      {access.canPublishAiGovernance ? <VectorIndexOperations /> : null}
       <Alert
         showIcon
         type="warning"

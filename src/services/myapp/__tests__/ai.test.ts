@@ -3,6 +3,7 @@ import {
   generateAiInventoryAdjustmentDraft,
   getAiConversation,
   listAiConversations,
+  listAiDrafts,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
@@ -137,6 +138,55 @@ describe('AI domain service', () => {
     expect(result.draft.validation.readyForHandoff).toBe(true);
   });
 
+  it('maps the current user draft center with filters and pagination', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        items: [
+          {
+            name: 'AI-DRAFT-1',
+            conversation: 'AI-CONV-1',
+            source_run: 'AI-RUN-1',
+            draft_type: 'purchase_order',
+            status: 'draft',
+            company: 'Demo Company',
+            title: '采购订单草稿',
+            version: 3,
+            payload: { supplier: 'SUP-1' },
+            validation: {
+              ready_for_handoff: false,
+              errors: ['缺少商品'],
+              warnings: [],
+            },
+          },
+        ],
+        pagination: { total: 21 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listAiDrafts({
+      current: 2,
+      draftType: 'purchase_order',
+      pageSize: 20,
+      status: 'draft',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith('list_ai_drafts_v1', {
+      draft_type: 'purchase_order',
+      limit: 20,
+      start: 20,
+      status: 'draft',
+    });
+    expect(result.total).toBe(21);
+    expect(result.items[0]).toMatchObject({
+      conversationId: 'AI-CONV-1',
+      draftType: 'purchase_order',
+      version: 3,
+      validation: { readyForHandoff: false, errors: ['缺少商品'] },
+    });
+  });
+
   it('maps persisted conversation messages and citations', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
@@ -154,6 +204,16 @@ describe('AI domain service', () => {
             content: '候选商品',
             scenario: 'product_search',
             citations: [{ type: 'product', id: 'ITEM-001', label: '测试商品' }],
+            run_id: 'AI-RUN-1',
+            run: {
+              status: 'completed',
+              model_alias: 'erp-fast-chat',
+              model: 'provider-model',
+              trace_id: 'trace-1',
+              latency_ms: 900,
+              usage: { total_tokens: 12, reasoning_tokens: 0 },
+            },
+            feedback: { rating: 'positive', category: 'helpful' },
           },
         ],
       },
@@ -165,6 +225,12 @@ describe('AI domain service', () => {
 
     expect(result.messages[0].scenario).toBe('product_search');
     expect(result.messages[0].citations?.[0].id).toBe('ITEM-001');
+    expect(result.messages[0].run).toMatchObject({
+      modelAlias: 'erp-fast-chat',
+      latencyMs: 900,
+      usage: { totalTokens: 12 },
+    });
+    expect(result.messages[0].feedback?.rating).toBe('positive');
   });
 
   it('consumes POST SSE events and returns completed chat metadata', async () => {

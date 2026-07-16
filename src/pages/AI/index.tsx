@@ -1,28 +1,35 @@
 import {
-  DeleteOutlined,
-  DislikeOutlined,
+  AppstoreOutlined,
+  BarChartOutlined,
+  FileTextOutlined,
   InboxOutlined,
-  LikeOutlined,
   RobotOutlined,
-  SendOutlined,
+  SearchOutlined,
+  ShoppingCartOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
+import {
+  Bubble,
+  Conversations,
+  Prompts,
+  Sender,
+  Welcome,
+  XProvider,
+} from '@ant-design/x';
+import type { BubbleItemType } from '@ant-design/x/es/bubble/interface';
 import { history } from '@umijs/max';
 import {
   Alert,
   Avatar,
   Button,
-  Col,
   DatePicker,
-  Empty,
   Form,
   Input,
   InputNumber,
   List,
   Modal,
   message,
-  Row,
   Select,
   Space,
   Spin,
@@ -30,7 +37,7 @@ import {
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
@@ -52,8 +59,13 @@ import {
   submitAiFeedback,
   updateAiDraft,
 } from '@/services/myapp/ai';
+import {
+  AiMessageContent,
+  type AiMessageRow,
+} from './components/AiMessageContent';
+import { useAiWorkspaceStyles } from './styles';
 
-type ChatRow = AiChatMessage & { id: string; runId?: string | null };
+type ChatRow = AiMessageRow;
 
 const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
   { content: '你目前可以帮助我做什么？', scenario: 'general' },
@@ -90,16 +102,6 @@ const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
   { label: '库存调整草稿', value: 'inventory_adjustment_draft' },
 ];
 
-const REPORT_METRIC_LABELS: Record<string, string> = {
-  sales_amount_total: '销售额',
-  purchase_amount_total: '采购额',
-  received_amount_total: '实收',
-  paid_amount_total: '实付',
-  net_cashflow_total: '净现金流',
-  receivable_outstanding_total: '应收未结',
-  payable_outstanding_total: '应付未结',
-};
-
 function createMessage(
   role: AiChatMessage['role'],
   content: string,
@@ -116,19 +118,30 @@ function createMessage(
 }
 
 export default function AiPage() {
+  const { styles } = useAiWorkspaceStyles();
   const [draftForm] = Form.useForm();
+  const [feedbackForm] = Form.useForm<{
+    category: 'incorrect' | 'incomplete' | 'unsafe' | 'other';
+    comment?: string;
+  }>();
   const { defaultCompany } = useWorkspacePreferences();
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [messages, setMessages] = useState<ChatRow[]>([]);
   const [conversations, setConversations] = useState<AiConversation[]>([]);
+  const [conversationStatus, setConversationStatus] = useState<
+    'active' | 'archived'
+  >('active');
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [scenario, setScenario] = useState<AiScenario>('general');
   const [lastResult, setLastResult] = useState<AiChatResult | null>(null);
   const [feedbackByRun, setFeedbackByRun] = useState<
     Record<string, 'positive' | 'negative'>
   >({});
+  const [negativeFeedbackRunId, setNegativeFeedbackRunId] = useState<
+    string | null
+  >(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editingDraftType, setEditingDraftType] = useState<
     'sales_order' | 'purchase_order' | 'inventory_adjustment'
@@ -139,17 +152,21 @@ export default function AiPage() {
     [],
   );
   const [versionLoading, setVersionLoading] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const refreshConversations = useCallback(async () => {
     try {
-      const result = await listAiConversations();
+      const result = await listAiConversations({
+        limit: 50,
+        status: conversationStatus,
+      });
       setConversations(result.items);
     } catch (caught) {
       message.error(
         caught instanceof Error ? caught.message : '会话列表加载失败',
       );
     }
-  }, []);
+  }, [conversationStatus]);
 
   useEffect(() => {
     void refreshConversations();
@@ -163,22 +180,49 @@ export default function AiPage() {
     try {
       const result = await getAiConversation(targetId);
       setConversationId(result.conversation.name);
-      setMessages(
-        result.messages.map((item) => ({
-          id: item.name,
-          role: item.role,
-          content: item.content,
-          citations: item.citations,
-          runId: item.runId,
-        })),
-      );
+      const restoredMessages = result.messages.map((item) => ({
+        id: item.name,
+        role: item.role,
+        content: item.content,
+        citations: item.citations,
+        runId: item.runId,
+      }));
+      setMessages(restoredMessages);
+      const restoredFeedback: Record<string, 'positive' | 'negative'> = {};
+      result.messages.forEach((item) => {
+        if (item.runId && item.feedback) {
+          restoredFeedback[item.runId] = item.feedback.rating;
+        }
+      });
+      setFeedbackByRun(restoredFeedback);
       const latestScenario = [...result.messages]
         .reverse()
         .find((item) => item.scenario)?.scenario;
       if (latestScenario) {
         setScenario(latestScenario);
       }
-      setLastResult(null);
+      const latestRunMessage = [...result.messages]
+        .reverse()
+        .find((item) => item.runId && item.run);
+      setLastResult(
+        latestRunMessage?.run
+          ? {
+              conversationId: result.conversation.name,
+              events: [],
+              message: {
+                role: 'assistant',
+                content: latestRunMessage.content,
+                citations: latestRunMessage.citations,
+              },
+              model: latestRunMessage.run.model,
+              modelAlias: latestRunMessage.run.modelAlias,
+              runId: latestRunMessage.runId,
+              traceId: latestRunMessage.run.traceId,
+              usage: latestRunMessage.run.usage,
+              warnings: [],
+            }
+          : null,
+      );
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '会话加载失败');
     } finally {
@@ -186,10 +230,21 @@ export default function AiPage() {
     }
   };
 
+  useEffect(() => {
+    const targetId = new URLSearchParams(history.location.search).get(
+      'conversation',
+    );
+    if (targetId) void openConversation(targetId);
+  }, []);
+
   const submit = async (contentValue?: string, scenarioValue?: AiScenario) => {
     const content = (contentValue ?? draft).trim();
     const resolvedScenario = scenarioValue ?? scenario;
     if (!content || loading) {
+      return;
+    }
+    if (conversationStatus === 'archived' && conversationId) {
+      message.warning('已归档会话为只读状态，请新建会话后继续提问。');
       return;
     }
     if (
@@ -247,6 +302,8 @@ export default function AiPage() {
         await refreshConversations();
         return;
       }
+      const abortController = new AbortController();
+      streamAbortRef.current = abortController;
       const result = await streamAiChatMessage(
         {
           company: defaultCompany,
@@ -299,6 +356,7 @@ export default function AiPage() {
             }
           }
         },
+        abortController.signal,
       );
       setConversationId(result.conversationId);
       setLastResult(result);
@@ -316,15 +374,24 @@ export default function AiPage() {
       );
       await refreshConversations();
     } catch (caught) {
-      setMessages((current) =>
-        current.filter((item) => item.id !== assistantMessage.id),
-      );
-      message.error(
-        caught instanceof Error ? caught.message : 'AI 服务调用失败',
-      );
+      if (caught instanceof DOMException && caught.name === 'AbortError') {
+        message.info('已停止本次生成，当前已接收内容会保留。');
+      } else {
+        setMessages((current) =>
+          current.filter((item) => item.id !== assistantMessage.id),
+        );
+        message.error(
+          caught instanceof Error ? caught.message : 'AI 服务调用失败',
+        );
+      }
     } finally {
+      streamAbortRef.current = null;
       setLoading(false);
     }
+  };
+
+  const stopGeneration = () => {
+    streamAbortRef.current?.abort();
   };
 
   const handoffDraft = async (draftId: string) => {
@@ -549,481 +616,327 @@ export default function AiPage() {
   const submitFeedback = async (
     runId: string,
     rating: 'positive' | 'negative',
+    details?: { category?: string; comment?: string },
   ) => {
     try {
       await submitAiFeedback({
         runId,
         rating,
-        category: rating === 'positive' ? 'helpful' : 'incorrect',
+        category:
+          rating === 'positive'
+            ? 'helpful'
+            : ((details?.category ?? 'incorrect') as
+                | 'incorrect'
+                | 'incomplete'
+                | 'unsafe'
+                | 'other'),
+        comment: details?.comment,
       });
       setFeedbackByRun((current) => ({ ...current, [runId]: rating }));
+      setNegativeFeedbackRunId(null);
+      feedbackForm.resetFields();
       message.success('感谢反馈');
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '反馈提交失败');
     }
   };
 
+  const conversationItems = conversations.map((item) => {
+    const lastMessageAt = item.lastMessageAt ? dayjs(item.lastMessageAt) : null;
+    const group = lastMessageAt?.isSame(dayjs(), 'day')
+      ? '今天'
+      : lastMessageAt?.isSame(dayjs().subtract(1, 'day'), 'day')
+        ? '昨天'
+        : '更早';
+    return {
+      key: item.name,
+      group,
+      label: (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text ellipsis>{item.title}</Typography.Text>
+          <Typography.Text type="secondary">
+            {item.messageCount} 条消息
+            {item.company ? ` · ${item.company}` : ''}
+          </Typography.Text>
+        </Space>
+      ),
+    };
+  });
+
+  const promptItems = EXAMPLE_PROMPTS.map((item, index) => ({
+    key: String(index),
+    label: item.content,
+    description: SCENARIO_OPTIONS.find(
+      (option) => option.value === item.scenario,
+    )?.label,
+    icon:
+      item.scenario === 'product_search' ? (
+        <SearchOutlined />
+      ) : item.scenario === 'order_query' ? (
+        <ShoppingCartOutlined />
+      ) : item.scenario === 'report_summary' ? (
+        <BarChartOutlined />
+      ) : item.scenario.endsWith('_draft') ? (
+        <FileTextOutlined />
+      ) : (
+        <AppstoreOutlined />
+      ),
+  }));
+
+  const bubbleItems: BubbleItemType[] = messages.map((item, index) => ({
+    key: item.id,
+    role: item.role === 'user' ? 'user' : 'ai',
+    status:
+      loading && item.role === 'assistant' && index === messages.length - 1
+        ? 'updating'
+        : 'success',
+    content:
+      item.role === 'user' ? (
+        item.content
+      ) : (
+        <AiMessageContent
+          citations={item.citations}
+          content={item.content}
+          feedback={item.runId ? feedbackByRun[item.runId] : undefined}
+          onDiscardDraft={(draftId) => void discardDraft(draftId)}
+          onEditDraft={openDraftEditor}
+          onFeedback={(rating) =>
+            item.runId
+              ? rating === 'positive'
+                ? void submitFeedback(item.runId, rating)
+                : setNegativeFeedbackRunId(item.runId)
+              : undefined
+          }
+          onHandoffDraft={(draftId) => void handoffDraft(draftId)}
+          onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
+          runId={item.runId}
+          streaming={
+            loading && index === messages.length - 1 && !item.content
+              ? undefined
+              : loading && index === messages.length - 1
+          }
+        />
+      ),
+  }));
+
   return (
     <PageContainer
-      title="AI Copilot"
-      subTitle="企业业务助手"
-      extra={<Tag color="blue">只读试运行</Tag>}
+      className={styles.page}
+      extra={
+        <Space>
+          <Button onClick={() => history.push('/ai/drafts')}>我的草稿</Button>
+          <Tag color="blue">受控业务助手</Tag>
+        </Space>
+      }
+      ghost
+      subTitle="查询、解释和生成可审计业务草稿"
+      title="AI 工作台"
     >
-      <Row gutter={[16, 16]}>
-        <Col xs={24} xl={5}>
-          <ProCard title="我的会话">
-            <Space orientation="vertical" size={12} style={{ width: '100%' }}>
-              <Button
-                block
-                icon={<DeleteOutlined />}
-                onClick={resetConversation}
-              >
-                新建会话
-              </Button>
-              <List
-                dataSource={conversations}
-                locale={{ emptyText: '暂无历史会话' }}
-                loading={conversationLoading}
-                renderItem={(item) => (
-                  <List.Item
-                    onClick={() => void openConversation(item.name)}
-                    style={{ cursor: 'pointer', paddingInline: 0 }}
-                  >
-                    <List.Item.Meta
-                      description={`${item.messageCount} 条消息${item.company ? ` · ${item.company}` : ''}`}
-                      title={
-                        <Typography.Text
-                          ellipsis
-                          strong={conversationId === item.name}
-                        >
-                          {item.title}
-                        </Typography.Text>
-                      }
-                    />
-                  </List.Item>
-                )}
-                size="small"
-              />
-              <Typography.Text type="secondary">示例问题</Typography.Text>
-              <List
-                dataSource={EXAMPLE_PROMPTS}
-                renderItem={(item) => (
-                  <List.Item style={{ paddingInline: 0 }}>
-                    <Button
-                      block
-                      disabled={loading}
-                      onClick={() => void submit(item.content, item.scenario)}
-                      style={{
-                        height: 'auto',
-                        textAlign: 'left',
-                        whiteSpace: 'normal',
-                      }}
-                      type="text"
-                    >
-                      {item.content}
-                    </Button>
-                  </List.Item>
-                )}
-                size="small"
-              />
-            </Space>
-          </ProCard>
-        </Col>
-
-        <Col xs={24} xl={13}>
-          <ProCard
-            title="对话"
-            extra={
-              <Space>
-                {defaultCompany ? <Tag>{defaultCompany}</Tag> : null}
-                {conversationId ? (
-                  <Button
-                    icon={<InboxOutlined />}
-                    onClick={() => void archiveCurrentConversation()}
-                    size="small"
-                  >
-                    归档
-                  </Button>
-                ) : null}
-              </Space>
-            }
-          >
-            <div style={{ minHeight: 480, maxHeight: 620, overflowY: 'auto' }}>
-              {messages.length ? (
-                <Space
-                  orientation="vertical"
-                  size={16}
-                  style={{ width: '100%' }}
-                >
-                  {messages.map((item) => {
-                    const isUser = item.role === 'user';
-                    const runId = item.runId;
-                    return (
-                      <div
-                        key={item.id}
-                        style={{
-                          display: 'flex',
-                          flexDirection: isUser ? 'row-reverse' : 'row',
-                          gap: 12,
-                        }}
-                      >
-                        <Avatar
-                          icon={isUser ? <UserOutlined /> : <RobotOutlined />}
-                          style={{ background: isUser ? '#1677ff' : '#52c41a' }}
-                        />
-                        <Space
-                          orientation="vertical"
-                          size={8}
-                          style={{ maxWidth: '78%' }}
-                        >
-                          <div
-                            style={{
-                              background: isUser ? '#e6f4ff' : '#f5f5f5',
-                              borderRadius: 8,
-                              padding: '10px 14px',
-                              whiteSpace: 'pre-wrap',
-                            }}
-                          >
-                            <Typography.Text>{item.content}</Typography.Text>
-                          </div>
-                          {item.citations?.map((citation) => (
-                            <ProCard
-                              key={`${item.id}-${citation.type}-${citation.id}`}
-                              size="small"
-                              title={citation.label}
-                              extra={
-                                citation.href ? (
-                                  <Button
-                                    href={citation.href}
-                                    size="small"
-                                    type="link"
-                                  >
-                                    {citation.type === 'product'
-                                      ? '查看商品'
-                                      : citation.type === 'ai_draft'
-                                        ? '草稿详情'
-                                        : citation.type === 'business_report'
-                                          ? '查看报表'
-                                          : '查看订单'}
-                                  </Button>
-                                ) : null
-                              }
-                            >
-                              {citation.type === 'product' ? (
-                                <Space size={[8, 4]} wrap>
-                                  {citation.id ? (
-                                    <Tag>{citation.id}</Tag>
-                                  ) : null}
-                                  {citation.data.specification ? (
-                                    <Tag>
-                                      {String(citation.data.specification)}
-                                    </Tag>
-                                  ) : null}
-                                  {citation.data.match_reason ? (
-                                    <Tag color="purple">
-                                      {String(citation.data.match_reason)}
-                                    </Tag>
-                                  ) : null}
-                                  {typeof citation.data.semantic_score ===
-                                  'number' ? (
-                                    <Tag color="geekblue">
-                                      语义相关度{' '}
-                                      {Math.max(
-                                        0,
-                                        Math.min(
-                                          100,
-                                          Math.round(
-                                            Number(
-                                              citation.data.semantic_score,
-                                            ) * 100,
-                                          ),
-                                        ),
-                                      )}
-                                      %
-                                    </Tag>
-                                  ) : null}
-                                  <Typography.Text>
-                                    库存 {Number(citation.data.qty ?? 0)}{' '}
-                                    {String(
-                                      citation.data.uom_display ??
-                                        citation.data.uom ??
-                                        '',
-                                    )}
-                                  </Typography.Text>
-                                  <Typography.Text>
-                                    参考价 {Number(citation.data.price ?? 0)}
-                                  </Typography.Text>
-                                </Space>
-                              ) : citation.type === 'ai_draft' ? (
-                                <Space orientation="vertical" size={8}>
-                                  <Space wrap>
-                                    <Tag>
-                                      版本 {Number(citation.data.version ?? 1)}
-                                    </Tag>
-                                    <Tag
-                                      color={
-                                        citation.data.status === 'draft'
-                                          ? 'blue'
-                                          : 'default'
-                                      }
-                                    >
-                                      {String(citation.data.status ?? 'draft')}
-                                    </Tag>
-                                  </Space>
-                                  <Typography.Text>
-                                    {(
-                                      citation.data.validation as Record<
-                                        string,
-                                        unknown
-                                      >
-                                    )?.ready_for_handoff
-                                      ? citation.data.draft_type ===
-                                        'inventory_adjustment'
-                                        ? '草稿已通过后端实时库存校验，可进入库存调整编辑器复核。'
-                                        : `草稿已通过后端校验，可进入${citation.data.draft_type === 'purchase_order' ? '采购' : '销售'}订单编辑器复核。`
-                                      : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
-                                  </Typography.Text>
-                                  {Array.isArray(
-                                    (
-                                      citation.data.validation as Record<
-                                        string,
-                                        unknown
-                                      >
-                                    )?.errors,
-                                  )
-                                    ? (
-                                        (
-                                          citation.data.validation as Record<
-                                            string,
-                                            unknown
-                                          >
-                                        ).errors as unknown[]
-                                      ).map((error) => (
-                                        <Typography.Text
-                                          key={String(error)}
-                                          type="danger"
-                                        >
-                                          {String(error)}
-                                        </Typography.Text>
-                                      ))
-                                    : null}
-                                  <Button
-                                    disabled={citation.data.status !== 'draft'}
-                                    onClick={() => openDraftEditor(citation)}
-                                  >
-                                    编辑并重新校验
-                                  </Button>
-                                  <Button
-                                    onClick={() =>
-                                      void openVersionHistory(
-                                        String(citation.id ?? ''),
-                                      )
-                                    }
-                                  >
-                                    版本历史
-                                  </Button>
-                                  <Button
-                                    disabled={
-                                      citation.data.status === 'discarded' ||
-                                      !(
-                                        citation.data.validation as Record<
-                                          string,
-                                          unknown
-                                        >
-                                      )?.ready_for_handoff
-                                    }
-                                    onClick={() =>
-                                      void handoffDraft(
-                                        String(citation.id ?? ''),
-                                      )
-                                    }
-                                    type="primary"
-                                  >
-                                    在
-                                    {citation.data.draft_type ===
-                                    'inventory_adjustment'
-                                      ? '库存调整'
-                                      : citation.data.draft_type ===
-                                          'purchase_order'
-                                        ? '采购'
-                                        : '销售'}
-                                    {citation.data.draft_type ===
-                                    'inventory_adjustment'
-                                      ? '编辑器中继续'
-                                      : '订单编辑器中继续'}
-                                  </Button>
-                                  <Button
-                                    danger
-                                    disabled={
-                                      citation.data.status === 'discarded'
-                                    }
-                                    onClick={() =>
-                                      void discardDraft(
-                                        String(citation.id ?? ''),
-                                      )
-                                    }
-                                  >
-                                    {citation.data.status === 'discarded'
-                                      ? '已放弃'
-                                      : '放弃草稿'}
-                                  </Button>
-                                </Space>
-                              ) : citation.type === 'business_report' ? (
-                                <Space size={[8, 4]} wrap>
-                                  {Object.entries(
-                                    (citation.data.overview as Record<
-                                      string,
-                                      unknown
-                                    >) ?? {},
-                                  ).map(([key, value]) => (
-                                    <Tag key={key}>
-                                      {REPORT_METRIC_LABELS[key] ?? key}:{' '}
-                                      {Number(value ?? 0).toLocaleString(
-                                        'zh-CN',
-                                      )}
-                                    </Tag>
-                                  ))}
-                                </Space>
-                              ) : (
-                                <Space size={[8, 4]} wrap>
-                                  {citation.id ? (
-                                    <Tag>{citation.id}</Tag>
-                                  ) : null}
-                                  {citation.data.document_status ? (
-                                    <Tag>
-                                      {String(citation.data.document_status)}
-                                    </Tag>
-                                  ) : null}
-                                  <Typography.Text>
-                                    {String(citation.data.party ?? '')}
-                                  </Typography.Text>
-                                  <Typography.Text>
-                                    日期{' '}
-                                    {String(
-                                      citation.data.transaction_date ?? '-',
-                                    )}
-                                  </Typography.Text>
-                                  <Typography.Text>
-                                    金额 {Number(citation.data.amount ?? 0)}
-                                  </Typography.Text>
-                                  <Typography.Text>
-                                    未结{' '}
-                                    {Number(
-                                      citation.data.outstanding_amount ?? 0,
-                                    )}
-                                  </Typography.Text>
-                                </Space>
-                              )}
-                            </ProCard>
-                          ))}
-                          {!isUser && runId && item.content ? (
-                            <Space size={4}>
-                              <Button
-                                aria-label="有帮助"
-                                icon={<LikeOutlined />}
-                                onClick={() =>
-                                  void submitFeedback(runId, 'positive')
-                                }
-                                size="small"
-                                type={
-                                  feedbackByRun[runId] === 'positive'
-                                    ? 'primary'
-                                    : 'text'
-                                }
-                              />
-                              <Button
-                                aria-label="不准确"
-                                danger={feedbackByRun[runId] === 'negative'}
-                                icon={<DislikeOutlined />}
-                                onClick={() =>
-                                  void submitFeedback(runId, 'negative')
-                                }
-                                size="small"
-                                type="text"
-                              />
-                            </Space>
-                          ) : null}
-                        </Space>
-                      </div>
-                    );
-                  })}
-                  {loading ? <Spin tip="AI 正在处理..." /> : null}
-                </Space>
-              ) : (
-                <Empty description="开始一次安全的业务对话" />
-              )}
-            </div>
-            <Space.Compact style={{ marginTop: 16, width: '100%' }}>
+      <XProvider>
+        <div className={styles.workspace}>
+          <aside className={styles.sidebar}>
+            <div className={styles.sidebarHeader}>
               <Select
-                disabled={loading}
-                onChange={setScenario}
-                options={SCENARIO_OPTIONS}
-                style={{ width: 150 }}
-                value={scenario}
+                onChange={setConversationStatus}
+                options={[
+                  { label: '活跃会话', value: 'active' },
+                  { label: '已归档', value: 'archived' },
+                ]}
+                value={conversationStatus}
               />
-              <Input.TextArea
-                autoSize={{ minRows: 2, maxRows: 5 }}
-                disabled={loading}
-                maxLength={8000}
-                onChange={(event) => setDraft(event.target.value)}
-                onPressEnter={(event) => {
-                  if (!event.shiftKey) {
-                    event.preventDefault();
-                    void submit();
+            </div>
+            <div className={styles.sidebarBody}>
+              <Spin spinning={conversationLoading}>
+                <Conversations
+                  activeKey={conversationId ?? undefined}
+                  creation={{
+                    label: '新建会话',
+                    onClick: () => {
+                      setConversationStatus('active');
+                      resetConversation();
+                    },
+                  }}
+                  groupable
+                  items={conversationItems}
+                  menu={
+                    conversationStatus === 'active'
+                      ? (conversation) => ({
+                          items: [
+                            {
+                              icon: <InboxOutlined />,
+                              key: 'archive',
+                              label: '归档会话',
+                            },
+                          ],
+                          onClick: ({ key }) => {
+                            if (key === 'archive') {
+                              void archiveAiConversation(conversation.key).then(
+                                () => {
+                                  if (conversationId === conversation.key) {
+                                    resetConversation();
+                                  }
+                                  void refreshConversations();
+                                  message.success('会话已归档');
+                                },
+                              );
+                            }
+                          },
+                        })
+                      : undefined
                   }
-                }}
+                  onActiveChange={(key) => void openConversation(key)}
+                />
+              </Spin>
+            </div>
+          </aside>
+
+          <main className={styles.main}>
+            <div className={styles.contextBar}>
+              <Space wrap>
+                <Select
+                  disabled={loading}
+                  onChange={setScenario}
+                  options={SCENARIO_OPTIONS}
+                  value={scenario}
+                />
+                {defaultCompany ? <Tag>{defaultCompany}</Tag> : null}
+              </Space>
+              {conversationId ? (
+                <Button
+                  icon={<InboxOutlined />}
+                  onClick={() => void archiveCurrentConversation()}
+                  size="small"
+                >
+                  归档
+                </Button>
+              ) : null}
+            </div>
+
+            {messages.length ? (
+              <div className={styles.messages}>
+                <Bubble.List
+                  autoScroll
+                  items={bubbleItems}
+                  role={{
+                    ai: {
+                      avatar: <Avatar icon={<RobotOutlined />} />,
+                      placement: 'start',
+                      variant: 'borderless',
+                    },
+                    user: {
+                      avatar: <Avatar icon={<UserOutlined />} />,
+                      placement: 'end',
+                      shape: 'corner',
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className={styles.emptyState}>
+                <Welcome
+                  description="通过 Frappe 权限边界查询业务数据、解释经营情况，或生成需要人工复核的业务草稿。"
+                  icon={<RobotOutlined />}
+                  title="今天想处理什么业务？"
+                />
+                <Prompts
+                  className={styles.promptGrid}
+                  items={promptItems}
+                  onItemClick={({ data }) => {
+                    const prompt = EXAMPLE_PROMPTS[Number(data.key)];
+                    if (prompt) void submit(prompt.content, prompt.scenario);
+                  }}
+                  title="常用能力"
+                  wrap
+                />
+              </div>
+            )}
+
+            <div className={styles.composer}>
+              <Sender
+                autoSize={{ minRows: 2, maxRows: 7 }}
+                loading={loading}
+                onCancel={stopGeneration}
+                onChange={setDraft}
+                onSubmit={(value) => void submit(value)}
                 placeholder="输入问题；Enter 发送，Shift+Enter 换行"
                 value={draft}
               />
-              <Button
-                disabled={!draft.trim()}
-                icon={<SendOutlined />}
-                loading={loading}
-                onClick={() => void submit()}
-                type="primary"
-              >
-                发送
-              </Button>
-            </Space.Compact>
-          </ProCard>
-        </Col>
+            </div>
+          </main>
 
-        <Col xs={24} xl={6}>
-          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-            <Alert
-              showIcon
-              title="当前安全边界"
-              description="AI 可使用受控商品、订单和经营报表读取工具，并生成销售、采购订单或库存调整草稿；AI 不能创建、提交、取消、付款或直接调整库存。正式单据只能由用户在业务编辑器中复核后创建。"
-              type="info"
+          <aside className={styles.inspector}>
+            <Space orientation="vertical" size={16}>
+              <Alert
+                description="AI 只能读取受控数据并生成草稿，不能创建、提交、取消、付款或直接调整库存。"
+                showIcon
+                title="安全边界"
+                type="info"
+              />
+              <ProCard title="本次运行" variant="outlined">
+                <Space orientation="vertical" size={8}>
+                  <Typography.Text type="secondary">能力模型</Typography.Text>
+                  <Typography.Text>
+                    {lastResult?.modelAlias || '等待首次调用'}
+                  </Typography.Text>
+                  <Typography.Text type="secondary">实际模型</Typography.Text>
+                  <Typography.Text>{lastResult?.model || '-'}</Typography.Text>
+                  <Typography.Text type="secondary">总 Token</Typography.Text>
+                  <Typography.Text>
+                    {lastResult?.usage.totalTokens ?? 0}
+                  </Typography.Text>
+                  <Typography.Text type="secondary">Run</Typography.Text>
+                  <Typography.Text copyable={Boolean(lastResult?.runId)}>
+                    {lastResult?.runId || '-'}
+                  </Typography.Text>
+                </Space>
+              </ProCard>
+              {lastResult?.warnings.map((warning) => (
+                <Alert key={warning} showIcon title={warning} type="warning" />
+              ))}
+            </Space>
+          </aside>
+        </div>
+      </XProvider>
+      <Modal
+        destroyOnHidden
+        okText="提交改进反馈"
+        onCancel={() => {
+          setNegativeFeedbackRunId(null);
+          feedbackForm.resetFields();
+        }}
+        onOk={() => feedbackForm.submit()}
+        open={Boolean(negativeFeedbackRunId)}
+        title="这条回答需要如何改进？"
+      >
+        <Form
+          form={feedbackForm}
+          layout="vertical"
+          initialValues={{ category: 'incorrect' }}
+          onFinish={(values) =>
+            negativeFeedbackRunId
+              ? void submitFeedback(negativeFeedbackRunId, 'negative', values)
+              : undefined
+          }
+        >
+          <Form.Item
+            label="问题类型"
+            name="category"
+            rules={[{ message: '请选择问题类型', required: true }]}
+          >
+            <Select
+              options={[
+                { label: '事实或结果不准确', value: 'incorrect' },
+                { label: '回答不完整', value: 'incomplete' },
+                { label: '存在安全或权限风险', value: 'unsafe' },
+                { label: '其他问题', value: 'other' },
+              ]}
             />
-            <ProCard title="运行信息">
-              <Space orientation="vertical" size={8} style={{ width: '100%' }}>
-                <Typography.Text type="secondary">能力模型</Typography.Text>
-                <Typography.Text>
-                  {lastResult?.modelAlias || '等待首次调用'}
-                </Typography.Text>
-                <Typography.Text type="secondary">实际模型</Typography.Text>
-                <Typography.Text>{lastResult?.model || '-'}</Typography.Text>
-                <Typography.Text type="secondary">Token</Typography.Text>
-                <Typography.Text>
-                  {lastResult?.usage.totalTokens ?? 0}
-                </Typography.Text>
-                <Typography.Text type="secondary">推理 Token</Typography.Text>
-                <Typography.Text>
-                  {lastResult?.usage.reasoningTokens ?? 0}
-                </Typography.Text>
-                <Typography.Text type="secondary">Run</Typography.Text>
-                <Typography.Text copyable={Boolean(lastResult?.runId)}>
-                  {lastResult?.runId || '-'}
-                </Typography.Text>
-              </Space>
-            </ProCard>
-            {lastResult?.warnings.map((warning) => (
-              <Alert key={warning} showIcon title={warning} type="warning" />
-            ))}
-          </Space>
-        </Col>
-      </Row>
+          </Form.Item>
+          <Form.Item label="补充说明" name="comment">
+            <Input.TextArea maxLength={1000} rows={4} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
       <Modal
         destroyOnHidden
         okButtonProps={{ loading: draftSaving }}

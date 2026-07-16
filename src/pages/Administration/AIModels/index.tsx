@@ -1,6 +1,9 @@
 import {
+  ApiOutlined,
   CheckCircleOutlined,
   CloudSyncOutlined,
+  DatabaseOutlined,
+  DollarOutlined,
   ExperimentOutlined,
   HistoryOutlined,
   PlusOutlined,
@@ -15,7 +18,7 @@ import {
   ProTable,
   StatisticCard,
 } from '@ant-design/pro-components';
-import { useAccess, useRequest } from '@umijs/max';
+import { history, useAccess, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -50,6 +53,7 @@ import {
   getAiGovernanceOverview,
   getAiPolicy,
   getAiUsage,
+  listAiAuditEvents,
   listAiModels,
   listAiPolicies,
   publishAiPolicy,
@@ -60,6 +64,7 @@ import {
   validateAiPolicy,
 } from '@/services/myapp/ai-governance';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import UsageAnalytics from './UsageAnalytics';
 import VectorReleases from './VectorReleases';
 
 const { Paragraph, Text } = Typography;
@@ -130,7 +135,49 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-export default function AiModelGovernancePage() {
+export type AiGovernanceTab =
+  | 'models'
+  | 'policies'
+  | 'usage'
+  | 'vector-releases'
+  | 'audit';
+
+const TAB_ROUTES: Record<AiGovernanceTab, string> = {
+  audit: '/administration/ai/audit',
+  models: '/administration/ai/models',
+  policies: '/administration/ai/policies',
+  usage: '/administration/ai/usage',
+  'vector-releases': '/administration/ai/vectors',
+};
+
+const TAB_META: Record<AiGovernanceTab, { title: string; subTitle: string }> = {
+  audit: {
+    title: 'AI 审计中心',
+    subTitle: '查询关键治理动作、责任主体、原因和哈希证据',
+  },
+  models: {
+    title: 'AI 模型注册表',
+    subTitle: '维护模型能力、健康状态、成本、数据区域和留存策略',
+  },
+  policies: {
+    title: 'AI 场景策略',
+    subTitle: '管理预算、限流、灰度、审批、发布和回滚',
+  },
+  usage: {
+    title: 'AI 用量与成本',
+    subTitle: '观察请求、成功率、延迟、Token、反馈和估算成本',
+  },
+  'vector-releases': {
+    title: '向量与 Embedding',
+    subTitle: '治理在线索引、候选构建、质量门禁、原子发布和回滚',
+  },
+};
+
+export default function AiModelGovernancePage({
+  initialTab = 'models',
+}: {
+  initialTab?: AiGovernanceTab;
+}) {
   const access = useAccess() as Record<string, boolean>;
   const modelActionRef = useRef<ActionType | undefined>(undefined);
   const policyActionRef = useRef<ActionType | undefined>(undefined);
@@ -542,16 +589,49 @@ export default function AiModelGovernancePage() {
   ];
 
   const auditColumns: ProColumns<AiAuditEvent>[] = [
-    { title: '时间', dataIndex: 'creation', valueType: 'dateTime', width: 180 },
-    { title: '操作者', dataIndex: 'actor', width: 180 },
+    {
+      title: '关键词',
+      dataIndex: 'search',
+      hideInTable: true,
+      fieldProps: { placeholder: '操作者、对象或原因' },
+    },
+    {
+      title: '日期范围',
+      dataIndex: 'auditRange',
+      hideInTable: true,
+      valueType: 'dateRange',
+    },
+    {
+      title: '时间',
+      dataIndex: 'creation',
+      search: false,
+      valueType: 'dateTime',
+      width: 180,
+    },
+    { title: '操作者', dataIndex: 'actor', search: false, width: 180 },
     { title: '动作', dataIndex: 'action', width: 180 },
     {
       title: '对象',
+      dataIndex: 'objectType',
+      valueType: 'select',
+      valueEnum: {
+        ai_data_task: { text: '数据治理任务' },
+        model_policy: { text: '模型策略' },
+        model_registry: { text: '模型注册表' },
+        product_vector_index: { text: '商品向量' },
+        vector_release: { text: 'Embedding 发布' },
+      },
       render: (_, row) => `${row.objectType} / ${row.objectName}`,
     },
     {
       title: '级别',
       dataIndex: 'priority',
+      valueType: 'select',
+      valueEnum: {
+        normal: { text: '普通' },
+        high: { text: '高' },
+        critical: { text: '关键' },
+      },
       width: 90,
       render: (_, row) => (
         <Tag color={row.priority === 'critical' ? 'red' : 'blue'}>
@@ -559,7 +639,7 @@ export default function AiModelGovernancePage() {
         </Tag>
       ),
     },
-    { title: '原因', dataIndex: 'reason', ellipsis: true },
+    { title: '原因', dataIndex: 'reason', ellipsis: true, search: false },
   ];
 
   const totalModels = Object.values(overview?.registryCounts ?? {}).reduce(
@@ -570,11 +650,12 @@ export default function AiModelGovernancePage() {
     (sum, count) => sum + count,
     0,
   );
+  const pageMeta = TAB_META[initialTab];
 
   return (
     <PageContainer
-      title="AI 模型治理"
-      subTitle="模型注册、策略版本、预算、发布回滚、用量与审计"
+      title={pageMeta.title}
+      subTitle={pageMeta.subTitle}
       extra={[
         <Button
           key="refresh"
@@ -639,10 +720,66 @@ export default function AiModelGovernancePage() {
               }}
             />
           </Col>
+          <Col xl={6} sm={12} xs={24}>
+            <StatisticCard
+              loading={overviewLoading}
+              statistic={{
+                title: 'Orchestrator',
+                value: overview?.runtime.reachable ? '在线' : '不可达',
+                description:
+                  overview?.runtime.modelAlias ||
+                  overview?.runtime.error ||
+                  '-',
+                icon: <ApiOutlined />,
+              }}
+            />
+          </Col>
+          <Col xl={6} sm={12} xs={24}>
+            <StatisticCard
+              loading={overviewLoading}
+              statistic={{
+                title: '近 7 日请求',
+                value: overview?.usage7d.requestCount ?? 0,
+                description: `成功 ${overview?.usage7d.successCount ?? 0} / 错误 ${overview?.usage7d.errorCount ?? 0}`,
+                icon: <CheckCircleOutlined />,
+              }}
+            />
+          </Col>
+          <Col xl={6} sm={12} xs={24}>
+            <StatisticCard
+              loading={overviewLoading}
+              statistic={{
+                title: '近 7 日成本',
+                value: overview?.usage7d.estimatedCost ?? 0,
+                description: overview?.usage7d.costCurrency || '-',
+                precision: 4,
+                icon: <DollarOutlined />,
+              }}
+            />
+          </Col>
+          <Col xl={6} sm={12} xs={24}>
+            <StatisticCard
+              loading={overviewLoading}
+              statistic={{
+                title: '向量待处理 / 失败',
+                value:
+                  (overview?.vectorCounts.pending ?? 0) +
+                  (overview?.vectorCounts.failed ?? 0),
+                description: `已索引 ${overview?.vectorCounts.indexed ?? 0}`,
+                icon: <DatabaseOutlined />,
+              }}
+            />
+          </Col>
         </Row>
 
         <Card variant="borderless">
           <Tabs
+            activeKey={initialTab}
+            onChange={(key) =>
+              history.push(
+                TAB_ROUTES[key as AiGovernanceTab] ?? TAB_ROUTES.models,
+              )
+            }
             items={[
               {
                 key: 'models',
@@ -735,32 +872,39 @@ export default function AiModelGovernancePage() {
                 key: 'usage',
                 label: '预算与用量',
                 children: (
-                  <ProTable<AiUsageDaily>
-                    actionRef={usageActionRef}
-                    rowKey={(row) =>
-                      `${row.usageDate}-${row.environment}-${row.company}-${row.scenario}-${row.policyCode}-${row.policyVersion}-${row.modelAlias}`
-                    }
-                    columns={usageColumns}
-                    cardBordered={false}
-                    scroll={{ x: 1750 }}
-                    pagination={false}
-                    request={async (params) => {
-                      const range = params.usageRange as unknown as
-                        | string[]
-                        | undefined;
-                      const items = await getAiUsage({
-                        company: params.company,
-                        dateFrom: range?.[0],
-                        dateTo: range?.[1],
-                        environment: params.environment,
-                      });
-                      return {
-                        data: items,
-                        success: true,
-                        total: items.length,
-                      };
-                    }}
-                  />
+                  <Space
+                    orientation="vertical"
+                    size={16}
+                    style={{ width: '100%' }}
+                  >
+                    <UsageAnalytics />
+                    <ProTable<AiUsageDaily>
+                      actionRef={usageActionRef}
+                      rowKey={(row) =>
+                        `${row.usageDate}-${row.environment}-${row.company}-${row.scenario}-${row.policyCode}-${row.policyVersion}-${row.modelAlias}`
+                      }
+                      columns={usageColumns}
+                      cardBordered={false}
+                      scroll={{ x: 1750 }}
+                      pagination={false}
+                      request={async (params) => {
+                        const range = params.usageRange as unknown as
+                          | string[]
+                          | undefined;
+                        const items = await getAiUsage({
+                          company: params.company,
+                          dateFrom: range?.[0],
+                          dateTo: range?.[1],
+                          environment: params.environment,
+                        });
+                        return {
+                          data: items,
+                          success: true,
+                          total: items.length,
+                        };
+                      }}
+                    />
+                  </Space>
                 ),
               },
               {
@@ -776,17 +920,33 @@ export default function AiModelGovernancePage() {
               },
               {
                 key: 'audit',
-                label: '近期审计',
+                label: '审计中心',
                 children: (
                   <ProTable<AiAuditEvent>
-                    rowKey={(row) =>
-                      `${row.creation}-${row.action}-${row.objectName}`
-                    }
+                    rowKey="name"
                     columns={auditColumns}
                     cardBordered={false}
-                    dataSource={overview?.recentAudits ?? []}
-                    search={false}
-                    pagination={false}
+                    request={async (params) => {
+                      const range = params.auditRange as unknown as
+                        | string[]
+                        | undefined;
+                      const result = await listAiAuditEvents({
+                        action: params.action,
+                        current: params.current,
+                        dateFrom: range?.[0],
+                        dateTo: range?.[1],
+                        objectType: params.objectType,
+                        pageSize: params.pageSize,
+                        priority: params.priority,
+                        search: params.search,
+                      });
+                      return {
+                        data: result.items,
+                        success: true,
+                        total: result.total,
+                      };
+                    }}
+                    search={{ labelWidth: 'auto' }}
                   />
                 ),
               },

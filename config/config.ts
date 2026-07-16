@@ -173,6 +173,8 @@ export default defineConfig({
     configProvider: {
       theme: {
         token: {
+          borderRadius: 8,
+          colorPrimary: '#1677ff',
           fontFamily: 'AlibabaSans, sans-serif',
         },
       },

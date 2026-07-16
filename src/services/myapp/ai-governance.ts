@@ -13,16 +13,44 @@ export type AiAuditEvent = {
   action: string;
   actor: string;
   creation: string | null;
+  metadata: Record<string, unknown>;
+  name: string;
   objectName: string;
   objectType: string;
+  parameterHash: string;
   priority: string;
   reason: string | null;
+  resultHash: string;
 };
 
 export type AiGovernanceOverview = {
+  dataTaskCounts: Record<string, number>;
   policyCounts: Record<string, number>;
   recentAudits: AiAuditEvent[];
   registryCounts: Record<string, number>;
+  runtime: {
+    embeddingModel: string | null;
+    error: string | null;
+    langfuseConfigured: boolean;
+    modelAlias: string | null;
+    promptVersions: Record<string, string>;
+    reachable: boolean;
+    runtimeGovernanceConfigured: boolean;
+    status: string | null;
+    vectorCollection: string | null;
+    vectorSearchConfigured: boolean;
+  };
+  usage7d: {
+    costCurrency: string | null;
+    errorCount: number;
+    estimatedCost: number;
+    firstTokenP95Ms: number | null;
+    latencyP95Ms: number | null;
+    requestCount: number;
+    successCount: number;
+    totalTokens: number;
+  };
+  vectorCounts: Record<string, number>;
 };
 
 export type AiModel = {
@@ -155,7 +183,43 @@ export type AiVectorRelease = {
   vectorSize: number | null;
 };
 
+export type AiVectorIndexFailure = {
+  itemCode: string;
+  lastAttemptAt: string | null;
+  lastError: string | null;
+};
+
+export type AiVectorIndexStatus = {
+  counts: Record<string, number>;
+  dueCount: number;
+  embeddingModel: string | null;
+  enabled: boolean;
+  excludedIndexedCount: number;
+  excludedItemCount: number;
+  excludedItemPrefixes: string[];
+  indexVersion: string;
+  provider: Record<string, unknown>;
+  recentFailures: AiVectorIndexFailure[];
+  totalItems: number;
+  trackedCount: number;
+  vectorCollection: string;
+};
+
+export type AiVectorCleanupPreview = {
+  erpItemsChanged: number;
+  excludedCount: number;
+  excludedIndexedCount: number;
+  itemCodes: string[];
+  remainingIndexedCount: number;
+  removedCount: number;
+  selectedCount: number;
+};
+
 export type AiDataTask = {
+  actions: Record<
+    'approve' | 'reject' | 'execute' | 'rollback',
+    { allowed: boolean; reason: string | null }
+  >;
   analysis: Record<string, unknown>;
   analyzedAt: string | null;
   analyzedBy: string | null;
@@ -217,10 +281,14 @@ function mapAudit(value: unknown): AiAuditEvent {
     action: String(row.action ?? ''),
     actor: String(row.actor ?? ''),
     creation: text(row.creation),
+    metadata: readObject(row.metadata),
+    name: String(row.name ?? ''),
     objectName: String(row.object_name ?? ''),
     objectType: String(row.object_type ?? ''),
+    parameterHash: String(row.parameter_hash ?? ''),
     priority: String(row.priority ?? 'normal'),
     reason: text(row.reason),
+    resultHash: String(row.result_hash ?? ''),
   };
 }
 
@@ -372,11 +440,66 @@ function mapVectorRelease(value: unknown): AiVectorRelease {
   };
 }
 
+function mapVectorIndexStatus(value: unknown): AiVectorIndexStatus {
+  const row = readObject(value);
+  return {
+    counts: mapCounts(row.counts),
+    dueCount: toNumber(row.due_count),
+    embeddingModel: text(row.embedding_model),
+    enabled: Boolean(row.enabled),
+    excludedIndexedCount: toNumber(row.excluded_indexed_count),
+    excludedItemCount: toNumber(row.excluded_item_count),
+    excludedItemPrefixes: toStringList(row.excluded_item_prefixes),
+    indexVersion: String(row.index_version ?? ''),
+    provider: readObject(row.provider),
+    recentFailures: Array.isArray(row.recent_failures)
+      ? row.recent_failures.map((value) => {
+          const failure = readObject(value);
+          return {
+            itemCode: String(failure.item_code ?? ''),
+            lastAttemptAt: text(failure.last_attempt_at),
+            lastError: text(failure.last_error),
+          };
+        })
+      : [],
+    totalItems: toNumber(row.total_items),
+    trackedCount: toNumber(row.tracked_count),
+    vectorCollection: String(row.vector_collection ?? ''),
+  };
+}
+
+function mapVectorCleanupPreview(value: unknown): AiVectorCleanupPreview {
+  const row = readObject(value);
+  return {
+    erpItemsChanged: toNumber(row.erp_items_changed),
+    excludedCount: toNumber(row.excluded_count),
+    excludedIndexedCount: toNumber(row.excluded_indexed_count),
+    itemCodes: toStringList(row.item_codes),
+    remainingIndexedCount: toNumber(row.remaining_indexed_count),
+    removedCount: toNumber(row.removed_count),
+    selectedCount: toNumber(row.selected_count),
+  };
+}
+
 export function mapAiDataTask(value: unknown): AiDataTask {
   const row = readObject(value);
+  const actions = readObject(row.actions);
+  const mapAction = (name: string) => {
+    const action = readObject(actions[name]);
+    return {
+      allowed: Boolean(action.allowed),
+      reason: text(action.reason),
+    };
+  };
   const executionResult = readObject(row.execution_result);
   const rollbackResult = readObject(row.rollback_result);
   return {
+    actions: {
+      approve: mapAction('approve'),
+      execute: mapAction('execute'),
+      reject: mapAction('reject'),
+      rollback: mapAction('rollback'),
+    },
     analysis: readObject(row.analysis),
     analyzedAt: text(row.analyzed_at),
     analyzedBy: text(row.analyzed_by),
@@ -417,13 +540,77 @@ export async function getAiGovernanceOverview() {
     'get_ai_model_governance_overview_v1',
   );
   const row = readObject(result.data);
+  const runtime = readObject(row.runtime);
+  const usage = readObject(row.usage_7d);
   return {
+    dataTaskCounts: mapCounts(row.data_task_counts),
     policyCounts: mapCounts(row.policy_counts),
     recentAudits: Array.isArray(row.recent_audits)
       ? row.recent_audits.map(mapAudit)
       : [],
     registryCounts: mapCounts(row.registry_counts),
+    runtime: {
+      embeddingModel: text(runtime.embedding_model),
+      error: text(runtime.error),
+      langfuseConfigured: Boolean(runtime.langfuse_configured),
+      modelAlias: text(runtime.model_alias),
+      promptVersions: Object.fromEntries(
+        Object.entries(readObject(runtime.prompt_versions)).map(
+          ([key, value]) => [key, String(value ?? '')],
+        ),
+      ),
+      reachable: Boolean(runtime.reachable),
+      runtimeGovernanceConfigured: Boolean(
+        runtime.runtime_governance_configured,
+      ),
+      status: text(runtime.status),
+      vectorCollection: text(runtime.vector_collection),
+      vectorSearchConfigured: Boolean(runtime.vector_search_configured),
+    },
+    usage7d: {
+      costCurrency: text(usage.cost_currency),
+      errorCount: toNumber(usage.error_count),
+      estimatedCost: toNumber(usage.estimated_cost),
+      firstTokenP95Ms: toOptionalNumber(usage.first_token_p95_ms),
+      latencyP95Ms: toOptionalNumber(usage.latency_p95_ms),
+      requestCount: toNumber(usage.request_count),
+      successCount: toNumber(usage.success_count),
+      totalTokens: toNumber(usage.total_tokens),
+    },
+    vectorCounts: mapCounts(row.vector_counts),
   } satisfies AiGovernanceOverview;
+}
+
+export async function listAiAuditEvents(params: {
+  action?: string;
+  current?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  objectType?: string;
+  pageSize?: number;
+  priority?: string;
+  search?: string;
+} = {}) {
+  const pageSize = params.pageSize ?? 20;
+  const start = Math.max(0, ((params.current ?? 1) - 1) * pageSize);
+  const result = await callGatewayMethod<unknown>(
+    'list_ai_audit_events_v1',
+    compactPayload({
+      action: params.action,
+      date_from: params.dateFrom,
+      date_to: params.dateTo,
+      limit: pageSize,
+      object_type: params.objectType,
+      priority: params.priority,
+      search: params.search,
+      start,
+    }),
+  );
+  const payload = readObject(result.data);
+  return {
+    items: Array.isArray(payload.items) ? payload.items.map(mapAudit) : [],
+    total: toNumber(readObject(payload.pagination).total),
+  };
 }
 
 export async function listAiModels(params: {
@@ -645,6 +832,50 @@ export async function listAiVectorReleases(params: {
       : [],
     total: toNumber(readObject(payload.pagination).total),
   };
+}
+
+export async function getAiVectorIndexStatus(failureLimit = 20) {
+  const result = await callGatewayMethod<unknown>(
+    'get_ai_product_vector_status_v1',
+    { failure_limit: failureLimit },
+  );
+  return mapVectorIndexStatus(result.data);
+}
+
+export async function rebuildAiVectorIndex(payload: {
+  failedOnly?: boolean;
+  itemCodes?: string[];
+  limit?: number;
+}) {
+  return runGatewayMutation('rebuild_ai_product_vector_index_v1', {
+    payload: compactPayload({
+      failed_only: payload.failedOnly ? 1 : 0,
+      item_codes: payload.itemCodes,
+      limit: payload.limit ?? 100,
+    }),
+    successMessage: '向量索引重建任务已进入专用队列',
+  });
+}
+
+export async function cleanupExcludedAiVectors(payload: {
+  dryRun: boolean;
+  limit?: number;
+  reason?: string;
+}) {
+  return runGatewayMutation<AiVectorCleanupPreview>(
+    'cleanup_excluded_ai_product_vectors_v1',
+    {
+      payload: compactPayload({
+        dry_run: payload.dryRun ? 1 : 0,
+        limit: payload.limit ?? 5000,
+        reason: payload.reason,
+      }),
+      successMessage: payload.dryRun
+        ? '已完成排除向量影响范围预检'
+        : '排除向量已清理，ERP 商品未被修改',
+      transform: mapVectorCleanupPreview,
+    },
+  );
 }
 
 export async function getAiVectorRelease(releaseCode: string) {

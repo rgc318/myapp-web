@@ -2,13 +2,18 @@ import { callGatewayMethod } from '../api-client';
 import {
   analyzeAiProductData,
   createAiDataTask,
+  cleanupExcludedAiVectors,
+  getAiGovernanceOverview,
+  getAiVectorIndexStatus,
   getAiPolicy,
   getAiDataTask,
   getAiUsage,
   listAiDataTasks,
+  listAiAuditEvents,
   listAiVectorReleases,
   listAiModels,
   reviewAiDataTask,
+  rebuildAiVectorIndex,
   updateAiModel,
 } from '../ai-governance';
 import { runGatewayMutation } from '../mutation';
@@ -66,6 +71,53 @@ describe('AI governance domain service', () => {
       inputCost: 1.25,
       registryVersion: 3,
     });
+  });
+
+  it('maps the governance operations overview', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        registry_counts: { active: 2 },
+        policy_counts: { active: 1 },
+        data_task_counts: { review_required: 3 },
+        vector_counts: { indexed: 140, failed: 3 },
+        usage_7d: {
+          request_count: 20,
+          success_count: 19,
+          error_count: 1,
+          estimated_cost: 2.5,
+          cost_currency: 'CNY',
+          latency_p95_ms: 1800,
+        },
+        runtime: {
+          reachable: true,
+          status: 'ok',
+          model_alias: 'erp-fast-chat',
+          embedding_model: 'erp-embedding',
+          vector_collection: 'products-live',
+          vector_search_configured: true,
+          runtime_governance_configured: true,
+          langfuse_configured: true,
+          prompt_versions: { general: 'v5' },
+        },
+        recent_audits: [],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await getAiGovernanceOverview();
+
+    expect(result.runtime).toMatchObject({
+      reachable: true,
+      modelAlias: 'erp-fast-chat',
+      vectorSearchConfigured: true,
+    });
+    expect(result.usage7d).toMatchObject({
+      requestCount: 20,
+      estimatedCost: 2.5,
+      latencyP95Ms: 1800,
+    });
+    expect(result.dataTaskCounts.review_required).toBe(3);
   });
 
   it('maps policy version snapshots and validation evidence', async () => {
@@ -147,6 +199,59 @@ describe('AI governance domain service', () => {
     });
   });
 
+  it('maps paginated audit events and sends governance filters', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        items: [
+          {
+            name: 'AI-AUDIT-1',
+            actor: 'admin@example.com',
+            action: 'publish_policy',
+            object_type: 'model_policy',
+            object_name: 'general-prod',
+            priority: 'high',
+            reason: '正式发布',
+            parameter_hash: 'a'.repeat(64),
+            result_hash: 'b'.repeat(64),
+            metadata: { result: { status: 'active' } },
+          },
+        ],
+        pagination: { total: 31 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listAiAuditEvents({
+      current: 2,
+      dateFrom: '2026-07-01',
+      dateTo: '2026-07-16',
+      objectType: 'model_policy',
+      pageSize: 20,
+      priority: 'high',
+      search: 'general',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_ai_audit_events_v1',
+      expect.objectContaining({
+        date_from: '2026-07-01',
+        date_to: '2026-07-16',
+        limit: 20,
+        object_type: 'model_policy',
+        priority: 'high',
+        search: 'general',
+        start: 20,
+      }),
+    );
+    expect(result.total).toBe(31);
+    expect(result.items[0]).toMatchObject({
+      name: 'AI-AUDIT-1',
+      objectType: 'model_policy',
+      metadata: { result: { status: 'active' } },
+    });
+  });
+
   it('keeps governance writes in the mutation layer with snake-case payloads', async () => {
     mockedRunGatewayMutation.mockResolvedValue({ data: {}, idempotencyKey: 'idem-1' });
 
@@ -212,6 +317,79 @@ describe('AI governance domain service', () => {
     });
   });
 
+  it('maps online vector index status without exposing raw envelopes', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        enabled: true,
+        index_version: 'product-semantic-v1',
+        embedding_model: 'erp-embedding',
+        vector_collection: 'myapp-products-live',
+        total_items: 582,
+        tracked_count: 143,
+        due_count: 12,
+        counts: { indexed: 140, failed: 3 },
+        excluded_item_prefixes: ['HTTP-'],
+        excluded_item_count: 439,
+        excluded_indexed_count: 2,
+        provider: { reachable: true, points_count: 143 },
+        recent_failures: [
+          {
+            item_code: 'ITEM-FAILED',
+            last_error: 'provider timeout',
+            last_attempt_at: '2026-07-16 10:00:00',
+          },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await getAiVectorIndexStatus(50);
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_ai_product_vector_status_v1',
+      { failure_limit: 50 },
+    );
+    expect(result).toMatchObject({
+      dueCount: 12,
+      excludedIndexedCount: 2,
+      vectorCollection: 'myapp-products-live',
+      counts: { indexed: 140, failed: 3 },
+    });
+    expect(result.recentFailures[0].itemCode).toBe('ITEM-FAILED');
+  });
+
+  it('routes vector rebuild and exclusion cleanup through idempotent mutations', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {},
+      idempotencyKey: 'idem-vector',
+    });
+
+    await rebuildAiVectorIndex({ failedOnly: true, limit: 50 });
+    await cleanupExcludedAiVectors({
+      dryRun: false,
+      reason: '清理明确测试向量',
+    });
+
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      1,
+      'rebuild_ai_product_vector_index_v1',
+      expect.objectContaining({
+        payload: expect.objectContaining({ failed_only: 1, limit: 50 }),
+      }),
+    );
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      2,
+      'cleanup_excluded_ai_product_vectors_v1',
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          dry_run: 0,
+          reason: '清理明确测试向量',
+        }),
+      }),
+    );
+  });
+
   it('maps AI data tasks and sends list filters with pagination', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
@@ -228,6 +406,12 @@ describe('AI governance domain service', () => {
             evidence: { rule: 'missing_description' },
             analysis: { formal_document_write: false },
             requested_by: 'steward@example.com',
+            actions: {
+              approve: { allowed: true },
+              reject: { allowed: true },
+              execute: { allowed: false, reason: '尚未审批' },
+              rollback: { allowed: false, reason: '尚未执行' },
+            },
             version: 2,
           },
         ],
@@ -262,6 +446,7 @@ describe('AI governance domain service', () => {
       beforeValue: { description: '' },
       proposedValue: { description: '测试商品 · 默认品牌' },
       requestedBy: 'steward@example.com',
+      actions: { approve: { allowed: true, reason: null } },
       version: 2,
     });
   });

@@ -36,6 +36,13 @@ export default [
     component: './AI',
   },
   {
+    path: '/ai/drafts',
+    name: 'ai-drafts',
+    access: 'canUseAI',
+    component: './AI/Drafts',
+    hideInMenu: true,
+  },
+  {
     path: '/account',
     name: 'account',
     hideInMenu: true,
@@ -393,6 +400,30 @@ export default [
         name: 'ai-models',
         access: 'canViewAiGovernance',
         component: './Administration/AIModels',
+      },
+      {
+        path: '/administration/ai/policies',
+        name: 'ai-policies',
+        access: 'canViewAiGovernance',
+        component: './Administration/AIPolicies',
+      },
+      {
+        path: '/administration/ai/usage',
+        name: 'ai-usage',
+        access: 'canViewAiGovernance',
+        component: './Administration/AIUsage',
+      },
+      {
+        path: '/administration/ai/vectors',
+        name: 'ai-vectors',
+        access: 'canViewAiGovernance',
+        component: './Administration/AIVectors',
+      },
+      {
+        path: '/administration/ai/audit',
+        name: 'ai-audit',
+        access: 'canViewAiGovernance',
+        component: './Administration/AIAudit',
       },
       {
         path: '/administration/ai/data-tasks',
