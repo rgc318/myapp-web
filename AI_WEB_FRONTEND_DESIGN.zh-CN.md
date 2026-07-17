@@ -68,7 +68,7 @@ AI Orchestrator → LiteLLM / Qdrant / Langfuse
 
 | 路由 | 用户目标 | 主要结构 | 路由权限 |
 | --- | --- | --- | --- |
-| `/ai` | 对话、查询、解释、生成业务草稿 | 会话侧栏、消息区、输入区、Run 检查器 | `canUseAI` |
+| `/ai` | 对话、查询、解释、生成业务草稿 | 会话侧栏、消息区、浮动输入区、Run 详情 Drawer | `canUseAI` |
 | `/ai/drafts` | 集中处理当前用户草稿 | 筛选、草稿卡片、校验、来源会话、交接 | `canUseAI` |
 | `/administration/ai/models` | 模型注册和运行概览 | KPI、模型表、详情抽屉、治理操作 | `canViewAiGovernance` |
 | `/administration/ai/policies` | 策略起草、验证、审批、发布与回滚 | 策略表、版本历史、表单和确认操作 | `canViewAiGovernance` |
@@ -98,23 +98,24 @@ AI Orchestrator → LiteLLM / Qdrant / Langfuse
 
 ### 5.2 AI 工作台布局
 
-桌面端采用三栏结构：
+桌面端默认采用双栏结构：
 
 - 左栏：活跃/归档会话、新建会话和草稿中心入口。
-- 中栏：上下文栏、消息列表、Welcome/Prompts 空态和 Sender 输入区。
-- 右栏：最新 Run 的状态、模型、后端总耗时、首 Token、Token 分解、Run、trace、工具进度、警告和失败恢复操作。
+- 主区：品牌栏、场景与公司上下文、消息列表、Welcome/Prompts 空态和浮动 Sender 输入区。
+- Run 详情不常驻占用对话宽度，通过右侧 Drawer 展示状态、模型、后端总耗时、首 Token、流式分块、Token 分解、Run、trace、工具进度、警告和失败恢复操作。
 
 响应式规则：
 
-- 大屏展示完整三栏。
-- 小于 XL 时隐藏右侧 Run 检查器，核心对话保持可用。
-- 小于 MD 时隐藏会话侧栏，避免压缩消息正文和输入区。
+- 大屏展示会话侧栏和居中的主消息区。
+- Run 详情在所有桌面宽度都通过 Drawer 按需打开，不挤压消息正文。
+- 小于 MD 时会话侧栏进入左侧 Drawer，避免压缩消息正文和输入区，同时保留历史会话入口。
 - 工作区使用视口高度和最小高度约束，消息区独立滚动，Sender 固定在工作区底部。
 
 ### 5.3 消息呈现
 
 - `Bubble.List` 只负责用户与助手消息结构。
 - `XMarkdown` 渲染解释性文本，并在流式阶段显示未完成状态。
+- 首段文本到达前，助手占位必须显示当前运行阶段和客户端等待计时；不得只显示空白气泡或让用户误以为请求未发出。
 - `Sources` 展示结构化业务来源入口。
 - 商品、订单、经营报表和 AI 草稿使用独立 citation 卡片展示业务字段。
 - `Actions` 提供有帮助/无帮助反馈，不把反馈按钮混入正文。
@@ -179,12 +180,16 @@ src/services/myapp/
 
 1. 创建用户消息和空助手消息占位。
 2. `run_started` 绑定 `conversationId` 和 `runId`。
-3. `message_delta` 追加助手文本。
-4. `citation` 增量追加结构化来源。
-5. `completed` 返回最终内容、Run 和用量结果。
-6. `error` 转换为用户可理解的错误提示。
+3. `run_progress` 更新上下文准备、工具、模型首段等待和流式输出阶段；页面从请求开始持续显示已等待时间。
+4. `message_delta` 追加助手文本，首段到达后继续逐块渲染。
+5. `citation` 增量追加结构化来源。
+6. `warning` 追加非阻断警告。
+7. `completed` 返回最终内容、Run、用量和 `stream.delta_count / streamed_chars`。
+8. `error` 转换为用户可理解的错误提示。
 
 浏览器使用 `fetch + ReadableStream`，不使用原生 `EventSource`，因为请求需要 POST body 和 JWT Bearer Header。
+
+销售、采购和库存调整草稿使用严格结构化模型结果，并在 Frappe 侧重新做权限、主数据、UOM、价格或库存校验，因此不能把未闭合 JSON 当作业务草稿逐字展示。页面在等待期间显示“结构化生成与后端校验”阶段，只有最终验证通过或带明确校验错误的草稿才整体呈现。
 
 ### 7.3 停止与失败策略
 
@@ -396,6 +401,7 @@ git diff --check
 5. 治理能力拆分深链路，而不是单一大 Tab：便于权限、导航、告警跳转和后续模块化。
 6. 前端消费后端 allowed/reason，而不是复制状态机：避免前后端权限与生命周期漂移。
 7. 使用精确依赖 overrides，而不是 `npm audit fix --force`：降低 Ant Design Pro 主依赖树的破坏风险。
+8. 默认双栏并把 Run 诊断放入 Drawer，而不是常驻第三栏：优先保证会话阅读宽度，诊断仍可随时打开且不丢失。
 
 ## 17. 相关文档
 

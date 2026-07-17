@@ -64,8 +64,12 @@ jest.mock('@/hooks/useWorkspacePreferences', () => ({
 jest.mock('./components/AiMessageContent', () => {
   const React = jest.requireActual('react');
   return {
-    AiMessageContent: ({ content }: any) =>
-      React.createElement('div', null, content),
+    AiMessageContent: ({ content, progressMessage, streaming }: any) =>
+      React.createElement(
+        'div',
+        null,
+        content || (streaming ? progressMessage : ''),
+      ),
   };
 });
 
@@ -106,6 +110,11 @@ describe('AI workspace page', () => {
           run_id: 'AI-RUN-1',
           type: 'run_started',
         });
+        onEvent({
+          message: '模型已接收请求，正在生成首段内容',
+          phase: 'model_started',
+          type: 'run_progress',
+        });
         onEvent({ tool: 'search_products', type: 'tool_started' });
         onEvent({
           result_count: 2,
@@ -137,6 +146,7 @@ describe('AI workspace page', () => {
             },
           },
           runId: 'AI-RUN-1',
+          stream: { deltaCount: 12, streamedChars: 6 },
           traceId: 'trace-1',
           usage: {
             completionTokens: 20,
@@ -170,11 +180,78 @@ describe('AI workspace page', () => {
       );
     });
     expect(await screen.findByText('找到两个商品')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /运行详情/ }));
     expect(screen.getByText('已完成')).toBeTruthy();
     expect(screen.getByText('760 ms')).toBeTruthy();
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('shows the upstream progress phase before the first text delta', async () => {
+    let finishStream: ((value: unknown) => void) | undefined;
+    streamAiChatMessage.mockImplementationOnce(
+      async (_payload: unknown, onEvent: any) => {
+        onEvent({
+          conversation: 'AI-CONV-PROGRESS',
+          run_id: 'AI-RUN-PROGRESS',
+          type: 'run_started',
+        });
+        onEvent({
+          message: '模型已接收请求，正在生成首段内容',
+          phase: 'model_started',
+          type: 'run_progress',
+        });
+        return await new Promise((resolve) => {
+          finishStream = resolve;
+        });
+      },
+    );
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '解释库存周转率' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(
+      await screen.findByText('模型已接收请求，正在生成首段内容'),
+    ).toBeTruthy();
+
+    finishStream?.({
+      conversationId: 'AI-CONV-PROGRESS',
+      events: [],
+      message: { content: '库存周转率说明', role: 'assistant' },
+      model: 'provider-model',
+      modelAlias: 'erp-fast-chat',
+      run: {
+        error: null,
+        errorCode: null,
+        firstTokenMs: 3200,
+        latencyMs: 3600,
+        model: 'provider-model',
+        modelAlias: 'erp-fast-chat',
+        status: 'completed',
+        traceId: 'trace-progress',
+        usage: {
+          completionTokens: 10,
+          promptTokens: 20,
+          reasoningTokens: 0,
+          totalTokens: 30,
+        },
+      },
+      runId: 'AI-RUN-PROGRESS',
+      stream: { deltaCount: 8, streamedChars: 8 },
+      traceId: 'trace-progress',
+      usage: {
+        completionTokens: 10,
+        promptTokens: 20,
+        reasoningTokens: 0,
+        totalTokens: 30,
+      },
+      warnings: [],
+    });
+    expect(await screen.findByText('库存周转率说明')).toBeTruthy();
   });
 
   it('keeps an existing conversation bound to its original company', async () => {

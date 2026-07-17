@@ -1,11 +1,15 @@
 import {
   AppstoreOutlined,
   BarChartOutlined,
+  DashboardOutlined,
   FileTextOutlined,
   InboxOutlined,
+  MenuOutlined,
   RobotOutlined,
+  SafetyCertificateOutlined,
   SearchOutlined,
   ShoppingCartOutlined,
+  ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
@@ -24,6 +28,7 @@ import {
   Avatar,
   Button,
   DatePicker,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -145,6 +150,11 @@ export default function AiPage() {
   const [scenario, setScenario] = useState<AiScenario>('general');
   const [lastResult, setLastResult] = useState<AiChatResult | null>(null);
   const [runStatus, setRunStatus] = useState<AiRunDisplayStatus>('idle');
+  const [runProgress, setRunProgress] = useState<{
+    message: string;
+    phase: string;
+    startedAt: number | null;
+  } | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [runWarnings, setRunWarnings] = useState<string[]>([]);
@@ -169,6 +179,8 @@ export default function AiPage() {
     [],
   );
   const [versionLoading, setVersionLoading] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const streamAbortRef = useRef<AbortController | null>(null);
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
@@ -228,6 +240,7 @@ export default function AiPage() {
       setActiveRunId(latestRunMessage?.runId ?? null);
       setRunWarnings([]);
       setToolProgress([]);
+      setRunProgress(null);
       setRunError(latestRunMessage?.run?.error ?? null);
       setRunStatus(
         latestRunMessage?.run
@@ -250,6 +263,7 @@ export default function AiPage() {
               modelAlias: latestRunMessage.run.modelAlias,
               runId: latestRunMessage.runId,
               run: latestRunMessage.run,
+              stream: { deltaCount: 0, streamedChars: 0 },
               traceId: latestRunMessage.run.traceId,
               usage: latestRunMessage.run.usage,
               warnings: [],
@@ -305,6 +319,11 @@ export default function AiPage() {
     setRunError(null);
     setRunWarnings([]);
     setToolProgress([]);
+    setRunProgress({
+      message: '正在建立安全会话与权限上下文',
+      phase: 'preparing',
+      startedAt: Date.now(),
+    });
     setRetryRequest(null);
     setRunStatus('running');
     setLoading(true);
@@ -314,6 +333,11 @@ export default function AiPage() {
         resolvedScenario === 'purchase_order_draft' ||
         resolvedScenario === 'inventory_adjustment_draft'
       ) {
+        setRunProgress((current) => ({
+          message: '正在生成结构化草稿并执行后端业务校验',
+          phase: 'validating',
+          startedAt: current?.startedAt ?? Date.now(),
+        }));
         const draftPayload = {
           company: effectiveCompany as string,
           content,
@@ -333,6 +357,7 @@ export default function AiPage() {
         setRunError(null);
         setRetryRequest(null);
         setRunStatus('completed');
+        setRunProgress(null);
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessage.id
@@ -359,6 +384,11 @@ export default function AiPage() {
         },
         (event) => {
           if (event.type === 'run_started') {
+            setRunProgress((current) => ({
+              message: '已建立会话，正在准备受控业务上下文',
+              phase: 'context_ready',
+              startedAt: current?.startedAt ?? Date.now(),
+            }));
             const nextConversationId = String(event.conversation ?? '');
             if (nextConversationId) {
               setConversationId(nextConversationId);
@@ -376,8 +406,21 @@ export default function AiPage() {
               );
             }
           }
+          if (event.type === 'run_progress') {
+            const progressMessage = String(event.message ?? '').trim();
+            setRunProgress((current) => ({
+              message: progressMessage || current?.message || '正在处理',
+              phase: String(event.phase ?? current?.phase ?? 'running'),
+              startedAt: current?.startedAt ?? Date.now(),
+            }));
+          }
           if (event.type === 'tool_started') {
             const toolName = String(event.tool ?? '业务工具');
+            setRunProgress((current) => ({
+              message: `正在执行 ${toolName}，读取受控业务数据`,
+              phase: 'tool_running',
+              startedAt: current?.startedAt ?? Date.now(),
+            }));
             setToolProgress((current) => [
               ...current.filter((item) => item.name !== toolName),
               { name: toolName, status: 'running' },
@@ -385,6 +428,11 @@ export default function AiPage() {
           }
           if (event.type === 'tool_completed') {
             const toolName = String(event.tool ?? '业务工具');
+            setRunProgress((current) => ({
+              message: '业务数据已就绪，正在组织回答',
+              phase: 'tool_completed',
+              startedAt: current?.startedAt ?? Date.now(),
+            }));
             setToolProgress((current) => [
               ...current.filter((item) => item.name !== toolName),
               {
@@ -407,6 +455,11 @@ export default function AiPage() {
           }
           if (event.type === 'message_delta') {
             const delta = String(event.delta ?? '');
+            setRunProgress((current) => ({
+              message: '正在流式输出回答',
+              phase: 'streaming',
+              startedAt: current?.startedAt ?? Date.now(),
+            }));
             setMessages((current) =>
               current.map((item) =>
                 item.id === assistantMessage.id
@@ -443,6 +496,7 @@ export default function AiPage() {
       setRunError(null);
       setRetryRequest(null);
       setRunStatus('completed');
+      setRunProgress(null);
       setMessages((current) =>
         current.map((item) =>
           item.id === assistantMessage.id
@@ -459,10 +513,12 @@ export default function AiPage() {
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === 'AbortError') {
         setRunStatus('stopped');
+        setRunProgress(null);
         setRetryRequest({ content, scenario: resolvedScenario });
         message.info('已停止本次生成，当前已接收内容会保留。');
       } else {
         setRunStatus('failed');
+        setRunProgress(null);
         setRunError(
           caught instanceof Error ? caught.message : 'AI 服务调用失败',
         );
@@ -690,6 +746,7 @@ export default function AiPage() {
     setRunError(null);
     setRunWarnings([]);
     setToolProgress([]);
+    setRunProgress(null);
     setRetryRequest(null);
     setRunStatus('idle');
     setDraft('');
@@ -806,39 +863,41 @@ export default function AiPage() {
           }
           onHandoffDraft={(draftId) => void handoffDraft(draftId)}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
-          runId={item.runId}
-          streaming={
-            loading && index === messages.length - 1 && !item.content
-              ? undefined
-              : loading && index === messages.length - 1
+          progressMessage={
+            loading && index === messages.length - 1
+              ? runProgress?.message
+              : undefined
           }
+          progressStartedAt={
+            loading && index === messages.length - 1
+              ? runProgress?.startedAt
+              : undefined
+          }
+          runId={item.runId}
+          streaming={loading && index === messages.length - 1}
         />
       ),
   }));
 
   return (
-    <PageContainer
-      className={styles.page}
-      extra={
-        <Space>
-          <Button onClick={() => history.push('/ai/drafts')}>我的草稿</Button>
-          <Tag color="blue">受控业务助手</Tag>
-        </Space>
-      }
-      ghost
-      subTitle="查询、解释和生成可审计业务草稿"
-      title="AI 工作台"
-    >
+    <PageContainer className={styles.page} ghost title={false}>
       <XProvider>
         <div className={styles.workspace}>
           <aside className={styles.sidebar}>
             <div className={styles.sidebarHeader}>
+              <div className={styles.sidebarTitle}>
+                <Typography.Title level={5}>对话</Typography.Title>
+                <Tag bordered={false} color="processing">
+                  {conversations.length}
+                </Tag>
+              </div>
               <Select
                 onChange={setConversationStatus}
                 options={[
                   { label: '活跃会话', value: 'active' },
                   { label: '已归档', value: 'archived' },
                 ]}
+                style={{ width: '100%' }}
                 value={conversationStatus}
               />
             </div>
@@ -888,6 +947,39 @@ export default function AiPage() {
           </aside>
 
           <main className={styles.main}>
+            <div className={styles.workspaceHeader}>
+              <div className={styles.brand}>
+                <Button
+                  className={styles.mobileOnly}
+                  icon={<MenuOutlined />}
+                  onClick={() => setConversationDrawerOpen(true)}
+                  type="text"
+                />
+                <Avatar
+                  className={styles.brandAvatar}
+                  icon={<ThunderboltOutlined />}
+                  shape="square"
+                  size={42}
+                />
+                <div className={styles.brandCopy}>
+                  <Typography.Title level={4}>AI 业务助手</Typography.Title>
+                  <Typography.Text type="secondary">
+                    可审计查询、经营解释与结构化草稿
+                  </Typography.Text>
+                </div>
+              </div>
+              <Space>
+                <Button onClick={() => history.push('/ai/drafts')}>
+                  我的草稿
+                </Button>
+                <Button
+                  icon={<DashboardOutlined />}
+                  onClick={() => setInspectorOpen(true)}
+                >
+                  运行详情
+                </Button>
+              </Space>
+            </div>
             <div className={styles.contextBar}>
               <Space wrap>
                 <Select
@@ -912,15 +1004,24 @@ export default function AiPage() {
                   </Tag>
                 ) : null}
               </Space>
-              {conversationId ? (
-                <Button
-                  icon={<InboxOutlined />}
-                  onClick={() => void archiveCurrentConversation()}
-                  size="small"
+              <Space wrap>
+                <Tag
+                  bordered={false}
+                  color="success"
+                  icon={<SafetyCertificateOutlined />}
                 >
-                  归档
-                </Button>
-              ) : null}
+                  权限内只读 · 草稿需人工复核
+                </Tag>
+                {conversationId ? (
+                  <Button
+                    icon={<InboxOutlined />}
+                    onClick={() => void archiveCurrentConversation()}
+                    size="small"
+                  >
+                    归档
+                  </Button>
+                ) : null}
+              </Space>
             </div>
 
             {messages.length ? (
@@ -963,43 +1064,88 @@ export default function AiPage() {
             )}
 
             <div className={styles.composer}>
-              <Sender
-                autoSize={{ minRows: 2, maxRows: 7 }}
-                loading={loading}
-                onCancel={stopGeneration}
-                onChange={setDraft}
-                onSubmit={(value) => void submit(value)}
-                placeholder="输入问题；Enter 发送，Shift+Enter 换行"
-                value={draft}
-              />
+              <div className={styles.composerInner}>
+                <Sender
+                  autoSize={{ minRows: 2, maxRows: 7 }}
+                  loading={loading}
+                  onCancel={stopGeneration}
+                  onChange={setDraft}
+                  onSubmit={(value) => void submit(value)}
+                  placeholder="输入业务问题；Enter 发送，Shift+Enter 换行"
+                  value={draft}
+                />
+              </div>
             </div>
           </main>
-
-          <aside className={styles.inspector}>
-            <Space orientation="vertical" size={16}>
-              <Alert
-                description="AI 只能读取受控数据并生成草稿，不能创建、提交、取消、付款或直接调整库存。"
-                showIcon
-                title="安全边界"
-                type="info"
-              />
-              <AiRunInspector
-                activeRunId={activeRunId}
-                error={runError}
-                onRetry={
-                  retryRequest
-                    ? () =>
-                        void submit(retryRequest.content, retryRequest.scenario)
-                    : undefined
-                }
-                result={lastResult}
-                status={runStatus}
-                tools={toolProgress}
-                warnings={runWarnings}
-              />
-            </Space>
-          </aside>
         </div>
+        <Drawer
+          onClose={() => setConversationDrawerOpen(false)}
+          open={conversationDrawerOpen}
+          placement="left"
+          title="对话"
+          width={360}
+        >
+          <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <Select
+              onChange={setConversationStatus}
+              options={[
+                { label: '活跃会话', value: 'active' },
+                { label: '已归档', value: 'archived' },
+              ]}
+              style={{ width: '100%' }}
+              value={conversationStatus}
+            />
+            <Spin spinning={conversationLoading}>
+              <Conversations
+                activeKey={conversationId ?? undefined}
+                creation={{
+                  label: '新建会话',
+                  onClick: () => {
+                    setConversationDrawerOpen(false);
+                    setConversationStatus('active');
+                    resetConversation();
+                  },
+                }}
+                groupable
+                items={conversationItems}
+                onActiveChange={(key) => {
+                  setConversationDrawerOpen(false);
+                  void openConversation(key);
+                }}
+              />
+            </Spin>
+          </Space>
+        </Drawer>
+        <Drawer
+          onClose={() => setInspectorOpen(false)}
+          open={inspectorOpen}
+          title="运行详情"
+          width={440}
+        >
+          <div className={styles.drawerContent}>
+            <Alert
+              description="AI 只能读取受控数据并生成草稿，不能创建、提交、取消、付款或直接调整库存。"
+              icon={<SafetyCertificateOutlined />}
+              showIcon
+              title="安全边界"
+              type="info"
+            />
+            <AiRunInspector
+              activeRunId={activeRunId}
+              error={runError}
+              onRetry={
+                retryRequest
+                  ? () =>
+                      void submit(retryRequest.content, retryRequest.scenario)
+                  : undefined
+              }
+              result={lastResult}
+              status={runStatus}
+              tools={toolProgress}
+              warnings={runWarnings}
+            />
+          </div>
+        </Drawer>
       </XProvider>
       <Modal
         destroyOnHidden

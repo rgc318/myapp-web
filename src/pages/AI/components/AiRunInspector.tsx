@@ -105,6 +105,21 @@ export function AiRunInspector({
               children: durationText(run?.firstTokenMs),
             },
             {
+              key: 'stream',
+              label: '输出方式',
+              children: result
+                ? result.stream.deltaCount > 0
+                  ? [
+                      '流式',
+                      result.stream.deltaCount,
+                      '段 ·',
+                      result.stream.streamedChars,
+                      '字符',
+                    ].join(' ')
+                  : '结构化结果完成后展示'
+                : '-',
+            },
+            {
               key: 'tokens',
               label: 'Token',
               children: result

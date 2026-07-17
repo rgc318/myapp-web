@@ -2,12 +2,14 @@ import {
   DislikeOutlined,
   FileTextOutlined,
   LikeOutlined,
+  LoadingOutlined,
   ShoppingOutlined,
 } from '@ant-design/icons';
 import { ProCard } from '@ant-design/pro-components';
 import { Actions, Sources } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
 import { Button, Space, Tag, Typography } from 'antd';
+import { useEffect, useState } from 'react';
 import type { AiChatMessage, AiCitation } from '@/services/myapp/ai';
 import { useAiWorkspaceStyles } from '../styles';
 
@@ -30,12 +32,50 @@ type Props = {
   onFeedback: (rating: 'positive' | 'negative') => void;
   onHandoffDraft: (draftId: string) => void;
   onOpenDraftHistory: (draftId: string) => void;
+  progressMessage?: string;
+  progressStartedAt?: number | null;
   runId?: string | null;
   streaming?: boolean;
 };
 
 function draftValidation(citation: AiCitation) {
   return citation.data.validation as Record<string, unknown> | undefined;
+}
+
+function GenerationProgress({
+  message,
+  startedAt,
+}: {
+  message: string;
+  startedAt?: number | null;
+}) {
+  const { styles } = useAiWorkspaceStyles();
+  const [elapsedMs, setElapsedMs] = useState(
+    startedAt ? Math.max(0, Date.now() - startedAt) : 0,
+  );
+
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const timer = window.setInterval(
+      () => setElapsedMs(Math.max(0, Date.now() - startedAt)),
+      250,
+    );
+    return () => window.clearInterval(timer);
+  }, [startedAt]);
+
+  return (
+    <div className={styles.generationStatus}>
+      <span className={styles.generationIcon}>
+        <LoadingOutlined spin />
+      </span>
+      <Space orientation="vertical" size={2}>
+        <Typography.Text strong>{message}</Typography.Text>
+        <Typography.Text type="secondary">
+          已处理 {(elapsedMs / 1000).toFixed(1)} 秒 · 内容到达后会逐段展示
+        </Typography.Text>
+      </Space>
+    </div>
+  );
 }
 
 function CitationCard({
@@ -186,6 +226,8 @@ export function AiMessageContent({
   onFeedback,
   onHandoffDraft,
   onOpenDraftHistory,
+  progressMessage,
+  progressStartedAt,
   runId,
   streaming,
 }: Props) {
@@ -200,9 +242,22 @@ export function AiMessageContent({
 
   return (
     <div className={styles.messageBody}>
-      <XMarkdown streaming={streaming ? { hasNextChunk: true } : undefined}>
-        {content}
-      </XMarkdown>
+      {!content && streaming ? (
+        <GenerationProgress
+          message={progressMessage || '正在准备回答'}
+          startedAt={progressStartedAt}
+        />
+      ) : (
+        <XMarkdown streaming={streaming ? { hasNextChunk: true } : undefined}>
+          {content}
+        </XMarkdown>
+      )}
+      {content && streaming ? (
+        <div className={styles.streamingLine}>
+          <LoadingOutlined spin />
+          <Typography.Text type="secondary">正在流式生成</Typography.Text>
+        </div>
+      ) : null}
       {sources.length ? (
         <Sources defaultExpanded items={sources} title="业务来源" />
       ) : null}

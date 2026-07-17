@@ -49,6 +49,10 @@ describe('AI domain service', () => {
           latency_ms: 920,
           first_token_ms: 180,
         },
+        stream: {
+          delta_count: 18,
+          streamed_chars: 42,
+        },
         usage: {
           prompt_tokens: 10,
           completion_tokens: 2,
@@ -84,6 +88,7 @@ describe('AI domain service', () => {
       latencyMs: 920,
       status: 'completed',
     });
+    expect(result.stream).toEqual({ deltaCount: 18, streamedChars: 42 });
     expect(result.events).toEqual([{ type: 'completed' }]);
   });
 
@@ -248,9 +253,10 @@ describe('AI domain service', () => {
   it('consumes POST SSE events and returns completed chat metadata', async () => {
     const chunks = [
       'data: {"type":"run_started","conversation":"AI-CONV-1","run_id":"AI-RUN-1"}\n\n',
+      'data: {"type":"run_progress","phase":"model_started","message":"模型已接收请求"}\n\n',
       'data: {"type":"message_delta","delta":"连接"}\n\n',
       'data: {"type":"message_delta","delta":"成功"}\n\n',
-      'data: {"type":"completed","conversation":"AI-CONV-1","run_id":"AI-RUN-1","message":{"role":"assistant","content":"连接成功"},"model":"opencode-deepseek-v4-flash","model_alias":"opencode-deepseek-v4-flash","run":{"status":"completed","latency_ms":760,"first_token_ms":120},"usage":{"total_tokens":10},"warnings":[]}\n\n',
+      'data: {"type":"completed","conversation":"AI-CONV-1","run_id":"AI-RUN-1","message":{"role":"assistant","content":"连接成功"},"model":"opencode-deepseek-v4-flash","model_alias":"opencode-deepseek-v4-flash","run":{"status":"completed","latency_ms":760,"first_token_ms":120},"stream":{"delta_count":2,"streamed_chars":4},"usage":{"total_tokens":10},"warnings":[]}\n\n',
     ].map((value) => new Uint8Array(Buffer.from(value)));
     let index = 0;
     const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -274,6 +280,7 @@ describe('AI domain service', () => {
 
     expect(events).toEqual([
       'run_started',
+      'run_progress',
       'message_delta',
       'message_delta',
       'completed',
@@ -282,6 +289,7 @@ describe('AI domain service', () => {
     expect(result.message.content).toBe('连接成功');
     expect(result.model).toBe('opencode-deepseek-v4-flash');
     expect(result.run).toMatchObject({ latencyMs: 760, firstTokenMs: 120 });
+    expect(result.stream).toEqual({ deltaCount: 2, streamedChars: 4 });
     fetchMock.mockRestore();
   });
 

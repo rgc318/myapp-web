@@ -27,6 +27,7 @@ const result: AiChatResult = {
     },
   },
   runId: 'AI-RUN-1',
+  stream: { deltaCount: 24, streamedChars: 56 },
   traceId: 'trace-1',
   usage: {
     completionTokens: 20,
@@ -57,6 +58,7 @@ describe('AiRunInspector', () => {
     expect(screen.getByText('erp-fast-chat')).toBeTruthy();
     expect(screen.getByText('920 ms')).toBeTruthy();
     expect(screen.getByText('180 ms')).toBeTruthy();
+    expect(screen.getByText('流式 24 段 · 56 字符')).toBeTruthy();
     expect(screen.getByText('105（输入 80 / 输出 20 / 推理 5）')).toBeTruthy();
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 3 项')).toBeTruthy();

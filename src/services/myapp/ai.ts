@@ -105,6 +105,10 @@ export type AiChatResult = {
   modelAlias: string | null;
   traceId: string | null;
   run: AiRunSummary;
+  stream: {
+    deltaCount: number;
+    streamedChars: number;
+  };
   usage: AiTokenUsage;
   warnings: string[];
   events: AiEvent[];
@@ -115,6 +119,7 @@ function mapChatResult(value: unknown): AiChatResult {
   const responseMessage = readObject(data.message);
   const usage = readObject(data.usage);
   const run = readObject(data.run);
+  const stream = readObject(data.stream);
   return {
     conversationId: String(data.conversation ?? ''),
     runId: typeof data.run_id === 'string' ? data.run_id : null,
@@ -150,6 +155,10 @@ function mapChatResult(value: unknown): AiChatResult {
         totalTokens: toNumber(usage.total_tokens),
         reasoningTokens: toNumber(usage.reasoning_tokens),
       },
+    },
+    stream: {
+      deltaCount: toNumber(stream.delta_count),
+      streamedChars: toNumber(stream.streamed_chars),
     },
     usage: {
       promptTokens: toNumber(usage.prompt_tokens),
