@@ -4,6 +4,7 @@ import {
   DashboardOutlined,
   FileTextOutlined,
   InboxOutlined,
+  LockOutlined,
   MenuOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
@@ -103,6 +104,7 @@ const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
 ];
 
 const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
+  { label: '自动识别', value: 'auto' },
   { label: '通用对话', value: 'general' },
   { label: '商品搜索', value: 'product_search' },
   { label: '订单查询', value: 'order_query' },
@@ -147,7 +149,10 @@ export default function AiPage() {
   const [conversationCompany, setConversationCompany] = useState<string | null>(
     null,
   );
-  const [scenario, setScenario] = useState<AiScenario>('general');
+  const [scenario, setScenario] = useState<AiScenario>('auto');
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(
+    defaultCompany ?? null,
+  );
   const [lastResult, setLastResult] = useState<AiChatResult | null>(null);
   const [runStatus, setRunStatus] = useState<AiRunDisplayStatus>('idle');
   const [runProgress, setRunProgress] = useState<{
@@ -184,7 +189,13 @@ export default function AiPage() {
   const streamAbortRef = useRef<AbortController | null>(null);
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
-    : defaultCompany;
+    : selectedCompany || defaultCompany;
+
+  useEffect(() => {
+    if (!conversationId && !selectedCompany && defaultCompany) {
+      setSelectedCompany(defaultCompany);
+    }
+  }, [conversationId, defaultCompany, selectedCompany]);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -299,6 +310,7 @@ export default function AiPage() {
         'product_search',
         'order_query',
         'report_summary',
+        'auto',
         'sales_order_draft',
         'purchase_order_draft',
         'inventory_adjustment_draft',
@@ -320,7 +332,7 @@ export default function AiPage() {
     setRunWarnings([]);
     setToolProgress([]);
     setRunProgress({
-      message: '正在建立安全会话与权限上下文',
+      message: '正在准备当前账号的业务查询上下文',
       phase: 'preparing',
       startedAt: Date.now(),
     });
@@ -385,7 +397,7 @@ export default function AiPage() {
         (event) => {
           if (event.type === 'run_started') {
             setRunProgress((current) => ({
-              message: '已建立会话，正在准备受控业务上下文',
+              message: '会话已建立，正在准备业务查询上下文',
               phase: 'context_ready',
               startedAt: current?.startedAt ?? Date.now(),
             }));
@@ -750,7 +762,7 @@ export default function AiPage() {
     setRetryRequest(null);
     setRunStatus('idle');
     setDraft('');
-    setScenario('general');
+    setScenario('auto');
   };
 
   const archiveCurrentConversation = async () => {
@@ -988,7 +1000,7 @@ export default function AiPage() {
                   options={SCENARIO_OPTIONS}
                   value={scenario}
                 />
-                {effectiveCompany ? (
+                {conversationId && effectiveCompany ? (
                   <Tag
                     color={
                       conversationId &&
@@ -999,10 +1011,20 @@ export default function AiPage() {
                         : undefined
                     }
                   >
-                    {conversationId ? '会话公司' : '默认公司'}：
-                    {effectiveCompany}
+                    <LockOutlined /> 会话公司：{effectiveCompany}
                   </Tag>
-                ) : null}
+                ) : (
+                  <Space size={6}>
+                    <Typography.Text type="secondary">查询公司</Typography.Text>
+                    <RemoteLinkSelect
+                      doctype="Company"
+                      onChange={(value) => setSelectedCompany(value || null)}
+                      placeholder="选择公司"
+                      style={{ width: 220 }}
+                      value={effectiveCompany ?? undefined}
+                    />
+                  </Space>
+                )}
               </Space>
               <Space wrap>
                 <Tag
@@ -1010,7 +1032,7 @@ export default function AiPage() {
                   color="success"
                   icon={<SafetyCertificateOutlined />}
                 >
-                  权限内只读 · 草稿需人工复核
+                  按当前账号权限查询 · 写操作需确认
                 </Tag>
                 {conversationId ? (
                   <Button

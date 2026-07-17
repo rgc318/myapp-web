@@ -172,20 +172,24 @@ src/services/myapp/
 - 打开历史会话时重新加载消息、citation、Run 摘要和已提交反馈。
 - URL 可携带 `conversation` 参数，用于从草稿或其他业务入口回到来源会话。
 - 页面刷新后不依赖内存中的 `lastResult` 恢复模型、Token、trace 和反馈状态。
-- 已有会话始终使用后端返回的会话公司；用户后续修改工作偏好不会改变当前会话公司。新建会话才读取当前默认公司，界面需明确区分“会话公司”和“默认公司”。
+- 新会话通过 `RemoteLinkSelect` 显式选择查询公司，并以工作偏好默认公司作为初始值；用户可以在发送首条消息前切换公司。
+- 已有会话始终使用后端返回的会话公司并显示锁定状态；用户后续修改工作偏好或新会话选择不会改变历史会话公司。切换公司必须新建会话，避免跨公司数据混入同一上下文。
 
 ### 7.2 SSE 事件处理
 
 普通对话、商品查询、订单查询和经营报表解释通过 POST + JWT SSE：
 
 1. 创建用户消息和空助手消息占位。
-2. `run_started` 绑定 `conversationId` 和 `runId`。
-3. `run_progress` 更新上下文准备、工具、模型首段等待和流式输出阶段；页面从请求开始持续显示已等待时间。
-4. `message_delta` 追加助手文本，首段到达后继续逐块渲染。
-5. `citation` 增量追加结构化来源。
-6. `warning` 追加非阻断警告。
-7. `completed` 返回最终内容、Run、用量和 `stream.delta_count / streamed_chars`。
-8. `error` 转换为用户可理解的错误提示。
+2. 默认 `auto` 场景由 Frappe 根据当前问题确定 `general / product_search / order_query / report_summary`，页面不自行复制业务路由规则；用户仍可显式选择固定场景。
+3. `run_started` 绑定 `conversationId` 和 `runId`。
+4. `run_progress` 更新权限/公司确认、工具、模型首 Token 等待和实时输出阶段；页面从请求开始持续显示已等待时间，不能把等待阶段称为“思考内容”。
+5. `message_delta` 追加助手文本，首 Token 到达后继续逐块渲染。
+6. `citation` 增量追加结构化来源。
+7. `warning` 追加非阻断警告。
+8. `completed` 返回最终内容、Run、用量和 `stream.delta_count / streamed_chars`。
+9. `error` 转换为用户可理解的错误提示。
+
+`order_query` 支持一次查询销售订单、销售发票、采购订单和采购发票中的一个或多个类型；每种类型分别应用当前用户记录权限、公司范围、日期、状态、金额、排序和数量限制，并以结构化 citation 返回，不要求用户手工拆成多个问题。
 
 浏览器使用 `fetch + ReadableStream`，不使用原生 `EventSource`，因为请求需要 POST body 和 JWT Bearer Header。
 

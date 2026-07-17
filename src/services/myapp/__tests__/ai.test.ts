@@ -274,7 +274,7 @@ describe('AI domain service', () => {
     const events: string[] = [];
 
     const result = await streamAiChatMessage(
-      { content: '你好', scenario: 'general' },
+      { content: '你好' },
       (event) => events.push(event.type),
     );
 
@@ -290,6 +290,10 @@ describe('AI domain service', () => {
     expect(result.model).toBe('opencode-deepseek-v4-flash');
     expect(result.run).toMatchObject({ latencyMs: 760, firstTokenMs: 120 });
     expect(result.stream).toEqual({ deltaCount: 2, streamedChars: 4 });
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
+      content: '你好',
+      scenario: 'auto',
+    });
     fetchMock.mockRestore();
   });
 

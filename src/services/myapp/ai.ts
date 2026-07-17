@@ -6,6 +6,7 @@ import { getMyAppAuthHeaders } from './auth-storage';
 export type AiChatRole = 'user' | 'assistant';
 
 export type AiScenario =
+  | 'auto'
   | 'general'
   | 'product_search'
   | 'order_query'
@@ -412,7 +413,7 @@ export async function sendAiChatMessage(payload: {
 }): Promise<AiChatResult> {
   const result = await callGatewayMethod<Record<string, unknown>>('chat_ai_v1', {
     content: payload.content,
-    scenario: payload.scenario ?? 'general',
+    scenario: payload.scenario ?? 'auto',
     ...(payload.conversationId
       ? { conversation_id: payload.conversationId }
       : {}),
@@ -547,7 +548,7 @@ export async function streamAiChatMessage(
       },
       body: JSON.stringify({
         content: payload.content,
-        scenario: payload.scenario ?? 'general',
+        scenario: payload.scenario ?? 'auto',
         ...(payload.conversationId
           ? { conversation_id: payload.conversationId }
           : {}),

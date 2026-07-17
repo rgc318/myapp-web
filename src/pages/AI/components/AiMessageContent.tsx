@@ -71,7 +71,7 @@ function GenerationProgress({
       <Space orientation="vertical" size={2}>
         <Typography.Text strong>{message}</Typography.Text>
         <Typography.Text type="secondary">
-          已处理 {(elapsedMs / 1000).toFixed(1)} 秒 · 内容到达后会逐段展示
+          首个响应尚未返回 · 已等待 {(elapsedMs / 1000).toFixed(1)} 秒
         </Typography.Text>
       </Space>
     </div>
@@ -255,7 +255,7 @@ export function AiMessageContent({
       {content && streaming ? (
         <div className={styles.streamingLine}>
           <LoadingOutlined spin />
-          <Typography.Text type="secondary">正在流式生成</Typography.Text>
+          <Typography.Text type="secondary">实时输出中</Typography.Text>
         </div>
       ) : null}
       {sources.length ? (

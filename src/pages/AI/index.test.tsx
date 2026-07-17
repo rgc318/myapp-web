@@ -53,7 +53,27 @@ jest.mock('@ant-design/x', () => {
 jest.mock('@/components', () => {
   const React = jest.requireActual('react');
   return {
-    RemoteLinkSelect: () => React.createElement('div', null, '远程选择器'),
+    RemoteLinkSelect: ({ disabled, doctype, onChange, value }: any) =>
+      React.createElement(
+        'select',
+        {
+          'aria-label': `${doctype} 选择`,
+          disabled,
+          onChange: (event: any) => onChange?.(event.target.value),
+          value: value ?? '',
+        },
+        React.createElement('option', { value: '' }, '请选择'),
+        React.createElement(
+          'option',
+          { value: 'Demo Company' },
+          'Demo Company',
+        ),
+        React.createElement(
+          'option',
+          { value: 'Second Company' },
+          'Second Company',
+        ),
+      ),
   };
 });
 
@@ -111,7 +131,7 @@ describe('AI workspace page', () => {
           type: 'run_started',
         });
         onEvent({
-          message: '模型已接收请求，正在生成首段内容',
+          message: '模型已接收请求，等待首个 Token',
           phase: 'model_started',
           type: 'run_progress',
         });
@@ -173,7 +193,7 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           company: 'Demo Company',
           content: '查找蓝色包装商品',
-          scenario: 'general',
+          scenario: 'auto',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -188,6 +208,30 @@ describe('AI workspace page', () => {
     expect(screen.getByText('只读模式')).toBeTruthy();
   });
 
+  it('allows a new conversation to choose its query company', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Company 选择' }), {
+      target: { value: 'Second Company' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '查询最新销售订单' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          company: 'Second Company',
+          content: '查询最新销售订单',
+          scenario: 'auto',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('shows the upstream progress phase before the first text delta', async () => {
     let finishStream: ((value: unknown) => void) | undefined;
     streamAiChatMessage.mockImplementationOnce(
@@ -198,7 +242,7 @@ describe('AI workspace page', () => {
           type: 'run_started',
         });
         onEvent({
-          message: '模型已接收请求，正在生成首段内容',
+          message: '模型已接收请求，等待首个 Token',
           phase: 'model_started',
           type: 'run_progress',
         });
@@ -215,7 +259,7 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     expect(
-      await screen.findByText('模型已接收请求，正在生成首段内容'),
+      await screen.findByText('模型已接收请求，等待首个 Token'),
     ).toBeTruthy();
 
     finishStream?.({
