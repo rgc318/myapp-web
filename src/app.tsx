@@ -94,7 +94,8 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
           content: getWatermarkContent(initialState?.currentUser),
         }
       : undefined,
-    footerRender: () => <Footer />,
+    footerRender: () =>
+      history.location.pathname === '/ai' ? null : <Footer />,
     onPageChange: () => {
       const { location } = history;
       // 如果没有登录，重定向到 login

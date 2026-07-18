@@ -41,6 +41,7 @@ import {
 
 const DRAFT_TYPE: Record<AiDraft['draftType'], string> = {
   inventory_adjustment: '库存调整',
+  product_setup: '商品建档',
   purchase_order: '采购订单',
   sales_order: '销售订单',
 };
@@ -87,14 +88,15 @@ export default function AiDraftsPage() {
     setHandoffLoading(true);
     try {
       const { draftType, payload } = await prepareAiDraftHandoff(draft.name);
+      const isProduct = draftType === 'product_setup';
       const isPurchase = draftType === 'purchase_order';
       const isInventory = draftType === 'inventory_adjustment';
       sessionStorage.setItem(
-        `myapp:ai-${isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draft.name}`,
+        `myapp:ai-${isProduct ? 'product-setup' : isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draft.name}`,
         JSON.stringify(payload),
       );
       history.push(
-        `${isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draft.name)}`,
+        `${isProduct ? '/master-data/products' : isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draft.name)}`,
       );
     } catch (error) {
       notifyMutationError(error);

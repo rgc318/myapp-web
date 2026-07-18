@@ -1,6 +1,14 @@
 import { createStyles } from 'antd-style';
 
 export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
+  answerSummary: css`
+    border-top: 1px solid ${token.colorBorderSecondary};
+    display: flex;
+    flex-direction: column;
+    gap: ${token.marginXS}px;
+    max-width: 880px;
+    padding-top: ${token.paddingSM}px;
+  `,
   brand: css`
     align-items: center;
     display: flex;
@@ -22,6 +30,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   `,
   composer: css`
     background: linear-gradient(180deg, transparent, ${token.colorBgContainer} 24%);
+    flex: 0 0 auto;
     padding: ${token.paddingSM}px ${token.paddingLG}px ${token.paddingLG}px;
   `,
   composerInner: css`
@@ -45,6 +54,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     align-items: center;
     border-bottom: 1px solid ${token.colorBorderSecondary};
     display: flex;
+    flex: 0 0 auto;
     flex-wrap: wrap;
     gap: ${token.marginSM}px;
     justify-content: space-between;
@@ -116,6 +126,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     display: flex;
     flex: 1;
     flex-direction: column;
+    min-height: 0;
     min-width: 0;
     overflow: hidden;
   `,
@@ -130,15 +141,29 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     background:
       radial-gradient(circle at 50% 0%, color-mix(in srgb, ${token.colorPrimary} 8%, transparent), transparent 36%),
       ${token.colorBgLayout};
+    box-sizing: border-box;
     display: flex;
     flex: 1;
     justify-content: center;
-    overflow-y: auto;
+    min-height: 0;
+    overflow: hidden;
     padding: ${token.paddingXL}px ${token.paddingLG}px;
 
-    > div {
-      max-width: 920px;
+    > .ant-bubble-list {
+      flex: 1;
+      height: 100%;
+      max-width: 1220px;
+      min-height: 0;
       width: 100%;
+    }
+
+    .ant-bubble-list-scroll-box {
+      height: 100%;
+      max-height: none;
+      min-height: 0;
+      overscroll-behavior: contain;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
     }
 
     .ant-bubble {
@@ -157,7 +182,36 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     }
   `,
   page: css`
+    display: flex;
+    flex-direction: column;
+    height: calc(100dvh - 56px);
+    min-height: 0;
+    overflow: hidden;
+
+    > .ant-pro-grid-content {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    > .ant-pro-grid-content > .ant-pro-grid-content-children {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      width: 100%;
+    }
+
     .ant-pro-page-container-children-container {
+      box-sizing: border-box;
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
       padding-block: 0;
     }
   `,
@@ -183,6 +237,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   `,
   sidebarBody: css`
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: ${token.paddingSM}px;
   `,
@@ -213,11 +268,12 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   workspace: css`
     background: ${token.colorBgContainer};
     border: 1px solid ${token.colorBorderSecondary};
-    border-radius: 20px;
-    box-shadow: 0 18px 60px rgba(15, 23, 42, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
     display: flex;
-    height: calc(100vh - 142px);
-    min-height: 620px;
+    flex: 1;
+    height: 100%;
+    min-height: 0;
     overflow: hidden;
   `,
   workspaceHeader: css`
@@ -225,6 +281,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     background: color-mix(in srgb, ${token.colorBgContainer} 92%, transparent);
     border-bottom: 1px solid ${token.colorBorderSecondary};
     display: flex;
+    flex: 0 0 auto;
     justify-content: space-between;
     padding: ${token.paddingMD}px ${token.paddingXL}px;
   `,

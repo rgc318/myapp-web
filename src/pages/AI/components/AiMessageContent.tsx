@@ -1,17 +1,20 @@
 import {
   DislikeOutlined,
-  FileTextOutlined,
   LikeOutlined,
   LoadingOutlined,
-  ShoppingOutlined,
 } from '@ant-design/icons';
 import { ProCard } from '@ant-design/pro-components';
-import { Actions, Sources } from '@ant-design/x';
+import { Actions } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
 import { Button, Space, Tag, Typography } from 'antd';
-import { useEffect, useState } from 'react';
-import type { AiChatMessage, AiCitation } from '@/services/myapp/ai';
+import React, { useEffect, useState } from 'react';
+import {
+  type AiChatMessage,
+  type AiCitation,
+  resolveAiBusinessResultSet,
+} from '@/services/myapp/ai';
 import { useAiWorkspaceStyles } from '../styles';
+import { BusinessResultPanel } from './BusinessResultPanel';
 
 const REPORT_METRIC_LABELS: Record<string, string> = {
   sales_amount_total: '销售额',
@@ -43,9 +46,11 @@ function draftValidation(citation: AiCitation) {
 }
 
 function GenerationProgress({
+  hasResults,
   message,
   startedAt,
 }: {
+  hasResults?: boolean;
   message: string;
   startedAt?: number | null;
 }) {
@@ -69,9 +74,12 @@ function GenerationProgress({
         <LoadingOutlined spin />
       </span>
       <Space orientation="vertical" size={2}>
-        <Typography.Text strong>{message}</Typography.Text>
+        <Typography.Text strong>
+          {hasResults ? '业务结果已返回，正在生成摘要' : message}
+        </Typography.Text>
         <Typography.Text type="secondary">
-          首个响应尚未返回 · 已等待 {(elapsedMs / 1000).toFixed(1)} 秒
+          {hasResults ? '结构化明细可立即查看' : '首个响应尚未返回'} · 已等待{' '}
+          {(elapsedMs / 1000).toFixed(1)} 秒
         </Typography.Text>
       </Space>
     </div>
@@ -232,25 +240,38 @@ export function AiMessageContent({
   streaming,
 }: Props) {
   const { styles } = useAiWorkspaceStyles();
-  const sources = citations.map((citation, index) => ({
-    key: `${citation.type}-${citation.id ?? index}`,
-    title: citation.label,
-    url: citation.href ?? undefined,
-    icon:
-      citation.type === 'product' ? <ShoppingOutlined /> : <FileTextOutlined />,
-  }));
+  const businessResultSet = resolveAiBusinessResultSet(citations);
+  const detailCitations = citations.filter(
+    (citation) =>
+      citation.type !== 'business_result_set' &&
+      ![
+        'sales_order',
+        'sales_invoice',
+        'purchase_order',
+        'purchase_invoice',
+      ].includes(citation.type),
+  );
 
   return (
     <div className={styles.messageBody}>
+      {businessResultSet ? (
+        <BusinessResultPanel resultSet={businessResultSet} />
+      ) : null}
       {!content && streaming ? (
         <GenerationProgress
+          hasResults={Boolean(businessResultSet)}
           message={progressMessage || '正在准备回答'}
           startedAt={progressStartedAt}
         />
       ) : (
-        <XMarkdown streaming={streaming ? { hasNextChunk: true } : undefined}>
-          {content}
-        </XMarkdown>
+        <div className={businessResultSet ? styles.answerSummary : undefined}>
+          {businessResultSet && content ? (
+            <Typography.Text strong>AI 摘要</Typography.Text>
+          ) : null}
+          <XMarkdown streaming={streaming ? { hasNextChunk: true } : undefined}>
+            {content}
+          </XMarkdown>
+        </div>
       )}
       {content && streaming ? (
         <div className={styles.streamingLine}>
@@ -258,12 +279,9 @@ export function AiMessageContent({
           <Typography.Text type="secondary">实时输出中</Typography.Text>
         </div>
       ) : null}
-      {sources.length ? (
-        <Sources defaultExpanded items={sources} title="业务来源" />
-      ) : null}
-      {citations.length ? (
+      {detailCitations.length ? (
         <div className={styles.sourceCards}>
-          {citations.map((citation, index) => (
+          {detailCitations.map((citation, index) => (
             <CitationCard
               citation={citation}
               key={`${citation.type}-${citation.id ?? index}`}

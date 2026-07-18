@@ -108,6 +108,7 @@ export type ProductSummary = {
 export type SaveProductPayload = {
   barcode?: string | null;
   brand?: string | null;
+  company?: string | null;
   currency?: string | null;
   description?: string | null;
   disabled?: boolean;
@@ -115,12 +116,16 @@ export type SaveProductPayload = {
   itemCode?: string | null;
   itemGroup?: string | null;
   itemName: string;
+  postingDate?: string | null;
   retailDefaultUom?: string | null;
   retailRate?: number | null;
   standardBuyingRate?: number | null;
   standardSellingRate?: number | null;
   stockUom?: string | null;
   valuationRate?: number | null;
+  warehouse?: string | null;
+  warehouseStockQty?: number | null;
+  warehouseStockUom?: string | null;
   wholesaleDefaultUom?: string | null;
   wholesaleRate?: number | null;
 };
@@ -907,12 +912,14 @@ function productSavePayload(
   return definedPayload({
     barcode: optionalTextField('barcode'),
     brand: optionalTextField('brand'),
+    company: toOptionalText(payload.company),
     currency: optionalTextField('currency'),
     description: optionalTextField('description'),
     disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
     image: payload.image === undefined ? undefined : payload.image,
     item_group: optionalTextField('itemGroup'),
     item_name: payload.itemName,
+    posting_date: toOptionalText(payload.postingDate),
     retail_default_uom:
       options.includeEmptyFields || hasOwn('retailDefaultUom')
         ? payload.retailDefaultUom ?? stockUom ?? ''
@@ -924,6 +931,9 @@ function productSavePayload(
       ? [{ conversion_factor: 1, uom: stockUom }]
       : undefined,
     valuation_rate: payload.valuationRate ?? undefined,
+    warehouse: toOptionalText(payload.warehouse),
+    warehouse_stock_qty: payload.warehouseStockQty ?? undefined,
+    warehouse_stock_uom: toOptionalText(payload.warehouseStockUom),
     wholesale_default_uom:
       options.includeEmptyFields || hasOwn('wholesaleDefaultUom')
         ? payload.wholesaleDefaultUom ?? stockUom ?? ''

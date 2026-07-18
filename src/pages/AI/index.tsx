@@ -44,6 +44,8 @@ import {
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { CurrencySelect } from '@/components/CurrencySelect';
+import { UomSelect } from '@/components/UomSelect';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   type AiChatMessage,
@@ -53,12 +55,14 @@ import {
   archiveAiConversation,
   discardAiDraft,
   generateAiInventoryAdjustmentDraft,
+  generateAiProductSetupDraft,
   generateAiPurchaseOrderDraft,
   generateAiSalesOrderDraft,
   getAiConversation,
   listAiConversations,
   listAiDraftVersions,
   prepareAiDraftHandoff,
+  resolveAiScenario,
   restoreAiDraftVersion,
   streamAiChatMessage,
   submitAiFeedback,
@@ -101,6 +105,10 @@ const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
     content: '把 Stores - RD 的 SKU010 库存调整到 8 个，原因是盘点差异。',
     scenario: 'inventory_adjustment_draft',
   },
+  {
+    content: '新增商品“传承结晶”，库存单位为个，标准售价 9999 元。',
+    scenario: 'product_setup_draft',
+  },
 ];
 
 const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
@@ -112,6 +120,7 @@ const SCENARIO_OPTIONS: { label: string; value: AiScenario }[] = [
   { label: '销售订单草稿', value: 'sales_order_draft' },
   { label: '采购订单草稿', value: 'purchase_order_draft' },
   { label: '库存调整草稿', value: 'inventory_adjustment_draft' },
+  { label: '商品建档草稿', value: 'product_setup_draft' },
 ];
 
 function createMessage(
@@ -176,7 +185,7 @@ export default function AiPage() {
   >(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
   const [editingDraftType, setEditingDraftType] = useState<
-    'sales_order' | 'purchase_order' | 'inventory_adjustment'
+    'sales_order' | 'purchase_order' | 'inventory_adjustment' | 'product_setup'
   >('sales_order');
   const [draftSaving, setDraftSaving] = useState(false);
   const [historyDraftId, setHistoryDraftId] = useState<string | null>(null);
@@ -239,12 +248,10 @@ export default function AiPage() {
         }
       });
       setFeedbackByRun(restoredFeedback);
-      const latestScenario = [...result.messages]
-        .reverse()
-        .find((item) => item.scenario)?.scenario;
-      if (latestScenario) {
-        setScenario(latestScenario);
-      }
+      // 历史消息保存的是每次请求最终执行的场景，不代表用户希望把后续
+      // 问题永久锁定到该场景。重新打开会话时恢复自动识别，避免上一轮
+      // 订单查询把后续商品创建等不同意图继续错误路由到 order_query。
+      setScenario('auto');
       const latestRunMessage = [...result.messages]
         .reverse()
         .find((item) => item.runId && item.run);
@@ -297,13 +304,24 @@ export default function AiPage() {
 
   const submit = async (contentValue?: string, scenarioValue?: AiScenario) => {
     const content = (contentValue ?? draft).trim();
-    const resolvedScenario = scenarioValue ?? scenario;
+    const requestedScenario = scenarioValue ?? scenario;
     if (!content || loading) {
       return;
     }
     if (conversationStatus === 'archived' && conversationId) {
       message.warning('已归档会话为只读状态，请新建会话后继续提问。');
       return;
+    }
+    let resolvedScenario = requestedScenario;
+    if (requestedScenario === 'auto') {
+      try {
+        resolvedScenario = await resolveAiScenario(content);
+      } catch (caught) {
+        message.error(
+          caught instanceof Error ? caught.message : 'AI 场景识别失败',
+        );
+        return;
+      }
     }
     if (
       [
@@ -314,6 +332,7 @@ export default function AiPage() {
         'sales_order_draft',
         'purchase_order_draft',
         'inventory_adjustment_draft',
+        'product_setup_draft',
       ].includes(resolvedScenario) &&
       !effectiveCompany
     ) {
@@ -325,7 +344,7 @@ export default function AiPage() {
     const assistantMessage = createMessage('assistant', '');
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft('');
-    setScenario(resolvedScenario);
+    setScenario(requestedScenario);
     setLastResult(null);
     setActiveRunId(null);
     setRunError(null);
@@ -343,7 +362,8 @@ export default function AiPage() {
       if (
         resolvedScenario === 'sales_order_draft' ||
         resolvedScenario === 'purchase_order_draft' ||
-        resolvedScenario === 'inventory_adjustment_draft'
+        resolvedScenario === 'inventory_adjustment_draft' ||
+        resolvedScenario === 'product_setup_draft'
       ) {
         setRunProgress((current) => ({
           message: '正在生成结构化草稿并执行后端业务校验',
@@ -360,7 +380,9 @@ export default function AiPage() {
             ? await generateAiSalesOrderDraft(draftPayload)
             : resolvedScenario === 'purchase_order_draft'
               ? await generateAiPurchaseOrderDraft(draftPayload)
-              : await generateAiInventoryAdjustmentDraft(draftPayload);
+              : resolvedScenario === 'inventory_adjustment_draft'
+                ? await generateAiInventoryAdjustmentDraft(draftPayload)
+                : await generateAiProductSetupDraft(draftPayload);
         setConversationId(result.conversationId);
         setConversationCompany((current) => current || effectiveCompany);
         setLastResult(result);
@@ -555,14 +577,15 @@ export default function AiPage() {
   const handoffDraft = async (draftId: string) => {
     try {
       const { draftType, payload } = await prepareAiDraftHandoff(draftId);
+      const isProduct = draftType === 'product_setup';
       const isPurchase = draftType === 'purchase_order';
       const isInventory = draftType === 'inventory_adjustment';
       sessionStorage.setItem(
-        `myapp:ai-${isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draftId}`,
+        `myapp:ai-${isProduct ? 'product-setup' : isInventory ? 'inventory-adjustment' : isPurchase ? 'purchase' : 'sales'}-draft:${draftId}`,
         JSON.stringify(payload),
       );
       history.push(
-        `${isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draftId)}`,
+        `${isProduct ? '/master-data/products' : isInventory ? '/inventory/adjustments' : isPurchase ? '/purchase/orders/new' : '/sales/orders/new'}?ai_draft=${encodeURIComponent(draftId)}`,
       );
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '草稿交接失败');
@@ -593,13 +616,33 @@ export default function AiPage() {
   ) => {
     const payload = citation.data.payload as Record<string, any>;
     const draftType =
-      citation.data.draft_type === 'inventory_adjustment'
-        ? 'inventory_adjustment'
-        : citation.data.draft_type === 'purchase_order'
-          ? 'purchase_order'
-          : 'sales_order';
+      citation.data.draft_type === 'product_setup'
+        ? 'product_setup'
+        : citation.data.draft_type === 'inventory_adjustment'
+          ? 'inventory_adjustment'
+          : citation.data.draft_type === 'purchase_order'
+            ? 'purchase_order'
+            : 'sales_order';
     setEditingDraftId(String(citation.id ?? ''));
     setEditingDraftType(draftType);
+    if (draftType === 'product_setup') {
+      draftForm.setFieldsValue({
+        company: payload?.company,
+        itemName: payload?.item_name,
+        itemCode: payload?.item_code,
+        itemGroup: payload?.item_group ?? payload?.item_group_query,
+        brand: payload?.brand ?? payload?.brand_query,
+        stockUom: payload?.stock_uom,
+        warehouse: payload?.warehouse ?? payload?.warehouse_query,
+        openingQty: payload?.opening_qty,
+        openingUom: payload?.opening_uom ?? payload?.stock_uom,
+        standardSellingRate: payload?.standard_selling_rate,
+        valuationRate: payload?.valuation_rate,
+        currency: payload?.currency ?? 'CNY',
+        description: payload?.description,
+      });
+      return;
+    }
     if (draftType === 'inventory_adjustment') {
       const item = Array.isArray(payload?.items) ? payload.items[0] : {};
       draftForm.setFieldsValue({
@@ -661,44 +704,60 @@ export default function AiPage() {
     try {
       const updated = await updateAiDraft(
         editingDraftId,
-        editingDraftType === 'inventory_adjustment'
+        editingDraftType === 'product_setup'
           ? {
               company: values.company,
-              posting_date: values.postingDate?.format('YYYY-MM-DD'),
-              warehouse: values.warehouse,
-              adjustment_type: values.adjustmentType,
+              item_name: values.itemName,
               item_code: values.itemCode,
-              quantity: values.quantity,
-              uom: values.uom,
-              reason: values.reason,
-            }
-          : {
-              ...(editingDraftType === 'purchase_order'
-                ? { supplier: values.party }
-                : { customer: values.party }),
-              company: values.company,
-              transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
-              ...(editingDraftType === 'purchase_order'
-                ? {
-                    schedule_date: values.targetDate?.format('YYYY-MM-DD'),
-                    default_purchase_mode: values.defaultMode,
-                  }
-                : {
-                    delivery_date: values.targetDate?.format('YYYY-MM-DD'),
-                    default_sales_mode: values.defaultMode,
-                  }),
+              item_group: values.itemGroup,
+              brand: values.brand,
+              stock_uom: values.stockUom,
               warehouse: values.warehouse,
-              remarks: values.remarks,
-              items: (values.items ?? []).map(
-                (row: Record<string, unknown>) => ({
-                  item_code: row.itemCode,
-                  qty: row.qty,
-                  uom: row.uom,
-                  price: row.price,
-                  warehouse: row.warehouse,
-                }),
-              ),
-            },
+              opening_qty: values.openingQty,
+              opening_uom: values.openingUom,
+              standard_selling_rate: values.standardSellingRate,
+              valuation_rate: values.valuationRate,
+              currency: values.currency,
+              description: values.description,
+            }
+          : editingDraftType === 'inventory_adjustment'
+            ? {
+                company: values.company,
+                posting_date: values.postingDate?.format('YYYY-MM-DD'),
+                warehouse: values.warehouse,
+                adjustment_type: values.adjustmentType,
+                item_code: values.itemCode,
+                quantity: values.quantity,
+                uom: values.uom,
+                reason: values.reason,
+              }
+            : {
+                ...(editingDraftType === 'purchase_order'
+                  ? { supplier: values.party }
+                  : { customer: values.party }),
+                company: values.company,
+                transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
+                ...(editingDraftType === 'purchase_order'
+                  ? {
+                      schedule_date: values.targetDate?.format('YYYY-MM-DD'),
+                      default_purchase_mode: values.defaultMode,
+                    }
+                  : {
+                      delivery_date: values.targetDate?.format('YYYY-MM-DD'),
+                      default_sales_mode: values.defaultMode,
+                    }),
+                warehouse: values.warehouse,
+                remarks: values.remarks,
+                items: (values.items ?? []).map(
+                  (row: Record<string, unknown>) => ({
+                    item_code: row.itemCode,
+                    qty: row.qty,
+                    uom: row.uom,
+                    price: row.price,
+                    warehouse: row.warehouse,
+                  }),
+                ),
+              },
       );
       setMessages((current) =>
         current.map((item) => ({
@@ -1216,18 +1275,22 @@ export default function AiPage() {
         onOk={() => void saveDraftChanges()}
         open={Boolean(editingDraftId)}
         title={
-          editingDraftType === 'inventory_adjustment'
-            ? '编辑库存调整草稿'
-            : `编辑${editingDraftType === 'purchase_order' ? '采购' : '销售'}订单草稿`
+          editingDraftType === 'product_setup'
+            ? '编辑商品建档草稿'
+            : editingDraftType === 'inventory_adjustment'
+              ? '编辑库存调整草稿'
+              : `编辑${editingDraftType === 'purchase_order' ? '采购' : '销售'}订单草稿`
         }
         width={900}
       >
         <Alert
           showIcon
           title={
-            editingDraftType === 'inventory_adjustment'
-              ? '保存后将重新查询真实商品、仓库、库存、单位和估值参考，并生成新版本；不会提交任何库存单据。'
-              : '保存后将重新查询真实客户或供应商、商品、仓库、单位和当前参考价，并生成新版本。'
+            editingDraftType === 'product_setup'
+              ? '保存后将重新校验商品名称、分类、品牌、单位、仓库、售价和初始库存；不会创建商品、价格或库存单据。'
+              : editingDraftType === 'inventory_adjustment'
+                ? '保存后将重新查询真实商品、仓库、库存、单位和估值参考，并生成新版本；不会提交任何库存单据。'
+                : '保存后将重新查询真实客户或供应商、商品、仓库、单位和当前参考价，并生成新版本。'
           }
           type="info"
           style={{ marginBottom: 16 }}
@@ -1236,7 +1299,82 @@ export default function AiPage() {
           <Form.Item name="company" hidden>
             <Input />
           </Form.Item>
-          {editingDraftType === 'inventory_adjustment' ? (
+          {editingDraftType === 'product_setup' ? (
+            <>
+              <div
+                style={{
+                  display: 'grid',
+                  gap: 12,
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                }}
+              >
+                <Form.Item
+                  label="商品名称"
+                  name="itemName"
+                  rules={[{ required: true, message: '请输入商品名称' }]}
+                >
+                  <Input />
+                </Form.Item>
+                <Form.Item label="商品编码" name="itemCode">
+                  <Input placeholder="不填则由后端生成" />
+                </Form.Item>
+                <Form.Item label="商品分类" name="itemGroup">
+                  <RemoteLinkSelect
+                    doctype="Item Group"
+                    filters={{ is_group: 0 }}
+                    placeholder="选择商品分类"
+                  />
+                </Form.Item>
+                <Form.Item label="品牌" name="brand">
+                  <RemoteLinkSelect doctype="Brand" placeholder="选择品牌" />
+                </Form.Item>
+                <Form.Item
+                  label="库存单位"
+                  name="stockUom"
+                  rules={[{ required: true, message: '请选择库存单位' }]}
+                >
+                  <UomSelect />
+                </Form.Item>
+                <Form.Item label="初始库存单位" name="openingUom">
+                  <UomSelect />
+                </Form.Item>
+                <Form.Item label="初始库存数量" name="openingQty">
+                  <InputNumber min={0} style={{ width: '100%' }} />
+                </Form.Item>
+                <Form.Item label="入库仓库" name="warehouse">
+                  <RemoteLinkSelect
+                    doctype="Warehouse"
+                    filters={{
+                      company: draftForm.getFieldValue('company'),
+                      disabled: 0,
+                      is_group: 0,
+                    }}
+                    placeholder="有初始库存时必须选择"
+                  />
+                </Form.Item>
+                <Form.Item label="标准售价" name="standardSellingRate">
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
+                <Form.Item label="库存估值价" name="valuationRate">
+                  <InputNumber
+                    min={0}
+                    precision={2}
+                    style={{ width: '100%' }}
+                  />
+                </Form.Item>
+                <Form.Item label="币种" name="currency">
+                  <CurrencySelect />
+                </Form.Item>
+              </div>
+              <Form.Item label="商品描述" name="description">
+                <Input.TextArea maxLength={2000} rows={3} />
+              </Form.Item>
+            </>
+          ) : editingDraftType === 'inventory_adjustment' ? (
             <>
               <div
                 style={{

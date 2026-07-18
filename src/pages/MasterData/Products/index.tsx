@@ -26,7 +26,7 @@ import {
   Typography,
   Upload,
 } from 'antd';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
@@ -741,6 +741,68 @@ const ProductsPage: React.FC = () => {
   const selectedItemCodes = selectedRowKeys.map(String);
   const validImportRows = importRows.filter((row) => !row.error);
 
+  useEffect(() => {
+    const draftId = new URLSearchParams(window.location.search).get('ai_draft');
+    if (!draftId) return;
+    const storageKey = `myapp:ai-product-setup-draft:${draftId}`;
+    const stored = sessionStorage.getItem(storageKey);
+    if (!stored) return;
+    try {
+      const payload = JSON.parse(stored) as Record<string, unknown>;
+      setEditingProduct(null);
+      setUploadedImageUrl(undefined);
+      form.resetFields();
+      form.setFieldsValue({
+        brand: typeof payload.brand === 'string' ? payload.brand : undefined,
+        company:
+          typeof payload.company === 'string' ? payload.company : undefined,
+        currency:
+          typeof payload.currency === 'string' ? payload.currency : 'CNY',
+        description:
+          typeof payload.description === 'string'
+            ? payload.description
+            : undefined,
+        disabled: false,
+        itemCode:
+          typeof payload.item_code === 'string' ? payload.item_code : undefined,
+        itemGroup:
+          typeof payload.item_group === 'string'
+            ? payload.item_group
+            : undefined,
+        itemName: String(payload.item_name ?? ''),
+        standardSellingRate:
+          payload.standard_selling_rate === null ||
+          payload.standard_selling_rate === undefined
+            ? undefined
+            : Number(payload.standard_selling_rate),
+        stockUom:
+          typeof payload.stock_uom === 'string' ? payload.stock_uom : 'Nos',
+        valuationRate:
+          payload.valuation_rate === null ||
+          payload.valuation_rate === undefined
+            ? undefined
+            : Number(payload.valuation_rate),
+        warehouse:
+          typeof payload.warehouse === 'string' ? payload.warehouse : undefined,
+        warehouseStockQty:
+          payload.warehouse_stock_qty === null ||
+          payload.warehouse_stock_qty === undefined
+            ? undefined
+            : Number(payload.warehouse_stock_qty),
+        warehouseStockUom:
+          typeof payload.warehouse_stock_uom === 'string'
+            ? payload.warehouse_stock_uom
+            : typeof payload.stock_uom === 'string'
+              ? payload.stock_uom
+              : 'Nos',
+      });
+      setModalOpen(true);
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      message.error('AI 商品草稿载荷格式不正确');
+    }
+  }, [form]);
+
   const reload = () => {
     setSelectedRowKeys([]);
     actionRef.current?.reload();
@@ -1052,7 +1114,7 @@ const ProductsPage: React.FC = () => {
           icon={<PlusOutlined />}
           key="create"
           type="primary"
-          onClick={openCreateModal}
+          onClick={() => openCreateModal()}
         >
           新增商品
         </Button>,
@@ -1328,6 +1390,11 @@ const ProductsPage: React.FC = () => {
               <Input placeholder="不填则后端自动生成" />
             </Form.Item>
           )}
+          {!editingProduct ? (
+            <Form.Item label="公司" name="company">
+              <RemoteLinkSelect doctype="Company" placeholder="选择公司" />
+            </Form.Item>
+          ) : null}
           <Form.Item
             label="商品名称"
             name="itemName"
@@ -1353,6 +1420,39 @@ const ProductsPage: React.FC = () => {
               <Input placeholder="主条码" />
             </Form.Item>
           </Space>
+          {!editingProduct ? (
+            <Space size={16} style={{ width: '100%' }}>
+              <Form.Item
+                label="初始库存数量"
+                name="warehouseStockQty"
+                style={{ minWidth: 180 }}
+              >
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item
+                label="初始库存单位"
+                name="warehouseStockUom"
+                style={{ minWidth: 180 }}
+              >
+                <UomSelect />
+              </Form.Item>
+              <Form.Item
+                label="入库仓库"
+                name="warehouse"
+                style={{ minWidth: 240 }}
+              >
+                <RemoteLinkSelect
+                  doctype="Warehouse"
+                  filters={{
+                    company: form.getFieldValue('company'),
+                    disabled: 0,
+                    is_group: 0,
+                  }}
+                  placeholder="有初始库存时必须选择"
+                />
+              </Form.Item>
+            </Space>
+          ) : null}
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
               label="库存单位"

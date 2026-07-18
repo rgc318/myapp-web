@@ -1,9 +1,12 @@
 import { callGatewayMethod } from '../api-client';
 import {
   generateAiInventoryAdjustmentDraft,
+  generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
   listAiDrafts,
+  resolveAiBusinessResultSet,
+  resolveAiScenario,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
@@ -116,6 +119,89 @@ describe('AI domain service', () => {
     expect(result.items[0].messageCount).toBe(2);
   });
 
+  it('maps versioned business result metadata and document citations', () => {
+    const resultSet = resolveAiBusinessResultSet([
+      {
+        type: 'business_result_set',
+        id: 'RESULT-1',
+        label: '业务查询结果',
+        href: null,
+        data: {
+          schema_version: 'business-result-set-v1',
+          result_type: 'business_documents',
+          scope: {
+            company: 'rgc (Demo)',
+            date_range: 'all',
+            date_from: null,
+            date_to: null,
+            status_filter: 'all',
+            sort_by: 'latest',
+            min_amount: null,
+            limit_per_group: 3,
+          },
+          groups: [
+            {
+              entity: 'sales_order',
+              label: '销售订单',
+              requested_count: 3,
+              returned_count: 1,
+              status: 'partial',
+            },
+            {
+              entity: 'sales_invoice',
+              label: '销售发票',
+              requested_count: 3,
+              returned_count: 0,
+              status: 'empty',
+            },
+          ],
+        },
+      },
+      {
+        type: 'sales_order',
+        id: 'SAL-ORD-1',
+        label: '销售订单 SAL-ORD-1 · 客户A',
+        href: '/sales/orders/SAL-ORD-1',
+        data: {
+          party: '客户A',
+          company: 'rgc (Demo)',
+          transaction_date: '2026-07-17',
+          document_status: 'submitted',
+          currency: 'CNY',
+          amount: 2400,
+          outstanding_amount: 0,
+        },
+      },
+    ]);
+
+    expect(resultSet).toMatchObject({
+      schemaVersion: 'business-result-set-v1',
+      scope: {
+        company: 'rgc (Demo)',
+        limitPerGroup: 3,
+        sortBy: 'latest',
+      },
+    });
+    expect(resultSet?.groups).toHaveLength(2);
+    expect(resultSet?.groups[0]).toMatchObject({
+      entity: 'sales_order',
+      requestedCount: 3,
+      returnedCount: 1,
+      status: 'partial',
+    });
+    expect(resultSet?.groups[0].items[0]).toMatchObject({
+      id: 'SAL-ORD-1',
+      documentStatus: 'submitted',
+      amount: 2400,
+      currency: 'CNY',
+    });
+    expect(resultSet?.groups[1]).toMatchObject({
+      entity: 'sales_invoice',
+      returnedCount: 0,
+      status: 'empty',
+    });
+  });
+
   it('generates an inventory adjustment draft through the domain service', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
@@ -151,6 +237,53 @@ describe('AI domain service', () => {
     );
     expect(result.draft.name).toBe('AI-DRAFT-INV');
     expect(result.draft.validation.readyForHandoff).toBe(true);
+  });
+
+  it('resolves product creation and maps a product setup draft', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: { scenario: 'product_setup_draft' },
+        meta: {},
+        raw: {},
+      })
+      .mockResolvedValueOnce({
+        data: {
+          conversation: 'AI-CONV-PRODUCT',
+          run_id: 'AI-RUN-PRODUCT',
+          message: { role: 'assistant', content: '已生成商品建档草稿' },
+          draft: {
+            name: 'AI-DRAFT-PRODUCT',
+            title: '新增传承结晶',
+            status: 'draft',
+            draft_type: 'product_setup',
+            payload: { item_name: '传承结晶' },
+            validation: { ready_for_handoff: false, errors: ['缺少估值价'], warnings: [] },
+          },
+        },
+        meta: {},
+        raw: {},
+      });
+
+    await expect(resolveAiScenario('新增商品传承结晶')).resolves.toBe(
+      'product_setup_draft',
+    );
+    const result = await generateAiProductSetupDraft({
+      company: 'rgc (Demo)',
+      content: '新增商品传承结晶',
+      conversationId: 'AI-CONV-PRODUCT',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      2,
+      'generate_ai_product_setup_draft_v1',
+      {
+        company: 'rgc (Demo)',
+        content: '新增商品传承结晶',
+        conversation_id: 'AI-CONV-PRODUCT',
+      },
+    );
+    expect(result.draft.draftType).toBe('product_setup');
+    expect(result.draft.validation.readyForHandoff).toBe(false);
   });
 
   it('maps the current user draft center with filters and pagination', async () => {

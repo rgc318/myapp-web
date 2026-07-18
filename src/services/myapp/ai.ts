@@ -13,13 +13,18 @@ export type AiScenario =
   | 'report_summary'
   | 'sales_order_draft'
   | 'purchase_order_draft'
-  | 'inventory_adjustment_draft';
+  | 'inventory_adjustment_draft'
+  | 'product_setup_draft';
 
 export type AiDraft = {
   company: string | null;
   conversationId: string | null;
   creation: string | null;
-  draftType: 'sales_order' | 'purchase_order' | 'inventory_adjustment';
+  draftType:
+    | 'sales_order'
+    | 'purchase_order'
+    | 'inventory_adjustment'
+    | 'product_setup';
   modified: string | null;
   name: string;
   title: string;
@@ -38,6 +43,54 @@ export type AiCitation = {
   label: string;
   href: string | null;
   data: Record<string, unknown>;
+};
+
+export type AiBusinessDocumentType =
+  | 'sales_order'
+  | 'sales_invoice'
+  | 'purchase_order'
+  | 'purchase_invoice';
+
+export type AiBusinessDocumentResult = {
+  amount: number;
+  company: string | null;
+  currency: string;
+  deliveryDate: string | null;
+  documentStatus: string | null;
+  dueDate: string | null;
+  href: string | null;
+  id: string;
+  label: string;
+  outstandingAmount: number;
+  paidAmount: number;
+  party: string | null;
+  transactionDate: string | null;
+  type: AiBusinessDocumentType;
+};
+
+export type AiBusinessResultGroup = {
+  entity: AiBusinessDocumentType;
+  items: AiBusinessDocumentResult[];
+  label: string;
+  requestedCount: number | null;
+  returnedCount: number;
+  status: 'success' | 'partial' | 'empty';
+};
+
+export type AiBusinessResultSet = {
+  groups: AiBusinessResultGroup[];
+  resultType: 'business_documents';
+  schemaVersion: string;
+  scope: {
+    company: string | null;
+    dateFrom: string | null;
+    dateRange: string | null;
+    dateTo: string | null;
+    limitPerGroup: number | null;
+    minAmount: number | null;
+    sortBy: string | null;
+    statusFilter: string | null;
+  };
 };
 
 export type AiChatMessage = {
@@ -185,6 +238,122 @@ function mapCitation(value: unknown): AiCitation {
   };
 }
 
+const BUSINESS_DOCUMENT_TYPES: AiBusinessDocumentType[] = [
+  'sales_order',
+  'sales_invoice',
+  'purchase_order',
+  'purchase_invoice',
+];
+
+const BUSINESS_DOCUMENT_LABELS: Record<AiBusinessDocumentType, string> = {
+  purchase_invoice: '采购发票',
+  purchase_order: '采购订单',
+  sales_invoice: '销售发票',
+  sales_order: '销售订单',
+};
+
+function optionalText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function isBusinessDocumentType(value: unknown): value is AiBusinessDocumentType {
+  return BUSINESS_DOCUMENT_TYPES.includes(value as AiBusinessDocumentType);
+}
+
+export function resolveAiBusinessResultSet(
+  citations: AiCitation[] = [],
+): AiBusinessResultSet | null {
+  const resultSetCitation = citations.find(
+    (citation) => citation.type === 'business_result_set',
+  );
+  const resultSetData = readObject(resultSetCitation?.data);
+  const scope = readObject(resultSetData.scope);
+  const documentRows = citations
+    .filter((citation) => isBusinessDocumentType(citation.type))
+    .map<AiBusinessDocumentResult>((citation) => ({
+      amount: toNumber(citation.data.amount),
+      company: optionalText(citation.data.company),
+      currency: optionalText(citation.data.currency) ?? 'CNY',
+      deliveryDate: optionalText(citation.data.delivery_date),
+      documentStatus: optionalText(citation.data.document_status),
+      dueDate: optionalText(citation.data.due_date),
+      href: citation.href,
+      id: citation.id ?? citation.label,
+      label: citation.label,
+      outstandingAmount: toNumber(citation.data.outstanding_amount),
+      paidAmount: toNumber(citation.data.paid_amount),
+      party: optionalText(citation.data.party),
+      transactionDate: optionalText(citation.data.transaction_date),
+      type: citation.type as AiBusinessDocumentType,
+    }));
+
+  if (!resultSetCitation && !documentRows.length) {
+    return null;
+  }
+
+  const groupMetadata = Array.isArray(resultSetData.groups)
+    ? resultSetData.groups.map((group) => readObject(group))
+    : [];
+  const groupTypes = groupMetadata.length
+    ? groupMetadata
+        .map((group) => group.entity)
+        .filter(isBusinessDocumentType)
+    : BUSINESS_DOCUMENT_TYPES.filter((type) =>
+        documentRows.some((row) => row.type === type),
+      );
+
+  const groups = groupTypes.map<AiBusinessResultGroup>((entity) => {
+    const metadata =
+      groupMetadata.find((group) => group.entity === entity) ?? {};
+    const items = documentRows.filter((row) => row.type === entity);
+    const requestedCount =
+      metadata.requested_count === null ||
+      metadata.requested_count === undefined
+        ? null
+        : toNumber(metadata.requested_count);
+    const statusValue = optionalText(metadata.status);
+    const status =
+      statusValue === 'empty' || statusValue === 'partial'
+        ? statusValue
+        : items.length === 0
+          ? 'empty'
+          : requestedCount !== null && items.length < requestedCount
+            ? 'partial'
+            : 'success';
+    return {
+      entity,
+      items,
+      label: optionalText(metadata.label) ?? BUSINESS_DOCUMENT_LABELS[entity],
+      requestedCount,
+      returnedCount: items.length,
+      status,
+    };
+  });
+
+  return {
+    groups,
+    resultType: 'business_documents',
+    schemaVersion:
+      optionalText(resultSetData.schema_version) ?? 'business-result-set-v0',
+    scope: {
+      company: optionalText(scope.company),
+      dateFrom: optionalText(scope.date_from),
+      dateRange: optionalText(scope.date_range),
+      dateTo: optionalText(scope.date_to),
+      limitPerGroup:
+        scope.limit_per_group === null || scope.limit_per_group === undefined
+          ? null
+          : toNumber(scope.limit_per_group),
+      minAmount:
+        scope.min_amount === null || scope.min_amount === undefined
+          ? null
+          : toNumber(scope.min_amount),
+      sortBy: optionalText(scope.sort_by),
+      statusFilter: optionalText(scope.status_filter),
+    },
+  };
+}
+
 function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
   const row = readObject(value);
   const validation = readObject(row.validation);
@@ -194,7 +363,9 @@ function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
       typeof row.conversation === 'string' ? row.conversation : null,
     creation: typeof row.creation === 'string' ? row.creation : null,
     draftType:
-      row.draft_type === 'purchase_order'
+      row.draft_type === 'product_setup'
+        ? 'product_setup'
+        : row.draft_type === 'purchase_order'
         ? 'purchase_order'
         : row.draft_type === 'inventory_adjustment'
           ? 'inventory_adjustment'
@@ -465,6 +636,34 @@ export async function generateAiInventoryAdjustmentDraft(payload: {
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_inventory_adjustment_draft_v1',
+    {
+      content: payload.content,
+      company: payload.company,
+      ...(payload.conversationId
+        ? { conversation_id: payload.conversationId }
+        : {}),
+    },
+  );
+  const data = readObject(result.data);
+  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+}
+
+export async function resolveAiScenario(content: string): Promise<AiScenario> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'resolve_ai_scenario_v1',
+    { content },
+  );
+  const scenario = String(readObject(result.data).scenario ?? 'general');
+  return scenario as AiScenario;
+}
+
+export async function generateAiProductSetupDraft(payload: {
+  content: string;
+  conversationId?: string | null;
+  company: string;
+}): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'generate_ai_product_setup_draft_v1',
     {
       content: payload.content,
       company: payload.company,

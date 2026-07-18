@@ -16,6 +16,7 @@ import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
 const DRAFT_TYPE_LABELS: Record<AiDraft['draftType'], string> = {
   inventory_adjustment: '库存调整',
+  product_setup: '商品建档',
   purchase_order: '采购订单',
   sales_order: '销售订单',
 };
@@ -78,6 +79,118 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
       : party;
   const businessDate =
     payload.posting_date ?? payload.transaction_date ?? payload.schedule_date;
+
+  if (draft.draftType === 'product_setup') {
+    return (
+      <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <Descriptions
+          bordered
+          column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
+          size="small"
+          items={[
+            {
+              key: 'type',
+              label: '草稿类型',
+              children: DRAFT_TYPE_LABELS[draft.draftType],
+            },
+            {
+              key: 'company',
+              label: '公司',
+              children: displayValue(payload.company ?? draft.company),
+            },
+            {
+              key: 'itemName',
+              label: '商品名称',
+              children: displayValue(payload.item_name),
+            },
+            {
+              key: 'itemCode',
+              label: '商品编码',
+              children: displayValue(payload.item_code),
+            },
+            {
+              key: 'itemGroup',
+              label: '商品分类',
+              children: displayValue(payload.item_group),
+            },
+            {
+              key: 'brand',
+              label: '品牌',
+              children: displayValue(payload.brand),
+            },
+            {
+              key: 'stockUom',
+              label: '库存单位',
+              children: resolveDisplayUom(
+                typeof payload.stock_uom === 'string'
+                  ? payload.stock_uom
+                  : null,
+                typeof payload.stock_uom_display === 'string'
+                  ? payload.stock_uom_display
+                  : null,
+              ),
+            },
+            {
+              key: 'sellingRate',
+              label: '标准售价',
+              children: formatCurrencyValue(
+                payload.standard_selling_rate as number | string | null,
+                typeof payload.currency === 'string' ? payload.currency : 'CNY',
+              ),
+            },
+            {
+              key: 'openingStock',
+              label: '初始库存',
+              children: `${formatNumber(payload.opening_qty)} ${resolveDisplayUom(
+                typeof payload.opening_uom === 'string'
+                  ? payload.opening_uom
+                  : null,
+                typeof payload.opening_uom_display === 'string'
+                  ? payload.opening_uom_display
+                  : null,
+              )}`,
+            },
+            {
+              key: 'warehouse',
+              label: '入库仓库',
+              children: displayValue(payload.warehouse),
+            },
+            {
+              key: 'valuationRate',
+              label: '库存估值价',
+              children: formatCurrencyValue(
+                payload.valuation_rate as number | string | null,
+                typeof payload.currency === 'string' ? payload.currency : 'CNY',
+              ),
+            },
+            {
+              key: 'description',
+              label: '商品描述',
+              span: 2,
+              children: displayValue(payload.description),
+            },
+          ]}
+        />
+        {draft.validation.errors.map((error) => (
+          <Alert key={error} showIcon title={error} type="error" />
+        ))}
+        {draft.validation.warnings.map((warning) => (
+          <Alert key={warning} showIcon title={warning} type="warning" />
+        ))}
+        {!draft.validation.errors.length ? (
+          <Alert
+            showIcon
+            title={
+              draft.validation.readyForHandoff
+                ? '商品、售价和初始库存草稿已通过校验，可以交接商品页面。'
+                : '商品建档草稿尚未满足交接条件。'
+            }
+            type={draft.validation.readyForHandoff ? 'success' : 'info'}
+          />
+        ) : null}
+      </Space>
+    );
+  }
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>

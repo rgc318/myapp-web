@@ -94,6 +94,7 @@ const SCENARIOS = [
   'sales_order_draft',
   'purchase_order_draft',
   'inventory_adjustment_draft',
+  'product_setup_draft',
 ];
 const CAPABILITIES = [
   'fast_chat',
