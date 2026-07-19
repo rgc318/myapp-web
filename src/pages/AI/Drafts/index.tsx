@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  EditOutlined,
   EyeOutlined,
   MessageOutlined,
   SendOutlined,
@@ -26,6 +27,7 @@ import { useRef, useState } from 'react';
 import {
   type AiDraft,
   discardAiDraft,
+  executeAiDraft,
   getAiDraft,
   listAiDrafts,
   listAiDraftVersions,
@@ -33,6 +35,7 @@ import {
   restoreAiDraftVersion,
 } from '@/services/myapp/ai';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import { AiDraftEditorModal } from '../components/AiDraftEditorModal';
 import {
   AiDraftBusinessReview,
   AiDraftRawPayload,
@@ -49,6 +52,7 @@ const DRAFT_TYPE: Record<AiDraft['draftType'], string> = {
 const STATUS: Record<string, { color: string; text: string }> = {
   discarded: { color: 'default', text: '已放弃' },
   draft: { color: 'processing', text: '待复核' },
+  executed: { color: 'success', text: '已执行' },
   handed_off: { color: 'success', text: '已交接业务编辑器' },
 };
 
@@ -59,6 +63,8 @@ export default function AiDraftsPage() {
   const [versions, setVersions] = useState<Record<string, unknown>[]>([]);
   const [versionLoading, setVersionLoading] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
+  const [executeLoading, setExecuteLoading] = useState(false);
+  const [editingDraft, setEditingDraft] = useState<AiDraft | null>(null);
 
   const loadDraftReview = async (draftName: string) => {
     const nextDetail = await getAiDraft(draftName);
@@ -118,6 +124,25 @@ export default function AiDraftsPage() {
     }
   };
 
+  const execute = (draft: AiDraft) => {
+    Modal.confirm({
+      content:
+        '系统会锁定当前草稿版本，并通过正式业务服务再次检查权限、主数据、单位、价格或实时库存。成功后会在草稿中保存正式业务对象回执。',
+      okText: `确认执行${DRAFT_TYPE[draft.draftType]}`,
+      onOk: async () => {
+        setExecuteLoading(true);
+        try {
+          await executeAiDraft(draft.name, draft.version);
+          await loadDraftReview(draft.name);
+          actionRef.current?.reload();
+        } finally {
+          setExecuteLoading(false);
+        }
+      },
+      title: `确认执行草稿 ${draft.name}？`,
+    });
+  };
+
   const discard = (draft: AiDraft) => {
     Modal.confirm({
       content: '放弃后草稿仍保留审计记录，但不能继续交接业务编辑器。',
@@ -171,6 +196,7 @@ export default function AiDraftsPage() {
         discarded: { text: '已放弃' },
         draft: { text: '待复核' },
         handed_off: { text: '已交接' },
+        executed: { text: '已执行' },
       },
       width: 130,
       render: (_, row) => {
@@ -226,8 +252,19 @@ export default function AiDraftsPage() {
           </a>
         ) : null,
         row.status === 'draft' && row.validation.readyForHandoff ? (
+          <a key="execute" onClick={() => execute(row)}>
+            <SendOutlined /> 确认执行
+          </a>
+        ) : null,
+        row.status === 'draft' ? (
+          <a key="edit" onClick={() => setEditingDraft(row)}>
+            <EditOutlined />
+            {row.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
+          </a>
+        ) : null,
+        row.status === 'draft' && row.validation.readyForHandoff ? (
           <a key="handoff" onClick={() => void handoff(row)}>
-            <SendOutlined /> 交接
+            在业务编辑器继续
           </a>
         ) : null,
       ],
@@ -237,11 +274,11 @@ export default function AiDraftsPage() {
   return (
     <PageContainer
       onBack={() => history.push('/ai')}
-      subTitle="集中复核、追踪和交接由 AI 生成的业务草稿"
+      subTitle="集中复核、编辑、确认执行和追踪由 AI 生成的业务草稿"
       title="我的 AI 草稿"
     >
       <Alert
-        description="草稿只属于当前登录用户。进入业务编辑器后仍需人工核对并主动保存，AI 不会创建或提交正式单据。"
+        description="草稿只属于当前登录用户。AI 只生成候选；正式业务操作必须由用户确认，并继续通过既有权限、幂等和审计服务执行。复杂场景仍可选择进入业务编辑器。"
         showIcon
         style={{ marginBottom: 16 }}
         type="info"
@@ -272,11 +309,28 @@ export default function AiDraftsPage() {
               detail.validation.readyForHandoff ? (
                 <Button
                   icon={<SendOutlined />}
-                  loading={handoffLoading}
-                  onClick={() => void handoff(detail)}
+                  loading={executeLoading}
+                  onClick={() => execute(detail)}
                   type="primary"
                 >
-                  进入业务编辑器
+                  确认执行
+                </Button>
+              ) : null}
+              {detail.status === 'draft' ? (
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => setEditingDraft(detail)}
+                >
+                  {detail.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
+                </Button>
+              ) : null}
+              {detail.status === 'draft' &&
+              detail.validation.readyForHandoff ? (
+                <Button
+                  loading={handoffLoading}
+                  onClick={() => void handoff(detail)}
+                >
+                  在业务编辑器继续
                 </Button>
               ) : null}
               {detail.status === 'draft' ? (
@@ -360,6 +414,16 @@ export default function AiDraftsPage() {
           </Space>
         ) : null}
       </Drawer>
+      <AiDraftEditorModal
+        draft={editingDraft}
+        onClose={() => setEditingDraft(null)}
+        onUpdated={(updated) => {
+          setEditingDraft(updated);
+          setDetail(updated);
+          void loadDraftReview(updated.name);
+          actionRef.current?.reload();
+        }}
+      />
     </PageContainer>
   );
 }

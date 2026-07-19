@@ -9,6 +9,7 @@ import XMarkdown from '@ant-design/x-markdown';
 import { Button, Space, Tag, Typography } from 'antd';
 import React, { useEffect, useState } from 'react';
 import {
+  type AiBusinessDocumentResult,
   type AiChatMessage,
   type AiCitation,
   resolveAiBusinessResultSet,
@@ -32,9 +33,12 @@ type Props = {
   feedback?: 'positive' | 'negative';
   onDiscardDraft: (draftId: string) => void;
   onEditDraft: (citation: AiCitation) => void;
+  onExecuteDraft: (draftId: string, version: number) => void;
   onFeedback: (rating: 'positive' | 'negative') => void;
   onHandoffDraft: (draftId: string) => void;
+  onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
+  onOpenProduct: (citation: AiCitation) => void;
   progressMessage?: string;
   progressStartedAt?: number | null;
   runId?: string | null;
@@ -90,19 +94,49 @@ function CitationCard({
   citation,
   onDiscardDraft,
   onEditDraft,
+  onExecuteDraft,
   onHandoffDraft,
   onOpenDraftHistory,
+  onOpenProduct,
 }: Pick<
   Props,
-  'onDiscardDraft' | 'onEditDraft' | 'onHandoffDraft' | 'onOpenDraftHistory'
+  | 'onDiscardDraft'
+  | 'onEditDraft'
+  | 'onExecuteDraft'
+  | 'onHandoffDraft'
+  | 'onOpenDraftHistory'
+  | 'onOpenProduct'
 > & { citation: AiCitation }) {
   const validation = draftValidation(citation);
+  const execution = citation.data.execution as
+    | Record<string, unknown>
+    | undefined;
+  const targetName = String(execution?.target_name ?? '');
+  const targetDoctype = String(execution?.target_doctype ?? '');
+  const targetHref =
+    targetDoctype === 'Sales Order'
+      ? `/sales/orders/${encodeURIComponent(targetName)}`
+      : targetDoctype === 'Purchase Order'
+        ? `/purchase/orders/${encodeURIComponent(targetName)}`
+        : targetDoctype === 'Item'
+          ? `/master-data/products/${encodeURIComponent(targetName)}`
+          : targetDoctype === 'Stock Entry'
+            ? '/inventory/ledger'
+            : null;
   return (
     <ProCard
       size="small"
       title={citation.label}
       extra={
-        citation.href ? (
+        citation.type === 'product' ? (
+          <Button
+            onClick={() => onOpenProduct(citation)}
+            size="small"
+            type="link"
+          >
+            当前页查看
+          </Button>
+        ) : citation.href ? (
           <Button href={citation.href} size="small" type="link">
             查看详情
           </Button>
@@ -143,16 +177,32 @@ function CitationCard({
         <Space orientation="vertical" size={8}>
           <Space wrap>
             <Tag>版本 {Number(citation.data.version ?? 1)}</Tag>
-            <Tag color={citation.data.status === 'draft' ? 'blue' : 'default'}>
-              {String(citation.data.status ?? 'draft')}
+            <Tag
+              color={
+                citation.data.status === 'executed'
+                  ? 'success'
+                  : citation.data.status === 'draft'
+                    ? 'blue'
+                    : 'default'
+              }
+            >
+              {citation.data.status === 'executed'
+                ? '已执行'
+                : citation.data.status === 'discarded'
+                  ? '已放弃'
+                  : citation.data.status === 'handed_off'
+                    ? '已进入业务编辑器'
+                    : '待复核'}
             </Tag>
           </Space>
           <Typography.Text>
-            {validation?.ready_for_handoff
-              ? citation.data.draft_type === 'inventory_adjustment'
-                ? '草稿已通过实时库存校验，可进入库存调整编辑器复核。'
-                : `草稿已通过后端校验，可进入${citation.data.draft_type === 'purchase_order' ? '采购' : '销售'}订单编辑器复核。`
-              : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
+            {citation.data.status === 'executed'
+              ? `已创建正式业务对象 ${targetName || '-'}。`
+              : validation?.ready_for_handoff
+                ? citation.data.draft_type === 'inventory_adjustment'
+                  ? '草稿已通过实时库存校验，可由当前用户确认执行。'
+                  : '草稿已通过后端校验，可由当前用户确认执行。'
+                : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
           </Typography.Text>
           {Array.isArray(validation?.errors)
             ? validation.errors.map((error) => (
@@ -166,7 +216,7 @@ function CitationCard({
               disabled={citation.data.status !== 'draft'}
               onClick={() => onEditDraft(citation)}
             >
-              编辑并重新校验
+              {validation?.ready_for_handoff ? '编辑草稿' : '完善草稿'}
             </Button>
             <Button
               onClick={() => onOpenDraftHistory(String(citation.id ?? ''))}
@@ -175,17 +225,35 @@ function CitationCard({
             </Button>
             <Button
               disabled={
-                citation.data.status === 'discarded' ||
+                citation.data.status !== 'draft' ||
                 !validation?.ready_for_handoff
               }
-              onClick={() => onHandoffDraft(String(citation.id ?? ''))}
+              onClick={() =>
+                onExecuteDraft(
+                  String(citation.id ?? ''),
+                  Number(citation.data.version ?? 1),
+                )
+              }
               type="primary"
             >
-              进入业务编辑器
+              确认执行
             </Button>
+            {targetHref && targetName ? (
+              <Button href={targetHref}>查看正式业务对象</Button>
+            ) : (
+              <Button
+                disabled={
+                  citation.data.status === 'discarded' ||
+                  !validation?.ready_for_handoff
+                }
+                onClick={() => onHandoffDraft(String(citation.id ?? ''))}
+              >
+                在业务编辑器继续
+              </Button>
+            )}
             <Button
               danger
-              disabled={citation.data.status === 'discarded'}
+              disabled={citation.data.status !== 'draft'}
               onClick={() => onDiscardDraft(String(citation.id ?? ''))}
             >
               {citation.data.status === 'discarded' ? '已放弃' : '放弃草稿'}
@@ -231,9 +299,12 @@ export function AiMessageContent({
   feedback,
   onDiscardDraft,
   onEditDraft,
+  onExecuteDraft,
   onFeedback,
   onHandoffDraft,
+  onOpenBusinessDocument,
   onOpenDraftHistory,
+  onOpenProduct,
   progressMessage,
   progressStartedAt,
   runId,
@@ -255,7 +326,10 @@ export function AiMessageContent({
   return (
     <div className={styles.messageBody}>
       {businessResultSet ? (
-        <BusinessResultPanel resultSet={businessResultSet} />
+        <BusinessResultPanel
+          onOpenDocument={onOpenBusinessDocument}
+          resultSet={businessResultSet}
+        />
       ) : null}
       {!content && streaming ? (
         <GenerationProgress
@@ -287,8 +361,10 @@ export function AiMessageContent({
               key={`${citation.type}-${citation.id ?? index}`}
               onDiscardDraft={onDiscardDraft}
               onEditDraft={onEditDraft}
+              onExecuteDraft={onExecuteDraft}
               onHandoffDraft={onHandoffDraft}
               onOpenDraftHistory={onOpenDraftHistory}
+              onOpenProduct={onOpenProduct}
             />
           ))}
         </div>

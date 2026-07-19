@@ -48,19 +48,25 @@ import { CurrencySelect } from '@/components/CurrencySelect';
 import { UomSelect } from '@/components/UomSelect';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
+  type AiBusinessDocumentResult,
   type AiChatMessage,
   type AiChatResult,
+  type AiCitation,
   type AiConversation,
+  type AiDraft,
   type AiScenario,
   archiveAiConversation,
   discardAiDraft,
+  executeAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
   generateAiPurchaseOrderDraft,
   generateAiSalesOrderDraft,
   getAiConversation,
+  getAiDraft,
   listAiConversations,
   listAiDraftVersions,
+  listAiSelectableModels,
   prepareAiDraftHandoff,
   resolveAiScenario,
   restoreAiDraftVersion,
@@ -78,6 +84,8 @@ import {
   AiRunInspector,
   type AiToolProgress,
 } from './components/AiRunInspector';
+import { BusinessDocumentDrawer } from './components/BusinessDocumentDrawer';
+import { ProductDetailDrawer } from './components/ProductDetailDrawer';
 import { useAiWorkspaceStyles } from './styles';
 
 type ChatRow = AiMessageRow;
@@ -106,7 +114,7 @@ const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
     scenario: 'inventory_adjustment_draft',
   },
   {
-    content: '新增商品“传承结晶”，库存单位为个，标准售价 9999 元。',
+    content: '新增商品“传承结晶”，库存基准单位为个，标准售价 9999 元。',
     scenario: 'product_setup_draft',
   },
 ];
@@ -175,8 +183,16 @@ export default function AiPage() {
   const [toolProgress, setToolProgress] = useState<AiToolProgress[]>([]);
   const [retryRequest, setRetryRequest] = useState<{
     content: string;
+    modelAlias: string | null;
     scenario: AiScenario;
   } | null>(null);
+  const [selectableModels, setSelectableModels] = useState<
+    Awaited<ReturnType<typeof listAiSelectableModels>>
+  >([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [selectedModelAlias, setSelectedModelAlias] = useState<string | null>(
+    null,
+  );
   const [feedbackByRun, setFeedbackByRun] = useState<
     Record<string, 'positive' | 'negative'>
   >({});
@@ -188,6 +204,9 @@ export default function AiPage() {
     'sales_order' | 'purchase_order' | 'inventory_adjustment' | 'product_setup'
   >('sales_order');
   const [draftSaving, setDraftSaving] = useState(false);
+  const [editingDraftValidation, setEditingDraftValidation] = useState<
+    AiDraft['validation'] | null
+  >(null);
   const [historyDraftId, setHistoryDraftId] = useState<string | null>(null);
   const [draftVersions, setDraftVersions] = useState<Record<string, unknown>[]>(
     [],
@@ -195,6 +214,14 @@ export default function AiPage() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
+  const [businessDocument, setBusinessDocument] =
+    useState<AiBusinessDocumentResult | null>(null);
+  const [productCitation, setProductCitation] = useState<AiCitation | null>(
+    null,
+  );
+  const draftOpeningQty = Form.useWatch('openingQty', draftForm);
+  const draftStockUom = Form.useWatch('stockUom', draftForm);
+  const draftHasOpeningStock = Number(draftOpeningQty ?? 0) > 0;
   const streamAbortRef = useRef<AbortController | null>(null);
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
@@ -205,6 +232,30 @@ export default function AiPage() {
       setSelectedCompany(defaultCompany);
     }
   }, [conversationId, defaultCompany, selectedCompany]);
+
+  useEffect(() => {
+    let active = true;
+    setModelsLoading(true);
+    void listAiSelectableModels()
+      .then((models) => {
+        if (!active) return;
+        setSelectableModels(models);
+        setSelectedModelAlias((current) =>
+          current && models.some((model) => model.modelAlias === current)
+            ? current
+            : null,
+        );
+      })
+      .catch(() => {
+        if (active) setSelectableModels([]);
+      })
+      .finally(() => {
+        if (active) setModelsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const refreshConversations = useCallback(async () => {
     try {
@@ -302,9 +353,15 @@ export default function AiPage() {
     if (targetId) void openConversation(targetId);
   }, []);
 
-  const submit = async (contentValue?: string, scenarioValue?: AiScenario) => {
+  const submit = async (
+    contentValue?: string,
+    scenarioValue?: AiScenario,
+    modelAliasValue?: string | null,
+  ) => {
     const content = (contentValue ?? draft).trim();
     const requestedScenario = scenarioValue ?? scenario;
+    const requestedModelAlias =
+      modelAliasValue === undefined ? selectedModelAlias : modelAliasValue;
     if (!content || loading) {
       return;
     }
@@ -344,7 +401,9 @@ export default function AiPage() {
     const assistantMessage = createMessage('assistant', '');
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setDraft('');
-    setScenario(requestedScenario);
+    // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
+    // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
+    setScenario('auto');
     setLastResult(null);
     setActiveRunId(null);
     setRunError(null);
@@ -374,6 +433,7 @@ export default function AiPage() {
           company: effectiveCompany as string,
           content,
           conversationId,
+          modelAlias: requestedModelAlias,
         };
         const result =
           resolvedScenario === 'sales_order_draft'
@@ -414,6 +474,7 @@ export default function AiPage() {
           company: effectiveCompany,
           content,
           conversationId,
+          modelAlias: requestedModelAlias,
           scenario: resolvedScenario,
         },
         (event) => {
@@ -548,7 +609,11 @@ export default function AiPage() {
       if (caught instanceof DOMException && caught.name === 'AbortError') {
         setRunStatus('stopped');
         setRunProgress(null);
-        setRetryRequest({ content, scenario: resolvedScenario });
+        setRetryRequest({
+          content,
+          modelAlias: requestedModelAlias,
+          scenario: resolvedScenario,
+        });
         message.info('已停止本次生成，当前已接收内容会保留。');
       } else {
         setRunStatus('failed');
@@ -556,7 +621,11 @@ export default function AiPage() {
         setRunError(
           caught instanceof Error ? caught.message : 'AI 服务调用失败',
         );
-        setRetryRequest({ content, scenario: resolvedScenario });
+        setRetryRequest({
+          content,
+          modelAlias: requestedModelAlias,
+          scenario: resolvedScenario,
+        });
         setMessages((current) =>
           current.filter((item) => item.id !== assistantMessage.id),
         );
@@ -611,11 +680,97 @@ export default function AiPage() {
     }
   };
 
-  const openDraftEditor = (
+  const executeDraft = (draftId: string, version: number) => {
+    const citation = messages
+      .flatMap((item) => item.citations ?? [])
+      .find((item) => item.id === draftId);
+    const draftType = String(citation?.data.draft_type ?? 'business');
+    const typeLabel =
+      draftType === 'product_setup'
+        ? '商品建档'
+        : draftType === 'purchase_order'
+          ? '采购订单'
+          : draftType === 'inventory_adjustment'
+            ? '库存调整'
+            : '销售订单';
+    Modal.confirm({
+      content:
+        '系统会使用当前草稿版本重新执行权限、主数据、单位、价格或库存校验，并调用正式业务服务。成功后将生成不可变业务回执。',
+      okText: `确认执行${typeLabel}`,
+      onOk: async () => {
+        const result = await executeAiDraft(draftId, version);
+        setMessages((current) =>
+          current.map((item) => ({
+            ...item,
+            citations: item.citations?.map((currentCitation) =>
+              currentCitation.id === draftId
+                ? {
+                    ...currentCitation,
+                    data: {
+                      ...currentCitation.data,
+                      execution: {
+                        executed_at: result.execution.executedAt,
+                        executed_by: result.execution.executedBy,
+                        request_id: result.execution.requestId,
+                        result: result.execution.result,
+                        target_doctype: result.execution.targetDoctype,
+                        target_name: result.execution.targetName,
+                      },
+                      status: result.draft.status,
+                      version: result.draft.version,
+                    },
+                  }
+                : currentCitation,
+            ),
+          })),
+        );
+      },
+      title: `确认执行草稿 ${draftId}？`,
+    });
+  };
+
+  const applyUpdatedDraft = (updated: AiDraft) => {
+    setMessages((current) =>
+      current.map((item) => ({
+        ...item,
+        citations: item.citations?.map((citation) =>
+          citation.id === updated.name
+            ? {
+                ...citation,
+                data: {
+                  ...citation.data,
+                  execution: updated.execution
+                    ? {
+                        executed_at: updated.execution.executedAt,
+                        executed_by: updated.execution.executedBy,
+                        request_id: updated.execution.requestId,
+                        result: updated.execution.result,
+                        target_doctype: updated.execution.targetDoctype,
+                        target_name: updated.execution.targetName,
+                      }
+                    : null,
+                  payload: updated.payload,
+                  status: updated.status,
+                  validation: {
+                    errors: updated.validation.errors,
+                    ready_for_handoff: updated.validation.readyForHandoff,
+                    warnings: updated.validation.warnings,
+                  },
+                  version: updated.version,
+                },
+              }
+            : citation,
+        ),
+      })),
+    );
+  };
+
+  const openDraftEditor = async (
     citation: NonNullable<AiChatMessage['citations']>[number],
   ) => {
-    const payload = citation.data.payload as Record<string, any>;
-    const draftType =
+    const draftId = String(citation.id ?? '');
+    let payload = citation.data.payload as Record<string, any>;
+    let draftType: AiDraft['draftType'] =
       citation.data.draft_type === 'product_setup'
         ? 'product_setup'
         : citation.data.draft_type === 'inventory_adjustment'
@@ -623,51 +778,75 @@ export default function AiPage() {
           : citation.data.draft_type === 'purchase_order'
             ? 'purchase_order'
             : 'sales_order';
-    setEditingDraftId(String(citation.id ?? ''));
+    try {
+      const latestDraft = await getAiDraft(draftId);
+      payload = latestDraft.payload;
+      draftType = latestDraft.draftType;
+      setEditingDraftValidation(latestDraft.validation);
+      applyUpdatedDraft(latestDraft);
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : '草稿最新内容加载失败',
+      );
+      return;
+    }
+    draftForm.resetFields();
+    setEditingDraftId(draftId);
     setEditingDraftType(draftType);
     if (draftType === 'product_setup') {
       draftForm.setFieldsValue({
-        company: payload?.company,
-        itemName: payload?.item_name,
-        itemCode: payload?.item_code,
-        itemGroup: payload?.item_group ?? payload?.item_group_query,
         brand: payload?.brand ?? payload?.brand_query,
-        stockUom: payload?.stock_uom,
-        warehouse: payload?.warehouse ?? payload?.warehouse_query,
-        openingQty: payload?.opening_qty,
-        openingUom: payload?.opening_uom ?? payload?.stock_uom,
-        standardSellingRate: payload?.standard_selling_rate,
-        valuationRate: payload?.valuation_rate,
+        company: payload?.company,
         currency: payload?.currency ?? 'CNY',
         description: payload?.description,
+        itemCode: payload?.item_code,
+        itemGroup: payload?.item_group ?? payload?.item_group_query,
+        itemName: payload?.item_name,
+        openingQty: payload?.opening_qty,
+        standardBuyingRate:
+          payload?.standard_buying_rate ?? payload?.valuation_rate,
+        standardSellingRate: payload?.standard_selling_rate,
+        stockUom: payload?.stock_uom,
+        warehouse: payload?.warehouse ?? payload?.warehouse_query,
       });
       return;
     }
     if (draftType === 'inventory_adjustment') {
       const item = Array.isArray(payload?.items) ? payload.items[0] : {};
       draftForm.setFieldsValue({
+        adjustmentType: payload?.adjustment_type ?? 'set_target',
         company: payload?.company,
+        itemCode: item?.item_code ?? item?.item_query,
         postingDate: payload?.posting_date
           ? dayjs(payload.posting_date)
           : undefined,
-        warehouse: payload?.warehouse,
-        adjustmentType: payload?.adjustment_type ?? 'set_target',
-        itemCode: item?.item_code ?? item?.item_query,
         quantity: item?.qty,
-        uom: item?.uom,
         reason: payload?.reason ?? payload?.remarks,
+        uom: item?.uom,
+        warehouse: payload?.warehouse,
       });
       return;
     }
     draftForm.setFieldsValue({
+      company: payload?.company,
+      defaultMode:
+        (draftType === 'purchase_order'
+          ? payload?.default_purchase_mode
+          : payload?.default_sales_mode) ?? 'wholesale',
+      items: Array.isArray(payload?.items)
+        ? payload.items.map((row: Record<string, unknown>) => ({
+            itemCode: row.item_code ?? row.item_query,
+            price: row.price,
+            qty: row.qty,
+            uom: row.uom,
+            warehouse: row.warehouse,
+          }))
+        : [],
       party:
         draftType === 'purchase_order'
           ? (payload?.supplier ?? payload?.supplier_query)
           : (payload?.customer ?? payload?.customer_query),
-      company: payload?.company,
-      transactionDate: payload?.transaction_date
-        ? dayjs(payload.transaction_date)
-        : undefined,
+      remarks: payload?.remarks,
       targetDate: (
         draftType === 'purchase_order'
           ? payload?.schedule_date
@@ -679,101 +858,11 @@ export default function AiPage() {
               : payload.delivery_date,
           )
         : undefined,
-      defaultMode:
-        (draftType === 'purchase_order'
-          ? payload?.default_purchase_mode
-          : payload?.default_sales_mode) ?? 'wholesale',
+      transactionDate: payload?.transaction_date
+        ? dayjs(payload.transaction_date)
+        : undefined,
       warehouse: payload?.warehouse,
-      remarks: payload?.remarks,
-      items: Array.isArray(payload?.items)
-        ? payload.items.map((row: Record<string, unknown>) => ({
-            itemCode: row.item_code ?? row.item_query,
-            qty: row.qty,
-            uom: row.uom,
-            price: row.price,
-            warehouse: row.warehouse,
-          }))
-        : [],
     });
-  };
-
-  const saveDraftChanges = async () => {
-    if (!editingDraftId) return;
-    const values = await draftForm.validateFields();
-    setDraftSaving(true);
-    try {
-      const updated = await updateAiDraft(
-        editingDraftId,
-        editingDraftType === 'product_setup'
-          ? {
-              company: values.company,
-              item_name: values.itemName,
-              item_code: values.itemCode,
-              item_group: values.itemGroup,
-              brand: values.brand,
-              stock_uom: values.stockUom,
-              warehouse: values.warehouse,
-              opening_qty: values.openingQty,
-              opening_uom: values.openingUom,
-              standard_selling_rate: values.standardSellingRate,
-              valuation_rate: values.valuationRate,
-              currency: values.currency,
-              description: values.description,
-            }
-          : editingDraftType === 'inventory_adjustment'
-            ? {
-                company: values.company,
-                posting_date: values.postingDate?.format('YYYY-MM-DD'),
-                warehouse: values.warehouse,
-                adjustment_type: values.adjustmentType,
-                item_code: values.itemCode,
-                quantity: values.quantity,
-                uom: values.uom,
-                reason: values.reason,
-              }
-            : {
-                ...(editingDraftType === 'purchase_order'
-                  ? { supplier: values.party }
-                  : { customer: values.party }),
-                company: values.company,
-                transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
-                ...(editingDraftType === 'purchase_order'
-                  ? {
-                      schedule_date: values.targetDate?.format('YYYY-MM-DD'),
-                      default_purchase_mode: values.defaultMode,
-                    }
-                  : {
-                      delivery_date: values.targetDate?.format('YYYY-MM-DD'),
-                      default_sales_mode: values.defaultMode,
-                    }),
-                warehouse: values.warehouse,
-                remarks: values.remarks,
-                items: (values.items ?? []).map(
-                  (row: Record<string, unknown>) => ({
-                    item_code: row.itemCode,
-                    qty: row.qty,
-                    uom: row.uom,
-                    price: row.price,
-                    warehouse: row.warehouse,
-                  }),
-                ),
-              },
-      );
-      setMessages((current) =>
-        current.map((item) => ({
-          ...item,
-          citations: item.citations?.map((citation) =>
-            citation.id === editingDraftId
-              ? { ...citation, data: updated }
-              : citation,
-          ),
-        })),
-      );
-      setEditingDraftId(null);
-      message.success(`草稿已更新至版本 ${Number(updated.version ?? 0)}`);
-    } finally {
-      setDraftSaving(false);
-    }
   };
 
   const openVersionHistory = async (draftId: string) => {
@@ -783,6 +872,86 @@ export default function AiPage() {
       setDraftVersions(await listAiDraftVersions(draftId));
     } finally {
       setVersionLoading(false);
+    }
+  };
+
+  const saveDraftChanges = async () => {
+    if (!editingDraftId) return;
+    let values: Record<string, any>;
+    try {
+      values = await draftForm.validateFields();
+    } catch {
+      return;
+    }
+    setDraftSaving(true);
+    try {
+      const updated = await updateAiDraft(
+        editingDraftId,
+        editingDraftType === 'product_setup'
+          ? {
+              brand: values.brand,
+              company: values.company,
+              currency: values.currency,
+              description: values.description,
+              item_code: values.itemCode,
+              item_group: values.itemGroup,
+              item_name: values.itemName,
+              opening_qty: values.openingQty,
+              opening_uom: values.stockUom,
+              standard_buying_rate: values.standardBuyingRate,
+              standard_selling_rate: values.standardSellingRate,
+              stock_uom: values.stockUom,
+              warehouse: values.warehouse,
+            }
+          : editingDraftType === 'inventory_adjustment'
+            ? {
+                adjustment_type: values.adjustmentType,
+                company: values.company,
+                item_code: values.itemCode,
+                posting_date: values.postingDate?.format('YYYY-MM-DD'),
+                quantity: values.quantity,
+                reason: values.reason,
+                uom: values.uom,
+                warehouse: values.warehouse,
+              }
+            : {
+                ...(editingDraftType === 'purchase_order'
+                  ? { supplier: values.party }
+                  : { customer: values.party }),
+                company: values.company,
+                ...(editingDraftType === 'purchase_order'
+                  ? {
+                      default_purchase_mode: values.defaultMode,
+                      schedule_date: values.targetDate?.format('YYYY-MM-DD'),
+                    }
+                  : {
+                      default_sales_mode: values.defaultMode,
+                      delivery_date: values.targetDate?.format('YYYY-MM-DD'),
+                    }),
+                items: (values.items ?? []).map(
+                  (row: Record<string, unknown>) => ({
+                    item_code: row.itemCode,
+                    price: row.price,
+                    qty: row.qty,
+                    uom: row.uom,
+                    warehouse: row.warehouse,
+                  }),
+                ),
+                remarks: values.remarks,
+                transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
+                warehouse: values.warehouse,
+              },
+      );
+      applyUpdatedDraft(updated);
+      setEditingDraftValidation(updated.validation);
+      if (updated.validation.readyForHandoff) {
+        setEditingDraftId(null);
+        message.success(`草稿已保存，可以继续确认（版本 ${updated.version}）`);
+      } else {
+        message.warning('草稿已保存，请根据提示补充必填信息。');
+      }
+    } finally {
+      setDraftSaving(false);
     }
   };
 
@@ -925,6 +1094,7 @@ export default function AiPage() {
           feedback={item.runId ? feedbackByRun[item.runId] : undefined}
           onDiscardDraft={(draftId) => void discardDraft(draftId)}
           onEditDraft={openDraftEditor}
+          onExecuteDraft={executeDraft}
           onFeedback={(rating) =>
             item.runId
               ? rating === 'positive'
@@ -933,7 +1103,9 @@ export default function AiPage() {
               : undefined
           }
           onHandoffDraft={(draftId) => void handoffDraft(draftId)}
+          onOpenBusinessDocument={setBusinessDocument}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
+          onOpenProduct={setProductCitation}
           progressMessage={
             loading && index === messages.length - 1
               ? runProgress?.message
@@ -1054,11 +1226,36 @@ export default function AiPage() {
             <div className={styles.contextBar}>
               <Space wrap>
                 <Select
+                  aria-label="AI 场景"
                   disabled={loading}
                   onChange={setScenario}
                   options={SCENARIO_OPTIONS}
                   value={scenario}
                 />
+                <Select
+                  aria-label="AI 模型"
+                  loading={modelsLoading}
+                  onChange={(value) =>
+                    setSelectedModelAlias(value === 'auto' ? null : value)
+                  }
+                  optionFilterProp="label"
+                  options={[
+                    { label: '自动选择（策略）', value: 'auto' },
+                    ...selectableModels.map((model) => ({
+                      label: model.modelAlias,
+                      value: model.modelAlias,
+                    })),
+                  ]}
+                  showSearch
+                  style={{ minWidth: 240 }}
+                  value={selectedModelAlias ?? 'auto'}
+                />
+                {selectedModelAlias ? (
+                  <Tag color="purple">固定模型：{selectedModelAlias}</Tag>
+                ) : null}
+                {scenario !== 'auto' ? (
+                  <Tag color="blue">仅本次发送</Tag>
+                ) : null}
                 {conversationId && effectiveCompany ? (
                   <Tag
                     color={
@@ -1197,6 +1394,14 @@ export default function AiPage() {
             </Spin>
           </Space>
         </Drawer>
+        <BusinessDocumentDrawer
+          document={businessDocument}
+          onClose={() => setBusinessDocument(null)}
+        />
+        <ProductDetailDrawer
+          citation={productCitation}
+          onClose={() => setProductCitation(null)}
+        />
         <Drawer
           onClose={() => setInspectorOpen(false)}
           open={inspectorOpen}
@@ -1205,7 +1410,7 @@ export default function AiPage() {
         >
           <div className={styles.drawerContent}>
             <Alert
-              description="AI 只能读取受控数据并生成草稿，不能创建、提交、取消、付款或直接调整库存。"
+              description="AI 只生成并校验候选；正式商品、订单或库存调整必须由当前用户明确确认，并继续通过既有业务权限、幂等和审计服务执行。"
               icon={<SafetyCertificateOutlined />}
               showIcon
               title="安全边界"
@@ -1217,7 +1422,11 @@ export default function AiPage() {
               onRetry={
                 retryRequest
                   ? () =>
-                      void submit(retryRequest.content, retryRequest.scenario)
+                      void submit(
+                        retryRequest.content,
+                        retryRequest.scenario,
+                        retryRequest.modelAlias,
+                      )
                   : undefined
               }
               result={lastResult}
@@ -1271,28 +1480,45 @@ export default function AiPage() {
       <Modal
         destroyOnHidden
         okButtonProps={{ loading: draftSaving }}
-        onCancel={() => setEditingDraftId(null)}
+        okText="保存草稿"
+        onCancel={() => {
+          setEditingDraftId(null);
+          setEditingDraftValidation(null);
+        }}
         onOk={() => void saveDraftChanges()}
         open={Boolean(editingDraftId)}
-        title={
+        title={`${editingDraftValidation?.readyForHandoff ? '编辑' : '完善'}${
           editingDraftType === 'product_setup'
-            ? '编辑商品建档草稿'
+            ? '商品建档'
             : editingDraftType === 'inventory_adjustment'
-              ? '编辑库存调整草稿'
-              : `编辑${editingDraftType === 'purchase_order' ? '采购' : '销售'}订单草稿`
-        }
+              ? '库存调整'
+              : `${editingDraftType === 'purchase_order' ? '采购' : '销售'}订单`
+        }草稿`}
         width={900}
       >
         <Alert
+          description={
+            editingDraftValidation?.errors.length ? (
+              <Space orientation="vertical" size={2}>
+                {editingDraftValidation.errors.map((error) => (
+                  <Typography.Text key={error} type="danger">
+                    {error}
+                  </Typography.Text>
+                ))}
+              </Space>
+            ) : undefined
+          }
           showIcon
           title={
-            editingDraftType === 'product_setup'
-              ? '保存后将重新校验商品名称、分类、品牌、单位、仓库、售价和初始库存；不会创建商品、价格或库存单据。'
-              : editingDraftType === 'inventory_adjustment'
-                ? '保存后将重新查询真实商品、仓库、库存、单位和估值参考，并生成新版本；不会提交任何库存单据。'
-                : '保存后将重新查询真实客户或供应商、商品、仓库、单位和当前参考价，并生成新版本。'
+            editingDraftValidation?.errors.length
+              ? '请补充以下信息'
+              : editingDraftType === 'product_setup'
+                ? '保存后系统会自动检查商品资料、价格和库存初始化信息；此步骤不会创建商品。'
+                : editingDraftType === 'inventory_adjustment'
+                  ? '保存后系统会自动检查商品、仓库、实时库存、单位和调整原因；此步骤不会提交库存单据。'
+                  : '保存后系统会自动检查往来单位、商品、仓库、单位和当前参考价。'
           }
-          type="info"
+          type={editingDraftValidation?.errors.length ? 'warning' : 'info'}
           style={{ marginBottom: 16 }}
         />
         <Form form={draftForm} layout="vertical">
@@ -1329,19 +1555,39 @@ export default function AiPage() {
                   <RemoteLinkSelect doctype="Brand" placeholder="选择品牌" />
                 </Form.Item>
                 <Form.Item
-                  label="库存单位"
+                  label="库存基准单位"
                   name="stockUom"
-                  rules={[{ required: true, message: '请选择库存单位' }]}
+                  extra="初始库存统一按该单位写入，不需要另外选择入库单位。"
+                  rules={[{ required: true, message: '请选择库存基准单位' }]}
                 >
-                  <UomSelect />
-                </Form.Item>
-                <Form.Item label="初始库存单位" name="openingUom">
                   <UomSelect />
                 </Form.Item>
                 <Form.Item label="初始库存数量" name="openingQty">
                   <InputNumber min={0} style={{ width: '100%' }} />
                 </Form.Item>
-                <Form.Item label="入库仓库" name="warehouse">
+                <Form.Item
+                  label="入库仓库"
+                  name="warehouse"
+                  extra={
+                    draftHasOpeningStock
+                      ? `将按库存基准单位${draftStockUom ? `（${draftStockUom}）` : ''}入库。`
+                      : undefined
+                  }
+                  required={draftHasOpeningStock}
+                  rules={[
+                    {
+                      validator: async (_, value) => {
+                        if (
+                          Number(draftForm.getFieldValue('openingQty') ?? 0) >
+                            0 &&
+                          !value
+                        ) {
+                          throw new Error('填写初始库存时，请选择入库仓库');
+                        }
+                      },
+                    },
+                  ]}
+                >
                   <RemoteLinkSelect
                     doctype="Warehouse"
                     filters={{
@@ -1359,7 +1605,31 @@ export default function AiPage() {
                     style={{ width: '100%' }}
                   />
                 </Form.Item>
-                <Form.Item label="库存估值价" name="valuationRate">
+                <Form.Item
+                  label="默认采购价"
+                  name="standardBuyingRate"
+                  extra={
+                    draftHasOpeningStock
+                      ? '用于首次入库成本和默认采购价格；不会使用标准售价代替。'
+                      : '用于采购业务的默认参考价。'
+                  }
+                  required={draftHasOpeningStock}
+                  rules={[
+                    {
+                      validator: async (_, value) => {
+                        if (
+                          Number(draftForm.getFieldValue('openingQty') ?? 0) >
+                            0 &&
+                          (value === null ||
+                            value === undefined ||
+                            value === '')
+                        ) {
+                          throw new Error('填写初始库存时，请输入默认采购价');
+                        }
+                      },
+                    },
+                  ]}
+                >
                   <InputNumber
                     min={0}
                     precision={2}
@@ -1544,7 +1814,7 @@ export default function AiPage() {
                           style={{
                             display: 'grid',
                             gap: 12,
-                            gridTemplateColumns: '2fr 1fr 1fr 1fr',
+                            gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr',
                           }}
                         >
                           <Form.Item
@@ -1570,6 +1840,14 @@ export default function AiPage() {
                             <RemoteLinkSelect
                               doctype="UOM"
                               placeholder="单位"
+                            />
+                          </Form.Item>
+                          <Form.Item name={[field.name, 'price']}>
+                            <InputNumber
+                              min={0}
+                              placeholder="价格"
+                              precision={6}
+                              style={{ width: '100%' }}
                             />
                           </Form.Item>
                           <Form.Item name={[field.name, 'warehouse']}>

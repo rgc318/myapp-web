@@ -56,6 +56,36 @@ function formatNumber(value: unknown) {
   return Number.isFinite(number) ? number.toLocaleString('zh-CN') : '-';
 }
 
+function AiDraftExecutionReceipt({ draft }: { draft: AiDraft }) {
+  const execution = draft.execution;
+  if (!execution?.targetName) return null;
+  const href =
+    execution.targetDoctype === 'Sales Order'
+      ? `/sales/orders/${encodeURIComponent(execution.targetName)}`
+      : execution.targetDoctype === 'Purchase Order'
+        ? `/purchase/orders/${encodeURIComponent(execution.targetName)}`
+        : execution.targetDoctype === 'Item'
+          ? `/master-data/products/${encodeURIComponent(execution.targetName)}`
+          : execution.targetDoctype === 'Stock Entry'
+            ? '/inventory/ledger'
+            : null;
+  return (
+    <Alert
+      action={
+        href ? (
+          <Button href={href} size="small">
+            查看正式业务对象
+          </Button>
+        ) : null
+      }
+      description={`执行人：${execution.executedBy || '-'} · 执行时间：${execution.executedAt || '-'}`}
+      showIcon
+      title={`已创建 ${execution.targetDoctype || '业务对象'} ${execution.targetName}`}
+      type="success"
+    />
+  );
+}
+
 export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
   const payload = draft.payload;
   const itemRows = (Array.isArray(payload.items) ? payload.items : []).map(
@@ -83,6 +113,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
   if (draft.draftType === 'product_setup') {
     return (
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+        <AiDraftExecutionReceipt draft={draft} />
         <Descriptions
           bordered
           column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
@@ -120,7 +151,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'stockUom',
-              label: '库存单位',
+              label: '库存基准单位',
               children: resolveDisplayUom(
                 typeof payload.stock_uom === 'string'
                   ? payload.stock_uom
@@ -156,10 +187,13 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
               children: displayValue(payload.warehouse),
             },
             {
-              key: 'valuationRate',
-              label: '库存估值价',
+              key: 'standardBuyingRate',
+              label: '默认采购价',
               children: formatCurrencyValue(
-                payload.valuation_rate as number | string | null,
+                (payload.standard_buying_rate ?? payload.valuation_rate) as
+                  | number
+                  | string
+                  | null,
                 typeof payload.currency === 'string' ? payload.currency : 'CNY',
               ),
             },
@@ -182,8 +216,8 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             showIcon
             title={
               draft.validation.readyForHandoff
-                ? '商品、售价和初始库存草稿已通过校验，可以交接商品页面。'
-                : '商品建档草稿尚未满足交接条件。'
+                ? '商品资料、价格和库存初始化信息完整，可以创建商品。'
+                : '请先完善商品建档信息。'
             }
             type={draft.validation.readyForHandoff ? 'success' : 'info'}
           />
@@ -194,6 +228,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
 
   return (
     <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <AiDraftExecutionReceipt draft={draft} />
       <Descriptions
         bordered
         column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
@@ -258,7 +293,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
           showIcon
           title={
             draft.validation.readyForHandoff
-              ? '草稿已通过后端实时校验，可以交接业务编辑器。'
+              ? '草稿已通过后端实时校验，可以确认执行。'
               : '草稿尚未满足交接条件。'
           }
           type={draft.validation.readyForHandoff ? 'success' : 'info'}

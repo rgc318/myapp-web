@@ -9,6 +9,7 @@ const draft: AiDraft = {
   conversationId: 'AI-CONV-1',
   creation: '2026-07-16 10:00:00',
   draftType: 'sales_order',
+  execution: null,
   modified: '2026-07-16 10:10:00',
   name: 'AI-DRAFT-1',
   payload: {
@@ -48,7 +49,7 @@ describe('AI draft review components', () => {
     expect(screen.getByText('数码相机')).toBeTruthy();
     expect(screen.getByText('SKU010')).toBeTruthy();
     expect(
-      screen.getByText('草稿已通过后端实时校验，可以交接业务编辑器。'),
+      screen.getByText('草稿已通过后端实时校验，可以确认执行。'),
     ).toBeTruthy();
   });
 

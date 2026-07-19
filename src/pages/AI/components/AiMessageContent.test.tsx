@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { AiMessageContent } from './AiMessageContent';
 
@@ -74,12 +74,74 @@ const baseProps = {
   citations,
   onDiscardDraft: jest.fn(),
   onEditDraft: jest.fn(),
+  onExecuteDraft: jest.fn(),
   onFeedback: jest.fn(),
   onHandoffDraft: jest.fn(),
+  onOpenBusinessDocument: jest.fn(),
   onOpenDraftHistory: jest.fn(),
+  onOpenProduct: jest.fn(),
 };
 
 describe('AiMessageContent', () => {
+  it('offers confirmed inline execution for a validated draft', () => {
+    const onExecuteDraft = jest.fn();
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [
+          {
+            data: {
+              draft_type: 'product_setup',
+              status: 'draft',
+              validation: { errors: [], ready_for_handoff: true, warnings: [] },
+              version: 2,
+            },
+            href: null,
+            id: 'AI-DRAFT-1',
+            label: '商品建档草稿',
+            type: 'ai_draft',
+          },
+        ],
+        content: '草稿已生成',
+        onExecuteDraft,
+      }),
+    );
+
+    expect(screen.getByRole('button', { name: '编辑草稿' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+    expect(onExecuteDraft).toHaveBeenCalledWith('AI-DRAFT-1', 2);
+  });
+
+  it('uses a clear action label when a draft still needs information', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [
+          {
+            data: {
+              draft_type: 'product_setup',
+              status: 'draft',
+              validation: {
+                errors: ['请填写默认采购价'],
+                ready_for_handoff: false,
+                warnings: [],
+              },
+              version: 2,
+            },
+            href: null,
+            id: 'AI-DRAFT-1',
+            label: '商品建档草稿',
+            type: 'ai_draft',
+          },
+        ],
+        content: '草稿需要补充信息',
+      }),
+    );
+
+    expect(screen.getByRole('button', { name: '完善草稿' })).toBeTruthy();
+    expect(screen.queryByText('编辑并重新校验')).toBeNull();
+  });
+
   it('shows structured business results before the model summary arrives', () => {
     render(
       React.createElement(AiMessageContent, {

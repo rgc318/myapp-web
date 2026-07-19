@@ -1,16 +1,19 @@
 import { callGatewayMethod } from '../api-client';
 import {
+  executeAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
   listAiDrafts,
+  listAiSelectableModels,
   resolveAiBusinessResultSet,
   resolveAiScenario,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
 } from '../ai';
+import { runGatewayMutation } from '../mutation';
 import { TextDecoder } from 'util';
 
 Object.assign(globalThis, { TextDecoder });
@@ -18,12 +21,66 @@ Object.assign(globalThis, { TextDecoder });
 jest.mock('../api-client', () => ({
   callGatewayMethod: jest.fn(),
 }));
+jest.mock('../mutation', () => ({
+  runGatewayMutation: jest.fn(),
+}));
 
 const mockedCallGatewayMethod = jest.mocked(callGatewayMethod);
+const mockedRunGatewayMutation = jest.mocked(runGatewayMutation);
 
 describe('AI domain service', () => {
   beforeEach(() => {
     mockedCallGatewayMethod.mockReset();
+    mockedRunGatewayMutation.mockReset();
+  });
+
+  it('executes the confirmed draft with a deterministic version idempotency key', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {
+        draft: {
+          name: 'AI-DRAFT-1',
+          draft_type: 'sales_order',
+          status: 'executed',
+          version: 3,
+          payload: {},
+          validation: { ready_for_handoff: true, errors: [], warnings: [] },
+          execution: {
+            executed_at: '2026-07-18 12:00:00',
+            executed_by: 'user@example.com',
+            request_id: 'REQ-1',
+            target_doctype: 'Sales Order',
+            target_name: 'SO-001',
+            result: { order: 'SO-001' },
+          },
+        },
+        execution: {
+          executed_at: '2026-07-18 12:00:00',
+          executed_by: 'user@example.com',
+          request_id: 'REQ-1',
+          target_doctype: 'Sales Order',
+          target_name: 'SO-001',
+          result: { order: 'SO-001' },
+        },
+        replayed: false,
+      },
+      idempotencyKey: 'web-execute-ai-draft-AI-DRAFT-1-v3',
+    });
+
+    const result = await executeAiDraft('AI-DRAFT-1', 3);
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'execute_ai_draft_v1',
+      expect.objectContaining({
+        idempotencyKey: 'web-execute-ai-draft-AI-DRAFT-1-v3',
+        payload: {
+          confirmed: 1,
+          draft_id: 'AI-DRAFT-1',
+          expected_version: 3,
+        },
+      }),
+    );
+    expect(result.draft.status).toBe('executed');
+    expect(result.execution.targetName).toBe('SO-001');
   });
 
   it('maps chat, audit and product citation fields', async () => {
@@ -117,6 +174,36 @@ describe('AI domain service', () => {
 
     expect(result.total).toBe(1);
     expect(result.items[0].messageCount).toBe(2);
+  });
+
+  it('maps user-selectable active model aliases', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        items: [
+          {
+            capability: 'fast_chat',
+            display_name: 'GLM 5.2',
+            model_alias: 'opencode-glm-5.2',
+            status: 'active',
+            supports_json_schema: 0,
+            supports_streaming: 1,
+          },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listAiSelectableModels();
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_ai_selectable_models_v1',
+    );
+    expect(result[0]).toMatchObject({
+      displayName: 'GLM 5.2',
+      modelAlias: 'opencode-glm-5.2',
+      supportsStreaming: true,
+    });
   });
 
   it('maps versioned business result metadata and document citations', () => {
@@ -407,7 +494,7 @@ describe('AI domain service', () => {
     const events: string[] = [];
 
     const result = await streamAiChatMessage(
-      { content: '你好' },
+      { content: '你好', modelAlias: 'opencode-glm-5.2' },
       (event) => events.push(event.type),
     );
 
@@ -425,6 +512,7 @@ describe('AI domain service', () => {
     expect(result.stream).toEqual({ deltaCount: 2, streamedChars: 4 });
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
       content: '你好',
+		model_alias: 'opencode-glm-5.2',
       scenario: 'auto',
     });
     fetchMock.mockRestore();

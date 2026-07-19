@@ -1,7 +1,7 @@
 import { FileSearchOutlined } from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProCard, ProTable } from '@ant-design/pro-components';
-import { Alert, Space, Tabs, Tag, Typography } from 'antd';
+import { Alert, Button, Space, Tabs, Tag, Typography } from 'antd';
 import type {
   AiBusinessDocumentResult,
   AiBusinessResultGroup,
@@ -48,66 +48,77 @@ function groupNotice(group: AiBusinessResultGroup) {
   return null;
 }
 
-const columns: ProColumns<AiBusinessDocumentResult>[] = [
-  {
-    dataIndex: 'id',
-    fixed: 'left',
-    title: '单据编号',
-    width: 190,
-    render: (_, row) =>
-      row.href ? (
-        <Typography.Link href={row.href}>{row.id}</Typography.Link>
-      ) : (
-        row.id
-      ),
-  },
-  {
-    dataIndex: 'party',
-    ellipsis: true,
-    title: '客户 / 供应商',
-    width: 220,
-    renderText: (value) => value || '-',
-  },
-  {
-    dataIndex: 'transactionDate',
-    title: '交易日期',
-    width: 120,
-    renderText: (value) => value || '-',
-  },
-  {
-    dataIndex: 'documentStatus',
-    title: '状态',
-    width: 110,
-    render: (_, row) => <StatusTag value={row.documentStatus} />,
-  },
-  {
-    align: 'right',
-    dataIndex: 'amount',
-    title: '金额',
-    width: 140,
-    render: (_, row) => formatCurrencyValue(row.amount, row.currency),
-  },
-  {
-    align: 'right',
-    dataIndex: 'outstandingAmount',
-    title: '未结金额',
-    width: 140,
-    render: (_, row) =>
-      row.outstandingAmount > 0 ? (
-        <Typography.Text type="danger">
-          {formatCurrencyValue(row.outstandingAmount, row.currency)}
-        </Typography.Text>
-      ) : (
-        <Typography.Text type="success">已结清</Typography.Text>
-      ),
-  },
-];
+function buildColumns(
+  onOpenDocument?: (document: AiBusinessDocumentResult) => void,
+): ProColumns<AiBusinessDocumentResult>[] {
+  return [
+    {
+      dataIndex: 'id',
+      fixed: 'left',
+      title: '单据编号',
+      width: 190,
+      render: (_, row) =>
+        onOpenDocument ? (
+          <Button onClick={() => onOpenDocument(row)} type="link">
+            {row.id}
+          </Button>
+        ) : row.href ? (
+          <Typography.Link href={row.href}>{row.id}</Typography.Link>
+        ) : (
+          row.id
+        ),
+    },
+    {
+      dataIndex: 'party',
+      ellipsis: true,
+      title: '客户 / 供应商',
+      width: 220,
+      renderText: (value) => value || '-',
+    },
+    {
+      dataIndex: 'transactionDate',
+      title: '交易日期',
+      width: 120,
+      renderText: (value) => value || '-',
+    },
+    {
+      dataIndex: 'documentStatus',
+      title: '状态',
+      width: 110,
+      render: (_, row) => <StatusTag value={row.documentStatus} />,
+    },
+    {
+      align: 'right',
+      dataIndex: 'amount',
+      title: '金额',
+      width: 140,
+      render: (_, row) => formatCurrencyValue(row.amount, row.currency),
+    },
+    {
+      align: 'right',
+      dataIndex: 'outstandingAmount',
+      title: '未结金额',
+      width: 140,
+      render: (_, row) =>
+        row.outstandingAmount > 0 ? (
+          <Typography.Text type="danger">
+            {formatCurrencyValue(row.outstandingAmount, row.currency)}
+          </Typography.Text>
+        ) : (
+          <Typography.Text type="success">已结清</Typography.Text>
+        ),
+    },
+  ];
+}
 
 export function BusinessResultPanel({
+  onOpenDocument,
   resultSet,
 }: {
+  onOpenDocument?: (document: AiBusinessDocumentResult) => void;
   resultSet: AiBusinessResultSet;
 }) {
+  const columns = buildColumns(onOpenDocument);
   const scopeTags = [
     resultSet.scope.company
       ? { key: 'company', label: `公司：${resultSet.scope.company}` }

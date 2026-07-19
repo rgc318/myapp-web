@@ -102,27 +102,99 @@ jest.mock('./styles', () => ({
 jest.mock('@/services/myapp/ai', () => ({
   archiveAiConversation: jest.fn(),
   discardAiDraft: jest.fn(),
+  executeAiDraft: jest.fn(),
   generateAiInventoryAdjustmentDraft: jest.fn(),
+  generateAiProductSetupDraft: jest.fn(),
   generateAiPurchaseOrderDraft: jest.fn(),
   generateAiSalesOrderDraft: jest.fn(),
   getAiConversation: jest.fn(),
+  getAiDraft: jest.fn(),
   listAiConversations: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+  listAiSelectableModels: jest.fn().mockResolvedValue([
+    {
+      capability: 'fast_chat',
+      displayName: 'opencode-glm-5.2',
+      modelAlias: 'opencode-glm-5.2',
+      status: 'active',
+      supportsJsonSchema: false,
+      supportsStreaming: true,
+    },
+  ]),
   listAiDraftVersions: jest.fn(),
   prepareAiDraftHandoff: jest.fn(),
+  resolveAiScenario: jest.fn(),
   restoreAiDraftVersion: jest.fn(),
   streamAiChatMessage: jest.fn(),
   submitAiFeedback: jest.fn(),
   updateAiDraft: jest.fn(),
 }));
 
-const { getAiConversation, streamAiChatMessage } = jest.requireMock(
-  '@/services/myapp/ai',
-);
+const {
+  generateAiProductSetupDraft,
+  getAiConversation,
+  resolveAiScenario,
+  streamAiChatMessage,
+} = jest.requireMock('@/services/myapp/ai');
 
 describe('AI workspace page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLocationSearch = '';
+    resolveAiScenario.mockImplementation(async (content: string) => {
+      if (content.includes('销售订单')) return 'order_query';
+      if (
+        content.includes('商品') ||
+        content.includes('蓝色包装') ||
+        content.includes('入库')
+      ) {
+        return 'product_search';
+      }
+      return 'general';
+    });
+    generateAiProductSetupDraft.mockResolvedValue({
+      conversationId: 'AI-CONV-DRAFT',
+      draft: {
+        company: 'Demo Company',
+        conversationId: 'AI-CONV-DRAFT',
+        draftType: 'product_setup',
+        name: 'AI-DRAFT-1',
+        payload: { itemName: '煌星' },
+        status: 'draft',
+        title: '添加一个新商品，煌星',
+        validation: { errors: [], readyForHandoff: false, warnings: [] },
+        version: 1,
+      },
+      events: [],
+      message: { content: '已生成商品建档草稿', role: 'assistant' },
+      model: 'provider-model',
+      modelAlias: 'erp-fast-chat',
+      run: {
+        error: null,
+        errorCode: null,
+        firstTokenMs: null,
+        latencyMs: 760,
+        model: 'provider-model',
+        modelAlias: 'erp-fast-chat',
+        status: 'completed',
+        traceId: 'trace-draft',
+        usage: {
+          completionTokens: 20,
+          promptTokens: 80,
+          reasoningTokens: 0,
+          totalTokens: 100,
+        },
+      },
+      runId: 'AI-RUN-DRAFT',
+      stream: { deltaCount: 0, streamedChars: 0 },
+      traceId: 'trace-draft',
+      usage: {
+        completionTokens: 20,
+        promptTokens: 80,
+        reasoningTokens: 0,
+        totalTokens: 100,
+      },
+      warnings: [],
+    });
     streamAiChatMessage.mockImplementation(
       async (_payload: unknown, onEvent: any) => {
         onEvent({
@@ -193,7 +265,7 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           company: 'Demo Company',
           content: '查找蓝色包装商品',
-          scenario: 'auto',
+          scenario: 'product_search',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -224,7 +296,34 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           company: 'Second Company',
           content: '查询最新销售订单',
-          scenario: 'auto',
+          scenario: 'order_query',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it('allows the user to select an active LiteLLM model', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 模型' }));
+    const modelOption = (await screen.findAllByText('opencode-glm-5.2'))
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+    expect(modelOption).toBeTruthy();
+    fireEvent.click(modelOption as HTMLElement);
+    await screen.findByText('固定模型：opencode-glm-5.2');
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '你好' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '你好',
+          modelAlias: 'opencode-glm-5.2',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -333,5 +432,40 @@ describe('AI workspace page', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it('uses an explicit draft scenario once and auto-routes the next message', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 场景' }));
+    fireEvent.click(await screen.findByText('商品建档草稿'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '添加一个新商品，煌星，10000一个，入库5000个' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(generateAiProductSetupDraft).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '查询一下煌星是否已经正常入库' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(resolveAiScenario).toHaveBeenCalledWith(
+        '查询一下煌星是否已经正常入库',
+      );
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '查询一下煌星是否已经正常入库',
+          scenario: 'product_search',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
+    expect(generateAiProductSetupDraft).toHaveBeenCalledTimes(1);
   });
 });

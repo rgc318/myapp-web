@@ -2,6 +2,12 @@ import { callGatewayMethod } from './api-client';
 import { buildMyAppApiUrl } from './api-base';
 import { readObject, toNumber, toStringList } from './api-utils';
 import { getMyAppAuthHeaders } from './auth-storage';
+import { runGatewayMutation } from './mutation';
+import {
+  getPurchaseInvoiceDetail,
+  getPurchaseOrderDetail,
+} from './purchase';
+import { getSalesInvoiceDetail, getSalesOrderDetail } from './sales';
 
 export type AiChatRole = 'user' | 'assistant';
 
@@ -15,6 +21,15 @@ export type AiScenario =
   | 'purchase_order_draft'
   | 'inventory_adjustment_draft'
   | 'product_setup_draft';
+
+export type AiSelectableModel = {
+  capability: string;
+  displayName: string;
+  modelAlias: string;
+  status: string;
+  supportsJsonSchema: boolean;
+  supportsStreaming: boolean;
+};
 
 export type AiDraft = {
   company: string | null;
@@ -33,6 +48,16 @@ export type AiDraft = {
   version: number;
   validation: { readyForHandoff: boolean; errors: string[]; warnings: string[] };
   payload: Record<string, unknown>;
+  execution: AiDraftExecution | null;
+};
+
+export type AiDraftExecution = {
+  executedAt: string | null;
+  executedBy: string | null;
+  requestId: string | null;
+  result: Record<string, unknown>;
+  targetDoctype: string | null;
+  targetName: string | null;
 };
 
 export type AiSalesOrderDraft = AiDraft;
@@ -91,6 +116,33 @@ export type AiBusinessResultSet = {
     sortBy: string | null;
     statusFilter: string | null;
   };
+};
+
+export type AiBusinessDocumentDetail = {
+  amount: number | null;
+  company: string;
+  currency: string;
+  date: string;
+  documentStatus: string;
+  dueOrTargetDate: string;
+  href: string | null;
+  id: string;
+  items: Array<{
+    amount: number | null;
+    itemCode: string;
+    itemName: string;
+    qty: number | null;
+    rate: number | null;
+    uom: string;
+    uomDisplay: string | null;
+    warehouse: string;
+  }>;
+  outstandingAmount: number | null;
+  paidAmount: number | null;
+  party: string;
+  references: string[];
+  remarks: string;
+  type: AiBusinessDocumentType;
 };
 
 export type AiChatMessage = {
@@ -354,9 +406,97 @@ export function resolveAiBusinessResultSet(
   };
 }
 
+export async function getAiBusinessDocumentDetail(
+  document: AiBusinessDocumentResult,
+): Promise<AiBusinessDocumentDetail | null> {
+  if (document.type === 'sales_order') {
+    const detail = await getSalesOrderDetail(document.id);
+    if (!detail) return null;
+    return {
+      amount: detail.amount,
+      company: detail.company,
+      currency: detail.currency,
+      date: detail.transactionDate,
+      documentStatus: detail.documentStatus,
+      dueOrTargetDate: detail.deliveryDate,
+      href: document.href,
+      id: detail.name,
+      items: detail.items,
+      outstandingAmount: detail.outstandingAmount,
+      paidAmount: detail.paidAmount,
+      party: detail.customer,
+      references: [...detail.deliveryNotes, ...detail.salesInvoices],
+      remarks: detail.remarks,
+      type: document.type,
+    };
+  }
+  if (document.type === 'sales_invoice') {
+    const detail = await getSalesInvoiceDetail(document.id);
+    if (!detail) return null;
+    return {
+      amount: detail.grandTotal,
+      company: detail.company,
+      currency: detail.currency,
+      date: detail.postingDate,
+      documentStatus: detail.documentStatus,
+      dueOrTargetDate: detail.dueDate,
+      href: document.href,
+      id: detail.name,
+      items: detail.items,
+      outstandingAmount: detail.outstandingAmount,
+      paidAmount: detail.paidAmount,
+      party: document.party ?? '',
+      references: [...detail.salesOrders, ...detail.deliveryNotes],
+      remarks: detail.remarks,
+      type: document.type,
+    };
+  }
+  if (document.type === 'purchase_order') {
+    const detail = await getPurchaseOrderDetail(document.id);
+    if (!detail) return null;
+    return {
+      amount: detail.amount,
+      company: detail.company,
+      currency: detail.currency,
+      date: detail.transactionDate,
+      documentStatus: detail.documentStatus,
+      dueOrTargetDate: detail.scheduleDate,
+      href: document.href,
+      id: detail.name,
+      items: detail.items,
+      outstandingAmount: detail.outstandingAmount,
+      paidAmount: detail.paidAmount,
+      party: detail.supplierName || detail.supplier,
+      references: [...detail.purchaseReceipts, ...detail.purchaseInvoices],
+      remarks: detail.remarks,
+      type: document.type,
+    };
+  }
+  const detail = await getPurchaseInvoiceDetail(document.id);
+  if (!detail) return null;
+  return {
+    amount: detail.amount,
+    company: detail.company,
+    currency: detail.currency,
+    date: detail.postingDate,
+    documentStatus: detail.documentStatus,
+    dueOrTargetDate: detail.dueDate,
+    href: document.href,
+    id: detail.name,
+    items: detail.items,
+    outstandingAmount: detail.outstandingAmount,
+    paidAmount: detail.paidAmount,
+    party: detail.supplierName || detail.supplier,
+    references: [...detail.purchaseOrders, ...detail.purchaseReceipts],
+    remarks: detail.remarks,
+    type: document.type,
+  };
+}
+
 function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
   const row = readObject(value);
   const validation = readObject(row.validation);
+  const execution = readObject(row.execution);
   return {
     company: typeof row.company === 'string' ? row.company : null,
     conversationId:
@@ -377,6 +517,31 @@ function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
     sourceRun: typeof row.source_run === 'string' ? row.source_run : null,
     version: toNumber(row.version, 1),
     payload: readObject(row.payload),
+    execution: row.execution
+      ? {
+          executedAt:
+            typeof execution.executed_at === 'string'
+              ? execution.executed_at
+              : null,
+          executedBy:
+            typeof execution.executed_by === 'string'
+              ? execution.executed_by
+              : null,
+          requestId:
+            typeof execution.request_id === 'string'
+              ? execution.request_id
+              : null,
+          result: readObject(execution.result),
+          targetDoctype:
+            typeof execution.target_doctype === 'string'
+              ? execution.target_doctype
+              : null,
+          targetName:
+            typeof execution.target_name === 'string'
+              ? execution.target_name
+              : null,
+        }
+      : null,
     validation: {
       readyForHandoff: Boolean(validation.ready_for_handoff),
       errors: toStringList(validation.errors),
@@ -397,7 +562,7 @@ export async function listAiDrafts(params: {
   current?: number;
   draftType?: AiDraft['draftType'];
   pageSize?: number;
-  status?: 'draft' | 'handed_off' | 'discarded' | 'all';
+  status?: 'draft' | 'executed' | 'handed_off' | 'discarded' | 'all';
 } = {}): Promise<{ items: AiDraft[]; total: number }> {
   const pageSize = params.pageSize ?? 20;
   const start = Math.max(0, ((params.current ?? 1) - 1) * pageSize);
@@ -432,6 +597,26 @@ function mapConversation(value: unknown): AiConversation {
     creation: typeof row.creation === 'string' ? row.creation : null,
     modified: typeof row.modified === 'string' ? row.modified : null,
   };
+}
+
+export async function listAiSelectableModels(): Promise<AiSelectableModel[]> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_ai_selectable_models_v1',
+  );
+  const data = readObject(result.data);
+  return Array.isArray(data.items)
+    ? data.items.map((value) => {
+        const row = readObject(value);
+        return {
+          capability: String(row.capability ?? ''),
+          displayName: String(row.display_name ?? row.model_alias ?? ''),
+          modelAlias: String(row.model_alias ?? ''),
+          status: String(row.status ?? ''),
+          supportsJsonSchema: Boolean(row.supports_json_schema),
+          supportsStreaming: Boolean(row.supports_streaming),
+        };
+      })
+    : [];
 }
 
 export async function listAiConversations(params?: {
@@ -581,6 +766,7 @@ export async function sendAiChatMessage(payload: {
   conversationId?: string | null;
   scenario?: AiScenario;
   company?: string | null;
+  modelAlias?: string | null;
 }): Promise<AiChatResult> {
   const result = await callGatewayMethod<Record<string, unknown>>('chat_ai_v1', {
     content: payload.content,
@@ -589,6 +775,7 @@ export async function sendAiChatMessage(payload: {
       ? { conversation_id: payload.conversationId }
       : {}),
     ...(payload.company ? { company: payload.company } : {}),
+    ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
   });
   return mapChatResult(result.data);
 }
@@ -597,12 +784,14 @@ export async function generateAiSalesOrderDraft(payload: {
   content: string;
   conversationId?: string | null;
   company: string;
+  modelAlias?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_sales_order_draft_v1',
     {
       content: payload.content,
       company: payload.company,
+      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -616,12 +805,14 @@ export async function generateAiPurchaseOrderDraft(payload: {
   content: string;
   conversationId?: string | null;
   company: string;
+  modelAlias?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_purchase_order_draft_v1',
     {
       content: payload.content,
       company: payload.company,
+      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
       ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
     },
   );
@@ -633,12 +824,14 @@ export async function generateAiInventoryAdjustmentDraft(payload: {
   content: string;
   conversationId?: string | null;
   company: string;
+  modelAlias?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_inventory_adjustment_draft_v1',
     {
       content: payload.content,
       company: payload.company,
+      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -661,12 +854,14 @@ export async function generateAiProductSetupDraft(payload: {
   content: string;
   conversationId?: string | null;
   company: string;
+  modelAlias?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_product_setup_draft_v1',
     {
       content: payload.content,
       company: payload.company,
+      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -691,15 +886,62 @@ export async function discardAiDraft(draftId: string): Promise<void> {
   await callGatewayMethod('discard_ai_draft_v1', { draft_id: draftId });
 }
 
+export async function executeAiDraft(
+  draftId: string,
+  expectedVersion: number,
+): Promise<{ draft: AiDraft; execution: AiDraftExecution; replayed: boolean }> {
+  const result = await runGatewayMutation<Record<string, unknown>>(
+    'execute_ai_draft_v1',
+    {
+      idempotencyKey: `web-execute-ai-draft-${draftId}-v${expectedVersion}`,
+      payload: {
+        confirmed: 1,
+        draft_id: draftId,
+        expected_version: expectedVersion,
+      },
+      successMessage: 'AI 草稿已执行',
+    },
+  );
+  const data = readObject(result.data);
+  const execution = readObject(data.execution);
+  return {
+    draft: mapSalesOrderDraft(data.draft),
+    execution: {
+      executedAt:
+        typeof execution.executed_at === 'string'
+          ? execution.executed_at
+          : null,
+      executedBy:
+        typeof execution.executed_by === 'string'
+          ? execution.executed_by
+          : null,
+      requestId:
+        typeof execution.request_id === 'string'
+          ? execution.request_id
+          : null,
+      result: readObject(execution.result),
+      targetDoctype:
+        typeof execution.target_doctype === 'string'
+          ? execution.target_doctype
+          : null,
+      targetName:
+        typeof execution.target_name === 'string'
+          ? execution.target_name
+          : null,
+    },
+    replayed: Boolean(data.replayed),
+  };
+}
+
 export async function updateAiDraft(
   draftId: string,
   payload: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
+): Promise<AiDraft> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'update_ai_draft_v1',
     { draft_id: draftId, payload },
   );
-  return readObject(result.data);
+  return mapSalesOrderDraft(result.data);
 }
 
 export async function listAiDraftVersions(
@@ -730,6 +972,7 @@ export async function streamAiChatMessage(
     conversationId?: string | null;
     scenario?: AiScenario;
     company?: string | null;
+    modelAlias?: string | null;
   },
   onEvent: (event: AiEvent) => void,
   signal?: AbortSignal,
@@ -752,6 +995,7 @@ export async function streamAiChatMessage(
           ? { conversation_id: payload.conversationId }
           : {}),
         ...(payload.company ? { company: payload.company } : {}),
+        ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
       }),
       signal,
     },
