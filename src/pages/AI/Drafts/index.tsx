@@ -64,7 +64,7 @@ export default function AiDraftsPage() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [executeLoading, setExecuteLoading] = useState(false);
-  const [editingDraft, setEditingDraft] = useState<AiDraft | null>(null);
+  const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
   const loadDraftReview = async (draftName: string) => {
     const nextDetail = await getAiDraft(draftName);
@@ -115,7 +115,7 @@ export default function AiDraftsPage() {
     if (!detail) return;
     setVersionLoading(true);
     try {
-      await restoreAiDraftVersion(detail.name, version);
+      await restoreAiDraftVersion(detail.name, version, detail.version);
       await loadDraftReview(detail.name);
     } catch (error) {
       notifyMutationError(error);
@@ -257,7 +257,7 @@ export default function AiDraftsPage() {
           </a>
         ) : null,
         row.status === 'draft' ? (
-          <a key="edit" onClick={() => setEditingDraft(row)}>
+          <a key="edit" onClick={() => setEditingDraftId(row.name)}>
             <EditOutlined />
             {row.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
           </a>
@@ -319,7 +319,7 @@ export default function AiDraftsPage() {
               {detail.status === 'draft' ? (
                 <Button
                   icon={<EditOutlined />}
-                  onClick={() => setEditingDraft(detail)}
+                  onClick={() => setEditingDraftId(detail.name)}
                 >
                   {detail.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
                 </Button>
@@ -415,12 +415,11 @@ export default function AiDraftsPage() {
         ) : null}
       </Drawer>
       <AiDraftEditorModal
-        draft={editingDraft}
-        onClose={() => setEditingDraft(null)}
+        draftId={editingDraftId}
+        onClose={() => setEditingDraftId(null)}
         onUpdated={(updated) => {
-          setEditingDraft(updated);
           setDetail(updated);
-          void loadDraftReview(updated.name);
+          void loadDraftReview(updated.name).catch(notifyMutationError);
           actionRef.current?.reload();
         }}
       />

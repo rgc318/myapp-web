@@ -13,7 +13,7 @@ import {
   ThunderboltOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import { PageContainer, ProCard } from '@ant-design/pro-components';
+import { PageContainer } from '@ant-design/pro-components';
 import {
   Bubble,
   Conversations,
@@ -28,11 +28,9 @@ import {
   Alert,
   Avatar,
   Button,
-  DatePicker,
   Drawer,
   Form,
   Input,
-  InputNumber,
   Modal,
   message,
   Select,
@@ -44,8 +42,6 @@ import {
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
-import { CurrencySelect } from '@/components/CurrencySelect';
-import { UomSelect } from '@/components/UomSelect';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   type AiBusinessDocumentResult,
@@ -63,7 +59,6 @@ import {
   generateAiPurchaseOrderDraft,
   generateAiSalesOrderDraft,
   getAiConversation,
-  getAiDraft,
   listAiConversations,
   listAiDraftVersions,
   listAiSelectableModels,
@@ -72,8 +67,8 @@ import {
   restoreAiDraftVersion,
   streamAiChatMessage,
   submitAiFeedback,
-  updateAiDraft,
 } from '@/services/myapp/ai';
+import { AiDraftEditorModal } from './components/AiDraftEditorModal';
 import { AiDraftVersionList } from './components/AiDraftReview';
 import {
   AiMessageContent,
@@ -148,7 +143,6 @@ function createMessage(
 
 export default function AiPage() {
   const { styles } = useAiWorkspaceStyles();
-  const [draftForm] = Form.useForm();
   const [feedbackForm] = Form.useForm<{
     category: 'incorrect' | 'incomplete' | 'unsafe' | 'other';
     comment?: string;
@@ -200,13 +194,6 @@ export default function AiPage() {
     string | null
   >(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
-  const [editingDraftType, setEditingDraftType] = useState<
-    'sales_order' | 'purchase_order' | 'inventory_adjustment' | 'product_setup'
-  >('sales_order');
-  const [draftSaving, setDraftSaving] = useState(false);
-  const [editingDraftValidation, setEditingDraftValidation] = useState<
-    AiDraft['validation'] | null
-  >(null);
   const [historyDraftId, setHistoryDraftId] = useState<string | null>(null);
   const [draftVersions, setDraftVersions] = useState<Record<string, unknown>[]>(
     [],
@@ -219,9 +206,6 @@ export default function AiPage() {
   const [productCitation, setProductCitation] = useState<AiCitation | null>(
     null,
   );
-  const draftOpeningQty = Form.useWatch('openingQty', draftForm);
-  const draftStockUom = Form.useWatch('stockUom', draftForm);
-  const draftHasOpeningStock = Number(draftOpeningQty ?? 0) > 0;
   const streamAbortRef = useRef<AbortController | null>(null);
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
@@ -765,104 +749,11 @@ export default function AiPage() {
     );
   };
 
-  const openDraftEditor = async (
+  const openDraftEditor = (
     citation: NonNullable<AiChatMessage['citations']>[number],
   ) => {
     const draftId = String(citation.id ?? '');
-    let payload = citation.data.payload as Record<string, any>;
-    let draftType: AiDraft['draftType'] =
-      citation.data.draft_type === 'product_setup'
-        ? 'product_setup'
-        : citation.data.draft_type === 'inventory_adjustment'
-          ? 'inventory_adjustment'
-          : citation.data.draft_type === 'purchase_order'
-            ? 'purchase_order'
-            : 'sales_order';
-    try {
-      const latestDraft = await getAiDraft(draftId);
-      payload = latestDraft.payload;
-      draftType = latestDraft.draftType;
-      setEditingDraftValidation(latestDraft.validation);
-      applyUpdatedDraft(latestDraft);
-    } catch (caught) {
-      message.error(
-        caught instanceof Error ? caught.message : '草稿最新内容加载失败',
-      );
-      return;
-    }
-    draftForm.resetFields();
     setEditingDraftId(draftId);
-    setEditingDraftType(draftType);
-    if (draftType === 'product_setup') {
-      draftForm.setFieldsValue({
-        brand: payload?.brand ?? payload?.brand_query,
-        company: payload?.company,
-        currency: payload?.currency ?? 'CNY',
-        description: payload?.description,
-        itemCode: payload?.item_code,
-        itemGroup: payload?.item_group ?? payload?.item_group_query,
-        itemName: payload?.item_name,
-        openingQty: payload?.opening_qty,
-        standardBuyingRate:
-          payload?.standard_buying_rate ?? payload?.valuation_rate,
-        standardSellingRate: payload?.standard_selling_rate,
-        stockUom: payload?.stock_uom,
-        warehouse: payload?.warehouse ?? payload?.warehouse_query,
-      });
-      return;
-    }
-    if (draftType === 'inventory_adjustment') {
-      const item = Array.isArray(payload?.items) ? payload.items[0] : {};
-      draftForm.setFieldsValue({
-        adjustmentType: payload?.adjustment_type ?? 'set_target',
-        company: payload?.company,
-        itemCode: item?.item_code ?? item?.item_query,
-        postingDate: payload?.posting_date
-          ? dayjs(payload.posting_date)
-          : undefined,
-        quantity: item?.qty,
-        reason: payload?.reason ?? payload?.remarks,
-        uom: item?.uom,
-        warehouse: payload?.warehouse,
-      });
-      return;
-    }
-    draftForm.setFieldsValue({
-      company: payload?.company,
-      defaultMode:
-        (draftType === 'purchase_order'
-          ? payload?.default_purchase_mode
-          : payload?.default_sales_mode) ?? 'wholesale',
-      items: Array.isArray(payload?.items)
-        ? payload.items.map((row: Record<string, unknown>) => ({
-            itemCode: row.item_code ?? row.item_query,
-            price: row.price,
-            qty: row.qty,
-            uom: row.uom,
-            warehouse: row.warehouse,
-          }))
-        : [],
-      party:
-        draftType === 'purchase_order'
-          ? (payload?.supplier ?? payload?.supplier_query)
-          : (payload?.customer ?? payload?.customer_query),
-      remarks: payload?.remarks,
-      targetDate: (
-        draftType === 'purchase_order'
-          ? payload?.schedule_date
-          : payload?.delivery_date
-      )
-        ? dayjs(
-            draftType === 'purchase_order'
-              ? payload.schedule_date
-              : payload.delivery_date,
-          )
-        : undefined,
-      transactionDate: payload?.transaction_date
-        ? dayjs(payload.transaction_date)
-        : undefined,
-      warehouse: payload?.warehouse,
-    });
   };
 
   const openVersionHistory = async (draftId: string) => {
@@ -875,91 +766,20 @@ export default function AiPage() {
     }
   };
 
-  const saveDraftChanges = async () => {
-    if (!editingDraftId) return;
-    let values: Record<string, any>;
-    try {
-      values = await draftForm.validateFields();
-    } catch {
-      return;
-    }
-    setDraftSaving(true);
-    try {
-      const updated = await updateAiDraft(
-        editingDraftId,
-        editingDraftType === 'product_setup'
-          ? {
-              brand: values.brand,
-              company: values.company,
-              currency: values.currency,
-              description: values.description,
-              item_code: values.itemCode,
-              item_group: values.itemGroup,
-              item_name: values.itemName,
-              opening_qty: values.openingQty,
-              opening_uom: values.stockUom,
-              standard_buying_rate: values.standardBuyingRate,
-              standard_selling_rate: values.standardSellingRate,
-              stock_uom: values.stockUom,
-              warehouse: values.warehouse,
-            }
-          : editingDraftType === 'inventory_adjustment'
-            ? {
-                adjustment_type: values.adjustmentType,
-                company: values.company,
-                item_code: values.itemCode,
-                posting_date: values.postingDate?.format('YYYY-MM-DD'),
-                quantity: values.quantity,
-                reason: values.reason,
-                uom: values.uom,
-                warehouse: values.warehouse,
-              }
-            : {
-                ...(editingDraftType === 'purchase_order'
-                  ? { supplier: values.party }
-                  : { customer: values.party }),
-                company: values.company,
-                ...(editingDraftType === 'purchase_order'
-                  ? {
-                      default_purchase_mode: values.defaultMode,
-                      schedule_date: values.targetDate?.format('YYYY-MM-DD'),
-                    }
-                  : {
-                      default_sales_mode: values.defaultMode,
-                      delivery_date: values.targetDate?.format('YYYY-MM-DD'),
-                    }),
-                items: (values.items ?? []).map(
-                  (row: Record<string, unknown>) => ({
-                    item_code: row.itemCode,
-                    price: row.price,
-                    qty: row.qty,
-                    uom: row.uom,
-                    warehouse: row.warehouse,
-                  }),
-                ),
-                remarks: values.remarks,
-                transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
-                warehouse: values.warehouse,
-              },
-      );
-      applyUpdatedDraft(updated);
-      setEditingDraftValidation(updated.validation);
-      if (updated.validation.readyForHandoff) {
-        setEditingDraftId(null);
-        message.success(`草稿已保存，可以继续确认（版本 ${updated.version}）`);
-      } else {
-        message.warning('草稿已保存，请根据提示补充必填信息。');
-      }
-    } finally {
-      setDraftSaving(false);
-    }
-  };
-
   const restoreVersion = async (version: number) => {
     if (!historyDraftId) return;
+    const expectedVersion = Number(draftVersions[0]?.version ?? 0);
+    if (expectedVersion < 1) {
+      message.error('当前草稿版本不可用，请重新打开版本历史。');
+      return;
+    }
     setVersionLoading(true);
     try {
-      const updated = await restoreAiDraftVersion(historyDraftId, version);
+      const updated = await restoreAiDraftVersion(
+        historyDraftId,
+        version,
+        expectedVersion,
+      );
       setMessages((current) =>
         current.map((item) => ({
           ...item,
@@ -1477,398 +1297,12 @@ export default function AiPage() {
           </Form.Item>
         </Form>
       </Modal>
-      <Modal
-        destroyOnHidden
-        okButtonProps={{ loading: draftSaving }}
-        okText="保存草稿"
-        onCancel={() => {
-          setEditingDraftId(null);
-          setEditingDraftValidation(null);
-        }}
-        onOk={() => void saveDraftChanges()}
-        open={Boolean(editingDraftId)}
-        title={`${editingDraftValidation?.readyForHandoff ? '编辑' : '完善'}${
-          editingDraftType === 'product_setup'
-            ? '商品建档'
-            : editingDraftType === 'inventory_adjustment'
-              ? '库存调整'
-              : `${editingDraftType === 'purchase_order' ? '采购' : '销售'}订单`
-        }草稿`}
-        width={900}
-      >
-        <Alert
-          description={
-            editingDraftValidation?.errors.length ? (
-              <Space orientation="vertical" size={2}>
-                {editingDraftValidation.errors.map((error) => (
-                  <Typography.Text key={error} type="danger">
-                    {error}
-                  </Typography.Text>
-                ))}
-              </Space>
-            ) : undefined
-          }
-          showIcon
-          title={
-            editingDraftValidation?.errors.length
-              ? '请补充以下信息'
-              : editingDraftType === 'product_setup'
-                ? '保存后系统会自动检查商品资料、价格和库存初始化信息；此步骤不会创建商品。'
-                : editingDraftType === 'inventory_adjustment'
-                  ? '保存后系统会自动检查商品、仓库、实时库存、单位和调整原因；此步骤不会提交库存单据。'
-                  : '保存后系统会自动检查往来单位、商品、仓库、单位和当前参考价。'
-          }
-          type={editingDraftValidation?.errors.length ? 'warning' : 'info'}
-          style={{ marginBottom: 16 }}
-        />
-        <Form form={draftForm} layout="vertical">
-          <Form.Item name="company" hidden>
-            <Input />
-          </Form.Item>
-          {editingDraftType === 'product_setup' ? (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 12,
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                }}
-              >
-                <Form.Item
-                  label="商品名称"
-                  name="itemName"
-                  rules={[{ required: true, message: '请输入商品名称' }]}
-                >
-                  <Input />
-                </Form.Item>
-                <Form.Item label="商品编码" name="itemCode">
-                  <Input placeholder="不填则由后端生成" />
-                </Form.Item>
-                <Form.Item label="商品分类" name="itemGroup">
-                  <RemoteLinkSelect
-                    doctype="Item Group"
-                    filters={{ is_group: 0 }}
-                    placeholder="选择商品分类"
-                  />
-                </Form.Item>
-                <Form.Item label="品牌" name="brand">
-                  <RemoteLinkSelect doctype="Brand" placeholder="选择品牌" />
-                </Form.Item>
-                <Form.Item
-                  label="库存基准单位"
-                  name="stockUom"
-                  extra="初始库存统一按该单位写入，不需要另外选择入库单位。"
-                  rules={[{ required: true, message: '请选择库存基准单位' }]}
-                >
-                  <UomSelect />
-                </Form.Item>
-                <Form.Item label="初始库存数量" name="openingQty">
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item
-                  label="入库仓库"
-                  name="warehouse"
-                  extra={
-                    draftHasOpeningStock
-                      ? `将按库存基准单位${draftStockUom ? `（${draftStockUom}）` : ''}入库。`
-                      : undefined
-                  }
-                  required={draftHasOpeningStock}
-                  rules={[
-                    {
-                      validator: async (_, value) => {
-                        if (
-                          Number(draftForm.getFieldValue('openingQty') ?? 0) >
-                            0 &&
-                          !value
-                        ) {
-                          throw new Error('填写初始库存时，请选择入库仓库');
-                        }
-                      },
-                    },
-                  ]}
-                >
-                  <RemoteLinkSelect
-                    doctype="Warehouse"
-                    filters={{
-                      company: draftForm.getFieldValue('company'),
-                      disabled: 0,
-                      is_group: 0,
-                    }}
-                    placeholder="有初始库存时必须选择"
-                  />
-                </Form.Item>
-                <Form.Item label="标准售价" name="standardSellingRate">
-                  <InputNumber
-                    min={0}
-                    precision={2}
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="默认采购价"
-                  name="standardBuyingRate"
-                  extra={
-                    draftHasOpeningStock
-                      ? '用于首次入库成本和默认采购价格；不会使用标准售价代替。'
-                      : '用于采购业务的默认参考价。'
-                  }
-                  required={draftHasOpeningStock}
-                  rules={[
-                    {
-                      validator: async (_, value) => {
-                        if (
-                          Number(draftForm.getFieldValue('openingQty') ?? 0) >
-                            0 &&
-                          (value === null ||
-                            value === undefined ||
-                            value === '')
-                        ) {
-                          throw new Error('填写初始库存时，请输入默认采购价');
-                        }
-                      },
-                    },
-                  ]}
-                >
-                  <InputNumber
-                    min={0}
-                    precision={2}
-                    style={{ width: '100%' }}
-                  />
-                </Form.Item>
-                <Form.Item label="币种" name="currency">
-                  <CurrencySelect />
-                </Form.Item>
-              </div>
-              <Form.Item label="商品描述" name="description">
-                <Input.TextArea maxLength={2000} rows={3} />
-              </Form.Item>
-            </>
-          ) : editingDraftType === 'inventory_adjustment' ? (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 12,
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                }}
-              >
-                <Form.Item
-                  label="仓库"
-                  name="warehouse"
-                  rules={[{ required: true }]}
-                >
-                  <RemoteLinkSelect
-                    doctype="Warehouse"
-                    filters={{
-                      company: draftForm.getFieldValue('company'),
-                      disabled: 0,
-                      is_group: 0,
-                    }}
-                    placeholder="选择仓库"
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="过账日期"
-                  name="postingDate"
-                  rules={[{ required: true }]}
-                >
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item
-                  label="调整方式"
-                  name="adjustmentType"
-                  rules={[{ required: true }]}
-                >
-                  <Select
-                    options={[
-                      { label: '调整到目标库存', value: 'set_target' },
-                      { label: '增加库存', value: 'increase' },
-                      { label: '减少库存', value: 'decrease' },
-                    ]}
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="商品"
-                  name="itemCode"
-                  rules={[{ required: true }]}
-                >
-                  <RemoteLinkSelect
-                    doctype="Item"
-                    filters={{ disabled: 0, is_stock_item: 1 }}
-                    placeholder="选择库存商品"
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="目标或增减数量"
-                  name="quantity"
-                  rules={[{ required: true }]}
-                >
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item label="单位" name="uom">
-                  <RemoteLinkSelect doctype="UOM" placeholder="选择单位" />
-                </Form.Item>
-              </div>
-              <Form.Item
-                label="调整原因"
-                name="reason"
-                rules={[
-                  { required: true, message: '请填写盘点差异或业务原因' },
-                ]}
-              >
-                <Input.TextArea maxLength={1000} />
-              </Form.Item>
-            </>
-          ) : (
-            <>
-              <div
-                style={{
-                  display: 'grid',
-                  gap: 12,
-                  gridTemplateColumns: 'repeat(2, 1fr)',
-                }}
-              >
-                <Form.Item
-                  label={
-                    editingDraftType === 'purchase_order' ? '供应商' : '客户'
-                  }
-                  name="party"
-                  rules={[{ required: true }]}
-                >
-                  <RemoteLinkSelect
-                    doctype={
-                      editingDraftType === 'purchase_order'
-                        ? 'Supplier'
-                        : 'Customer'
-                    }
-                    placeholder={
-                      editingDraftType === 'purchase_order'
-                        ? '选择供应商'
-                        : '选择客户'
-                    }
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="默认仓库"
-                  name="warehouse"
-                  rules={[{ required: true }]}
-                >
-                  <RemoteLinkSelect
-                    doctype="Warehouse"
-                    placeholder="选择仓库"
-                  />
-                </Form.Item>
-                <Form.Item
-                  label="订单日期"
-                  name="transactionDate"
-                  rules={[{ required: true }]}
-                >
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item
-                  label={
-                    editingDraftType === 'purchase_order'
-                      ? '预计到货日期'
-                      : '交货日期'
-                  }
-                  name="targetDate"
-                  rules={[{ required: true }]}
-                >
-                  <DatePicker style={{ width: '100%' }} />
-                </Form.Item>
-                <Form.Item
-                  label={
-                    editingDraftType === 'purchase_order'
-                      ? '采购取值模式'
-                      : '销售模式'
-                  }
-                  name="defaultMode"
-                >
-                  <Select
-                    options={[
-                      { label: '批发', value: 'wholesale' },
-                      { label: '零售', value: 'retail' },
-                    ]}
-                  />
-                </Form.Item>
-              </div>
-              <Form.Item label="备注" name="remarks">
-                <Input.TextArea maxLength={1000} />
-              </Form.Item>
-              <Form.List name="items">
-                {(fields, { add, remove }) => (
-                  <Space orientation="vertical" style={{ width: '100%' }}>
-                    {fields.map((field) => (
-                      <ProCard
-                        key={field.key}
-                        size="small"
-                        title={`商品行 ${field.name + 1}`}
-                        extra={
-                          <Button danger onClick={() => remove(field.name)}>
-                            删除
-                          </Button>
-                        }
-                      >
-                        <div
-                          style={{
-                            display: 'grid',
-                            gap: 12,
-                            gridTemplateColumns: '2fr 1fr 1fr 1fr 2fr',
-                          }}
-                        >
-                          <Form.Item
-                            name={[field.name, 'itemCode']}
-                            rules={[{ required: true }]}
-                          >
-                            <RemoteLinkSelect
-                              doctype="Item"
-                              placeholder="商品"
-                            />
-                          </Form.Item>
-                          <Form.Item
-                            name={[field.name, 'qty']}
-                            rules={[{ required: true }]}
-                          >
-                            <InputNumber
-                              min={0.000001}
-                              placeholder="数量"
-                              style={{ width: '100%' }}
-                            />
-                          </Form.Item>
-                          <Form.Item name={[field.name, 'uom']}>
-                            <RemoteLinkSelect
-                              doctype="UOM"
-                              placeholder="单位"
-                            />
-                          </Form.Item>
-                          <Form.Item name={[field.name, 'price']}>
-                            <InputNumber
-                              min={0}
-                              placeholder="价格"
-                              precision={6}
-                              style={{ width: '100%' }}
-                            />
-                          </Form.Item>
-                          <Form.Item name={[field.name, 'warehouse']}>
-                            <RemoteLinkSelect
-                              doctype="Warehouse"
-                              placeholder="仓库"
-                            />
-                          </Form.Item>
-                        </div>
-                      </ProCard>
-                    ))}
-                    <Button onClick={() => add()} block>
-                      添加商品行
-                    </Button>
-                  </Space>
-                )}
-              </Form.List>
-            </>
-          )}
-        </Form>
-      </Modal>
+      <AiDraftEditorModal
+        draftId={editingDraftId}
+        onClose={() => setEditingDraftId(null)}
+        onLoaded={applyUpdatedDraft}
+        onUpdated={applyUpdatedDraft}
+      />
       <Modal
         footer={null}
         loading={versionLoading}

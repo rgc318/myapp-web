@@ -9,9 +9,11 @@ import {
   listAiSelectableModels,
   resolveAiBusinessResultSet,
   resolveAiScenario,
+  restoreAiDraftVersion,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
+  updateAiDraft,
 } from '../ai';
 import { runGatewayMutation } from '../mutation';
 import { TextDecoder } from 'util';
@@ -81,6 +83,57 @@ describe('AI domain service', () => {
     );
     expect(result.draft.status).toBe('executed');
     expect(result.execution.targetName).toBe('SO-001');
+  });
+
+  it('updates a draft through the mutation layer with its expected version', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {
+        name: 'AI-DRAFT-1',
+        draft_type: 'sales_order',
+        status: 'draft',
+        version: 3,
+        payload: { remarks: '修改后' },
+        validation: { ready_for_handoff: true, errors: [], warnings: [] },
+      },
+      idempotencyKey: 'REQ-UPDATE-1',
+    });
+
+    const result = await updateAiDraft('AI-DRAFT-1', 2, {
+      remarks: '修改后',
+    });
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'update_ai_draft_v1',
+      {
+        payload: {
+          draft_id: 'AI-DRAFT-1',
+          expected_version: 2,
+          payload: { remarks: '修改后' },
+        },
+      },
+    );
+    expect(result.version).toBe(3);
+  });
+
+  it('restores a draft version through an idempotent current-version mutation', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: { name: 'AI-DRAFT-1', version: 4 },
+      idempotencyKey: 'REQ-RESTORE-1',
+    });
+
+    await restoreAiDraftVersion('AI-DRAFT-1', 1, 3);
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'restore_ai_draft_version_v1',
+      {
+        idempotencyKey: 'web-restore-ai-draft-AI-DRAFT-1-v3-from-v1',
+        payload: {
+          draft_id: 'AI-DRAFT-1',
+          expected_version: 3,
+          version: 1,
+        },
+      },
+    );
   });
 
   it('maps chat, audit and product citation fields', async () => {

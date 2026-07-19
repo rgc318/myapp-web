@@ -935,11 +935,18 @@ export async function executeAiDraft(
 
 export async function updateAiDraft(
   draftId: string,
+  expectedVersion: number,
   payload: Record<string, unknown>,
 ): Promise<AiDraft> {
-  const result = await callGatewayMethod<Record<string, unknown>>(
+  const result = await runGatewayMutation<Record<string, unknown>>(
     'update_ai_draft_v1',
-    { draft_id: draftId, payload },
+    {
+      payload: {
+        draft_id: draftId,
+        expected_version: expectedVersion,
+        payload,
+      },
+    },
   );
   return mapSalesOrderDraft(result.data);
 }
@@ -958,10 +965,18 @@ export async function listAiDraftVersions(
 export async function restoreAiDraftVersion(
   draftId: string,
   version: number,
+  expectedVersion: number,
 ): Promise<Record<string, unknown>> {
-  const result = await callGatewayMethod<Record<string, unknown>>(
+  const result = await runGatewayMutation<Record<string, unknown>>(
     'restore_ai_draft_version_v1',
-    { draft_id: draftId, version },
+    {
+      idempotencyKey: `web-restore-ai-draft-${draftId}-v${expectedVersion}-from-v${version}`,
+      payload: {
+        draft_id: draftId,
+        expected_version: expectedVersion,
+        version,
+      },
+    },
   );
   return readObject(result.data);
 }
