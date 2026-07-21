@@ -3,6 +3,7 @@ export default {
   'menu.administration.users': 'Users',
   'menu.administration.user-detail': 'User Detail',
   'menu.administration.roles': 'Roles',
+  'menu.administration.test-data': 'Test Data Management',
   'menu.administration.ai-models': 'AI Model Governance',
   'menu.administration.ai-policies': 'AI Policies',
   'menu.administration.ai-usage': 'AI Usage & Cost',

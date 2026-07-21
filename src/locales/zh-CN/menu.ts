@@ -3,6 +3,7 @@ export default {
   'menu.administration.users': '用户管理',
   'menu.administration.user-detail': '用户详情',
   'menu.administration.roles': '角色目录',
+  'menu.administration.test-data': '测试数据管理',
   'menu.administration.ai-models': 'AI 模型治理',
   'menu.administration.ai-policies': 'AI 场景策略',
   'menu.administration.ai-usage': 'AI 用量与成本',

@@ -396,6 +396,12 @@ export default [
         component: './Administration/Roles',
       },
       {
+        path: '/administration/test-data',
+        name: 'test-data',
+        access: 'canAdmin',
+        component: './Administration/TestData',
+      },
+      {
         path: '/administration/ai/models',
         name: 'ai-models',
         access: 'canViewAiGovernance',
