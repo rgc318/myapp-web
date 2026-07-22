@@ -13,7 +13,7 @@
 
 ## 本地构建镜像
 
-构建阶段使用 Node.js 22，并通过 `package-lock.json` 和 `npm ci` 保证依赖可重复安装。CI/镜像安装阶段跳过 Husky 等仓库生命周期脚本，Umi 在实际 typecheck、test 和 build 命令中生成所需文件。
+构建阶段使用 Node.js 22，并通过 `package-lock.json` 和 `npm ci` 保证依赖可重复安装。CI 安装阶段跳过 Husky 等仓库生命周期脚本，再显式执行 `max setup` 生成 Umi 类型文件；镜像构建由 `max build` 完成 Umi 初始化。
 
 ```bash
 docker build -t myapp-web:staging .
