@@ -1,6 +1,7 @@
 import { callGatewayMethod } from '../api-client';
 import {
   analyzeAiProductData,
+  checkAiModelAvailability,
   createAiDataTask,
   cleanupExcludedAiVectors,
   getAiGovernanceOverview,
@@ -14,6 +15,7 @@ import {
   listAiModels,
   reviewAiDataTask,
   rebuildAiVectorIndex,
+  syncAiModels,
   updateAiModel,
 } from '../ai-governance';
 import { runGatewayMutation } from '../mutation';
@@ -279,6 +281,75 @@ describe('AI governance domain service', () => {
         }),
       }),
     );
+  });
+
+  it('maps LiteLLM sync visibility and real model availability results', async () => {
+    mockedRunGatewayMutation
+      .mockImplementationOnce(async (_method, options) => ({
+        data: options?.transform?.({
+          source: 'litellm',
+          visible_count: 13,
+          synced_count: 13,
+          missing_count: 1,
+          model_aliases: ['erp-fast-chat', 'erp-embedding'],
+        }),
+        idempotencyKey: 'sync-1',
+      }))
+      .mockImplementationOnce(async (_method, options) => ({
+        data: options?.transform?.({
+          source: 'litellm',
+          checked_count: 2,
+          available_count: 1,
+          unavailable_count: 1,
+          items: [
+            {
+              model_alias: 'erp-fast-chat',
+              capability: 'fast_chat',
+              available: true,
+              latency_ms: 321.5,
+              provider_model: 'openai/gpt-5',
+            },
+            {
+              model_alias: 'erp-embedding',
+              capability: 'embedding',
+              available: false,
+              latency_ms: 500,
+              error_code: 'PROVIDER_HTTP_429',
+            },
+          ],
+        }),
+        idempotencyKey: 'availability-1',
+      }));
+
+    const syncResult = await syncAiModels();
+    const availabilityResult = await checkAiModelAvailability();
+
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      1,
+      'sync_ai_model_registry_v1',
+      expect.objectContaining({ transform: expect.any(Function) }),
+    );
+    expect(syncResult.data).toMatchObject({
+      source: 'litellm',
+      visibleCount: 13,
+      syncedCount: 13,
+      missingCount: 1,
+    });
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      2,
+      'check_ai_model_availability_v1',
+      expect.objectContaining({ transform: expect.any(Function) }),
+    );
+    expect(availabilityResult.data).toMatchObject({
+      checkedCount: 2,
+      availableCount: 1,
+      unavailableCount: 1,
+    });
+    expect(availabilityResult.data.items[1]).toMatchObject({
+      modelAlias: 'erp-embedding',
+      available: false,
+      errorCode: 'PROVIDER_HTTP_429',
+    });
   });
 
   it('maps embedding release progress and immutable collection fields', async () => {

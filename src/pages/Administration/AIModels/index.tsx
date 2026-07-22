@@ -31,6 +31,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  message,
   Row,
   Select,
   Space,
@@ -50,6 +51,7 @@ import {
   type AiPolicyVersion,
   type AiUsageDaily,
   approveAiPolicy,
+  checkAiModelAvailability,
   getAiGovernanceOverview,
   getAiPolicy,
   getAiUsage,
@@ -84,6 +86,13 @@ const POLICY_STATUS: Record<string, { color: string; text: string }> = {
   draft: { color: 'default', text: '草稿' },
   review_required: { color: 'processing', text: '待审批' },
   superseded: { color: 'default', text: '已替代' },
+};
+
+const MODEL_HEALTH: Record<string, { color: string; text: string }> = {
+  available: { color: 'success', text: '可用' },
+  listed: { color: 'processing', text: 'LiteLLM 可见' },
+  missing: { color: 'default', text: 'LiteLLM 不可见' },
+  unavailable: { color: 'error', text: '不可用' },
 };
 
 const SCENARIOS = [
@@ -157,8 +166,9 @@ const TAB_META: Record<AiGovernanceTab, { title: string; subTitle: string }> = {
     subTitle: '查询关键治理动作、责任主体、原因和哈希证据',
   },
   models: {
-    title: 'AI 模型注册表',
-    subTitle: '维护模型能力、健康状态、成本、数据区域和留存策略',
+    title: 'AI 模型管理',
+    subTitle:
+      '同步 LiteLLM 当前 Key 可见模型，并管理可用性、成本、数据区域和留存策略',
   },
   policies: {
     title: 'AI 场景策略',
@@ -187,6 +197,8 @@ export default function AiModelGovernancePage({
   const [policyForm] = Form.useForm();
   const [actionForm] = Form.useForm();
   const [editingModel, setEditingModel] = useState<AiModel | null>(null);
+  const [syncingModels, setSyncingModels] = useState(false);
+  const [checkingModels, setCheckingModels] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<AiPolicy | null>(null);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -372,8 +384,17 @@ export default function AiModelGovernancePage({
       width: 180,
       render: (_, row) => (
         <Space orientation="vertical" size={0}>
-          <Text>{row.lastHealthStatus || '-'}</Text>
+          {row.lastHealthStatus ? (
+            <Tag color={MODEL_HEALTH[row.lastHealthStatus]?.color ?? 'default'}>
+              {MODEL_HEALTH[row.lastHealthStatus]?.text ?? row.lastHealthStatus}
+            </Tag>
+          ) : (
+            <Text>-</Text>
+          )}
           <Text type="secondary">{row.lastHealthAt || '-'}</Text>
+          {row.lastErrorCode ? (
+            <Text type="danger">{row.lastErrorCode}</Text>
+          ) : null}
         </Space>
       ),
     },
@@ -812,16 +833,55 @@ export default function AiModelGovernancePage({
                             <Button
                               key="sync"
                               icon={<CloudSyncOutlined />}
+                              loading={syncingModels}
                               onClick={async () => {
+                                setSyncingModels(true);
                                 try {
-                                  await syncAiModels();
+                                  const result = await syncAiModels();
+                                  message.success(
+                                    `已从 LiteLLM 同步 ${result.data.visibleCount} 个当前 Key 可见模型`,
+                                  );
                                   reloadGovernance();
                                 } catch (error) {
                                   notifyMutationError(error);
+                                } finally {
+                                  setSyncingModels(false);
                                 }
                               }}
                             >
                               同步 LiteLLM
+                            </Button>,
+                            <Button
+                              key="availability"
+                              icon={<ApiOutlined />}
+                              loading={checkingModels}
+                              onClick={() => {
+                                Modal.confirm({
+                                  title: '检查全部模型可用性？',
+                                  content:
+                                    '系统会通过 LiteLLM 对每个未停用模型发起一次最小真实请求，可能产生少量 Provider 费用。',
+                                  okText: '开始检查',
+                                  cancelText: '取消',
+                                  onOk: async () => {
+                                    setCheckingModels(true);
+                                    try {
+                                      const result =
+                                        await checkAiModelAvailability();
+                                      message.success(
+                                        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.unavailableCount} 个不可用`,
+                                      );
+                                      reloadGovernance();
+                                    } catch (error) {
+                                      notifyMutationError(error);
+                                      throw error;
+                                    } finally {
+                                      setCheckingModels(false);
+                                    }
+                                  },
+                                });
+                              }}
+                            >
+                              一键检查可用性
                             </Button>,
                           ]
                         : []
@@ -957,7 +1017,7 @@ export default function AiModelGovernancePage({
       </Space>
 
       <Modal
-        title={`维护模型治理元数据 · ${editingModel?.modelAlias ?? ''}`}
+        title={`编辑模型管理信息 · ${editingModel?.modelAlias ?? ''}`}
         open={Boolean(editingModel)}
         onCancel={() => setEditingModel(null)}
         onOk={() => modelForm.submit()}

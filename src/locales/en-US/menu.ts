@@ -5,7 +5,7 @@ export default {
   'menu.administration.roles': 'Roles',
   'menu.administration.test-data': 'Test Data Management',
   'menu.administration.ai-governance': 'AI Management',
-  'menu.administration.ai-governance.models': 'Model Governance',
+  'menu.administration.ai-governance.models': 'Model Management',
   'menu.administration.ai-governance.policies': 'Scenario Policies',
   'menu.administration.ai-governance.usage': 'Usage & Cost',
   'menu.administration.ai-governance.vectors': 'Vector & Embedding',

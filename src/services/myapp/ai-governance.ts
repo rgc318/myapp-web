@@ -77,6 +77,31 @@ export type AiModel = {
   supportsVision: boolean;
 };
 
+export type AiModelSyncResult = {
+  missingCount: number;
+  modelAliases: string[];
+  source: string;
+  syncedCount: number;
+  visibleCount: number;
+};
+
+export type AiModelAvailabilityItem = {
+  available: boolean;
+  capability: string | null;
+  errorCode: string | null;
+  latencyMs: number;
+  modelAlias: string;
+  providerModel: string | null;
+};
+
+export type AiModelAvailabilityResult = {
+  availableCount: number;
+  checkedCount: number;
+  items: AiModelAvailabilityItem[];
+  source: string;
+  unavailableCount: number;
+};
+
 export type AiPolicy = {
   approvedAt: string | null;
   approvedBy: string | null;
@@ -639,9 +664,48 @@ export async function listAiModels(params: {
 }
 
 export async function syncAiModels() {
-  return runGatewayMutation('sync_ai_model_registry_v1', {
-    successMessage: '模型注册表已同步',
+  return runGatewayMutation<AiModelSyncResult>('sync_ai_model_registry_v1', {
+    transform: (data) => {
+      const payload = readObject(data);
+      return {
+        missingCount: toNumber(payload.missing_count),
+        modelAliases: toStringList(payload.model_aliases),
+        source: toOptionalText(payload.source) ?? 'litellm',
+        syncedCount: toNumber(payload.synced_count),
+        visibleCount: toNumber(payload.visible_count),
+      };
+    },
   });
+}
+
+export async function checkAiModelAvailability() {
+  return runGatewayMutation<AiModelAvailabilityResult>(
+    'check_ai_model_availability_v1',
+    {
+      transform: (data) => {
+        const payload = readObject(data);
+        return {
+          availableCount: toNumber(payload.available_count),
+          checkedCount: toNumber(payload.checked_count),
+          items: Array.isArray(payload.items)
+            ? payload.items.map((item) => {
+                const row = readObject(item);
+                return {
+                  available: Boolean(row.available),
+                  capability: toOptionalText(row.capability) ?? null,
+                  errorCode: toOptionalText(row.error_code) ?? null,
+                  latencyMs: toNumber(row.latency_ms),
+                  modelAlias: toOptionalText(row.model_alias) ?? '',
+                  providerModel: toOptionalText(row.provider_model) ?? null,
+                };
+              })
+            : [],
+          source: toOptionalText(payload.source) ?? 'litellm',
+          unavailableCount: toNumber(payload.unavailable_count),
+        };
+      },
+    },
+  );
 }
 
 export async function updateAiModel(
@@ -676,7 +740,7 @@ export async function updateAiModel(
       }),
       reason,
     },
-    successMessage: '模型治理元数据已更新',
+    successMessage: '模型管理信息已更新',
   });
 }
 

@@ -5,7 +5,7 @@ export default {
   'menu.administration.roles': '角色目录',
   'menu.administration.test-data': '测试数据管理',
   'menu.administration.ai-governance': 'AI 管理',
-  'menu.administration.ai-governance.models': '模型治理',
+  'menu.administration.ai-governance.models': '模型管理',
   'menu.administration.ai-governance.policies': '场景策略',
   'menu.administration.ai-governance.usage': '用量与成本',
   'menu.administration.ai-governance.vectors': '向量与 Embedding',
