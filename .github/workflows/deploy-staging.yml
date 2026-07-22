@@ -1,0 +1,133 @@
+name: Deploy staging Web
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "published image tag to deploy"
+        required: true
+        default: "staging-latest"
+        type: string
+      publish_port:
+        description: "host port for myapp-web"
+        required: true
+        default: "30080"
+        type: string
+      docker_network:
+        description: "Docker network containing the Frappe frontend service"
+        required: true
+        default: "staging_default"
+        type: string
+      frappe_upstream:
+        description: "Frappe frontend URL reachable inside the Docker network"
+        required: true
+        default: "http://frontend:8080"
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/myapp-web
+  CONTAINER_NAME: myapp-web-staging
+
+jobs:
+  deploy:
+    name: Deploy to staging server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate deploy secrets and inputs
+        env:
+          STAGING_SSH_HOST: ${{ secrets.STAGING_SSH_HOST }}
+          STAGING_SSH_PORT: ${{ secrets.STAGING_SSH_PORT }}
+          STAGING_SSH_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          PUBLISH_PORT: ${{ inputs.publish_port }}
+          DOCKER_NETWORK: ${{ inputs.docker_network }}
+          FRAPPE_UPSTREAM: ${{ inputs.frappe_upstream }}
+        run: |
+          set -euo pipefail
+          for key in STAGING_SSH_HOST STAGING_SSH_PORT STAGING_SSH_USER STAGING_SSH_PRIVATE_KEY GHCR_USERNAME GHCR_TOKEN; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing required secret: ${key}"
+              exit 1
+            fi
+          done
+          printf '%s' "${STAGING_SSH_PORT}" | grep -Eq '^[0-9]+$'
+          printf '%s' "${PUBLISH_PORT}" | grep -Eq '^[0-9]+$'
+          printf '%s' "${IMAGE_TAG}" | grep -Eq '^[A-Za-z0-9_.-]+$'
+          printf '%s' "${DOCKER_NETWORK}" | grep -Eq '^[A-Za-z0-9_.-]+$'
+          printf '%s' "${FRAPPE_UPSTREAM}" | grep -Eq '^https?://[A-Za-z0-9_.:-]+$'
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          CONTAINER_NAME: ${{ env.CONTAINER_NAME }}
+          PUBLISH_PORT: ${{ inputs.publish_port }}
+          DOCKER_NETWORK: ${{ inputs.docker_network }}
+          FRAPPE_UPSTREAM: ${{ inputs.frappe_upstream }}
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_PRIVATE_KEY }}
+          command_timeout: 20m
+          envs: GHCR_USERNAME,GHCR_TOKEN,IMAGE_NAME,IMAGE_TAG,CONTAINER_NAME,PUBLISH_PORT,DOCKER_NETWORK,FRAPPE_UPSTREAM
+          script: |
+            set -euo pipefail
+
+            image="${IMAGE_NAME}:${IMAGE_TAG}"
+            previous_image_id=""
+            if docker container inspect "${CONTAINER_NAME}" >/dev/null 2>&1; then
+              previous_image_id="$(docker container inspect --format '{{.Image}}' "${CONTAINER_NAME}")"
+            fi
+
+            echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
+            docker network inspect "${DOCKER_NETWORK}" >/dev/null
+            docker pull "${image}"
+            docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+
+            run_container() {
+              docker run -d \
+                --name "${CONTAINER_NAME}" \
+                --restart unless-stopped \
+                --network "${DOCKER_NETWORK}" \
+                --security-opt no-new-privileges:true \
+                --cap-drop ALL \
+                -p "${PUBLISH_PORT}:8080" \
+                -e "MYAPP_WEB_UPSTREAM=${FRAPPE_UPSTREAM}" \
+                "$1"
+            }
+
+            run_container "${image}"
+
+            healthy=0
+            for attempt in $(seq 1 30); do
+              if curl --noproxy '*' -fsS "http://127.0.0.1:${PUBLISH_PORT}/healthz" >/dev/null \
+                && curl --noproxy '*' -fsS "http://127.0.0.1:${PUBLISH_PORT}/user/login" >/dev/null \
+                && curl --noproxy '*' -fsS "http://127.0.0.1:${PUBLISH_PORT}/api/method/ping" >/dev/null; then
+                healthy=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "${healthy}" != "1" ]; then
+              docker logs "${CONTAINER_NAME}" || true
+              docker rm -f "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+              if [ -n "${previous_image_id}" ]; then
+                echo "Deployment failed; restoring ${previous_image_id}."
+                run_container "${previous_image_id}"
+              fi
+              exit 1
+            fi
+
+            docker container inspect --format '{{.Config.Image}} {{.State.Health.Status}}' "${CONTAINER_NAME}"

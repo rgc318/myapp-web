@@ -1,30 +1,44 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        node_version: [20]
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+  verify:
+    name: Typecheck, lint, test and build
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v6
-      - name: Use Node.js ${{ matrix.node_version }}
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: ${{ matrix.node_version }}
-      - run: echo ${{github.ref}}
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun run lint
-      - run: bun run build
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run tsc
+
+      - name: Lint
+        run: npm run biome:lint
+
+      - name: Test
+        run: npm test -- --runInBand
+
+      - name: Build
+        run: npm run build
         env:
           CI: true
-          PROGRESS: none
-          NODE_ENV: test
+          NODE_ENV: production
           NODE_OPTIONS: --max_old_space_size=4096
+          PROGRESS: none

@@ -1,3 +1,12 @@
+## MyApp Web
+
+MyApp 的桌面端业务前端，基于 Ant Design Pro、Umi 和 ProComponents。
+
+- 开发规范：[WEB_DEVELOPMENT.zh-CN.md](./WEB_DEVELOPMENT.zh-CN.md)
+- 部署说明：[DEPLOYMENT.zh-CN.md](./DEPLOYMENT.zh-CN.md)
+
+MyApp 的构建、镜像和服务器部署以上述部署说明为准。下方保留上游 Ant Design Pro 的通用说明。
+
 Language : [🇺🇸](./README.md) | 🇨🇳 | [🇷🇺](./README.ru-RU.md) | [🇹🇷](./README.tr-TR.md) | [🇯🇵](./README.ja-JP.md) | [🇫🇷](./README.fr-FR.md) | [🇵🇹](./README.pt-BR.md) | [🇸🇦](./README.ar-DZ.md)
 
 <h1 align="center">Ant Design Pro</h1>
@@ -6,8 +15,7 @@ Language : [🇺🇸](./README.md) | 🇨🇳 | [🇷🇺](./README.ru-RU.md) | 
 
 开箱即用的中台前端/设计解决方案。
 
-[![CI](https://github.com/ant-design/ant-design-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/ant-design/ant-design-pro/actions/workflows/ci.yml)
-[![Preview Deploy](https://github.com/ant-design/ant-design-pro/actions/workflows/preview-deploy.yml/badge.svg)](https://github.com/ant-design/ant-design-pro/actions/workflows/preview-deploy.yml)
+[![CI](https://github.com/rgc318/myapp-web/actions/workflows/ci.yml/badge.svg)](https://github.com/rgc318/myapp-web/actions/workflows/ci.yml)
 [![Build With Umi](https://img.shields.io/badge/build%20with-umi-028fe4.svg?style=flat-square)](http://umijs.org/)
 [![Checked with Biome](https://img.shields.io/badge/Checked_with-Biome-60a5fa?style=flat&logo=biome)](https://biomejs.dev)
 ![](https://badgen.net/badge/icon/Ant%20Design?icon=https://gw.alipayobjects.com/zos/antfincdn/Pp4WPgVDB3/KDpgvguMpGfqaHPjicRK.svg&label)
@@ -16,7 +24,6 @@ Language : [🇺🇸](./README.md) | 🇨🇳 | [🇷🇺](./README.ru-RU.md) | 
 
 </div>
 
-- 预览：http://preview.pro.ant.design
 - 首页：http://pro.ant.design/index-cn
 - 使用文档：http://pro.ant.design/docs/getting-started-cn
 - 更新日志: http://pro.ant.design/docs/changelog-cn
