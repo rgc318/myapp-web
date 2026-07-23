@@ -193,7 +193,27 @@ describe('AiMessageContent', () => {
     );
 
     expect(screen.getByText('AI 服务暂时不可用')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /重新发送/ }));
+    fireEvent.click(screen.getByRole('button', { name: /稍后重试/ }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the user to edit validation failures instead of resending unchanged input', () => {
+    const onEditRequest = jest.fn();
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [],
+        content: '',
+        error: '请求内容未通过校验',
+        errorCode: 'AI_REQUEST_INVALID',
+        onEditRequest,
+        onRetry: jest.fn(),
+      }),
+    );
+
+    expect(screen.getByText('需要修改本次问题')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /修改问题/ }));
+    expect(onEditRequest).toHaveBeenCalledTimes(1);
   });
 });

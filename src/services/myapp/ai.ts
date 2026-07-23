@@ -69,6 +69,33 @@ export class AiDraftVersionConflictError extends Error {
   }
 }
 
+export class AiStreamError extends Error {
+  code: string;
+  conversationId: string | null;
+  runId: string | null;
+
+  constructor(
+    message: string,
+    options: {
+      code: string;
+      conversationId?: string | null;
+      runId?: string | null;
+    },
+  ) {
+    super(message);
+    this.name = 'AiStreamError';
+    this.code = options.code;
+    this.conversationId = options.conversationId ?? null;
+    this.runId = options.runId ?? null;
+  }
+}
+
+export function getAiErrorCode(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' && code.trim() ? code.trim() : null;
+}
+
 export function isAiDraftVersionConflictError(
   error: unknown,
 ): error is AiDraftVersionConflictError {
@@ -1027,34 +1054,73 @@ export async function streamAiChatMessage(
   onEvent: (event: AiEvent) => void,
   signal?: AbortSignal,
 ): Promise<AiChatResult> {
-  const response = await fetch(
-    buildMyAppApiUrl(
-      '/api/method/myapp.api.gateway.stream_ai_message_v1',
-    ),
-    {
-      method: 'POST',
-      headers: {
-        Accept: 'text/event-stream',
-        'Content-Type': 'application/json',
-        ...(getMyAppAuthHeaders() ?? {}),
+  let response: Response;
+  try {
+    response = await fetch(
+      buildMyAppApiUrl(
+        '/api/method/myapp.api.gateway.stream_ai_message_v1',
+      ),
+      {
+        method: 'POST',
+        headers: {
+          Accept: 'text/event-stream',
+          'Content-Type': 'application/json',
+          ...(getMyAppAuthHeaders() ?? {}),
+        },
+        body: JSON.stringify({
+          content: payload.content,
+          scenario: payload.scenario ?? 'auto',
+          ...(payload.conversationId
+            ? { conversation_id: payload.conversationId }
+            : {}),
+          ...(payload.company ? { company: payload.company } : {}),
+          ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+        }),
+        signal,
       },
-      body: JSON.stringify({
-        content: payload.content,
-        scenario: payload.scenario ?? 'auto',
-        ...(payload.conversationId
-          ? { conversation_id: payload.conversationId }
-          : {}),
-        ...(payload.company ? { company: payload.company } : {}),
-        ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
-      }),
-      signal,
-    },
-  );
+    );
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw error;
+    }
+    throw new AiStreamError('网络连接失败，请检查网络后重试。', {
+      code: 'AI_NETWORK_ERROR',
+    });
+  }
   if (!response.ok) {
-    throw new Error(`AI 流式请求失败（HTTP ${response.status}）`);
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    const outer = readObject(body);
+    const envelope = readObject(outer.message ?? outer);
+    const fallbackCode =
+      ({
+        401: 'AUTHENTICATION_REQUIRED',
+        403: 'PERMISSION_DENIED',
+        409: 'AI_PROMPT_VERSION_MISMATCH',
+        422: 'VALIDATION_ERROR',
+        429: 'AI_REQUEST_RATE_LIMITED',
+      } as Record<number, string>)[response.status] ??
+      'AI_SERVICE_UNAVAILABLE';
+    throw new AiStreamError(
+      typeof envelope.message === 'string'
+        ? envelope.message
+        : `AI 流式请求失败（HTTP ${response.status}）`,
+      {
+        code:
+          typeof envelope.code === 'string'
+            ? envelope.code
+            : fallbackCode,
+      },
+    );
   }
   if (!response.body) {
-    throw new Error('当前浏览器不支持 AI 流式响应。');
+    throw new AiStreamError('当前浏览器不支持 AI 流式响应。', {
+      code: 'AI_BROWSER_STREAM_UNSUPPORTED',
+    });
   }
 
   const reader = response.body.getReader();
@@ -1071,10 +1137,27 @@ export async function streamAiChatMessage(
     if (!data) {
       return;
     }
-    const event = readObject(JSON.parse(data)) as AiEvent;
+    let event: AiEvent;
+    try {
+      event = readObject(JSON.parse(data)) as AiEvent;
+    } catch {
+      throw new AiStreamError('AI 流式响应格式异常，请稍后重试。', {
+        code: 'AI_STREAM_PROTOCOL_ERROR',
+      });
+    }
     onEvent(event);
     if (event.type === 'error') {
-      throw new Error(String(event.message ?? 'AI 流式服务调用失败'));
+      throw new AiStreamError(
+        String(event.message ?? 'AI 流式服务调用失败'),
+        {
+          code: String(event.code ?? 'AI_STREAM_FAILED'),
+          conversationId:
+            typeof event.conversation === 'string'
+              ? event.conversation
+              : null,
+          runId: typeof event.run_id === 'string' ? event.run_id : null,
+        },
+      );
     }
     if (event.type === 'completed') {
       completed = event;
@@ -1095,7 +1178,9 @@ export async function streamAiChatMessage(
     consumeBlock(buffer);
   }
   if (!completed) {
-    throw new Error('AI 流式响应未正常完成。');
+    throw new AiStreamError('AI 流式响应未正常完成。', {
+      code: 'AI_STREAM_INCOMPLETE',
+    });
   }
   return mapChatResult(completed);
 }

@@ -1,5 +1,7 @@
 import {
   DislikeOutlined,
+  EditOutlined,
+  InfoCircleOutlined,
   LikeOutlined,
   LoadingOutlined,
   MoreOutlined,
@@ -17,6 +19,7 @@ import {
   resolveAiBusinessResultSet,
 } from '@/services/myapp/ai';
 import { useAiWorkspaceStyles } from '../styles';
+import { resolveAiFailureRecovery } from './ai-failure';
 import { BusinessResultPanel } from './BusinessResultPanel';
 
 const REPORT_METRIC_LABELS: Record<string, string> = {
@@ -33,15 +36,18 @@ type Props = {
   content: string;
   citations?: AiCitation[];
   error?: string | null;
+  errorCode?: string | null;
   feedback?: 'positive' | 'negative';
   onDiscardDraft: (draftId: string) => void;
   onEditDraft: (citation: AiCitation) => void;
+  onEditRequest?: () => void;
   onFeedback: (rating: 'positive' | 'negative') => void;
   onHandoffDraft: (draftId: string) => void;
   onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
   onOpenProduct: (citation: AiCitation) => void;
   onRetry?: () => void;
+  onViewDiagnostics?: () => void;
   progressMessage?: string;
   progressStartedAt?: number | null;
   runId?: string | null;
@@ -282,15 +288,18 @@ export function AiMessageContent({
   content,
   citations = [],
   error,
+  errorCode,
   feedback,
   onDiscardDraft,
   onEditDraft,
+  onEditRequest,
   onFeedback,
   onHandoffDraft,
   onOpenBusinessDocument,
   onOpenDraftHistory,
   onOpenProduct,
   onRetry,
+  onViewDiagnostics,
   progressMessage,
   progressStartedAt,
   runId,
@@ -308,6 +317,7 @@ export function AiMessageContent({
         'purchase_invoice',
       ].includes(citation.type),
   );
+  const failureRecovery = error ? resolveAiFailureRecovery(errorCode) : null;
 
   return (
     <div className={styles.messageBody}>
@@ -342,16 +352,47 @@ export function AiMessageContent({
       {error ? (
         <Alert
           action={
-            onRetry ? (
-              <Button icon={<ReloadOutlined />} onClick={onRetry} size="small">
-                重新发送
-              </Button>
-            ) : undefined
+            <Space wrap>
+              {failureRecovery?.action === 'retry' && onRetry ? (
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={onRetry}
+                  size="small"
+                >
+                  稍后重试
+                </Button>
+              ) : null}
+              {failureRecovery?.action === 'edit' && onEditRequest ? (
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={onEditRequest}
+                  size="small"
+                >
+                  修改问题
+                </Button>
+              ) : null}
+              {onViewDiagnostics ? (
+                <Button
+                  icon={<InfoCircleOutlined />}
+                  onClick={onViewDiagnostics}
+                  size="small"
+                >
+                  查看诊断
+                </Button>
+              ) : null}
+            </Space>
           }
-          description="已保留本次问题和运行记录，可以查看诊断或手动重试。"
+          description={
+            <Space orientation="vertical" size={2}>
+              <Typography.Text>{error}</Typography.Text>
+              <Typography.Text type="secondary">
+                {failureRecovery?.description}
+              </Typography.Text>
+            </Space>
+          }
           showIcon
-          title={error}
-          type="error"
+          title={failureRecovery?.title}
+          type={failureRecovery?.alertType}
         />
       ) : null}
       {detailCitations.length ? (
@@ -399,6 +440,7 @@ export function AiMessageContent({
 
 export type AiMessageRow = AiChatMessage & {
   error?: string | null;
+  errorCode?: string | null;
   id: string;
   runId?: string | null;
 };

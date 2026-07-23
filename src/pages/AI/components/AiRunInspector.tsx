@@ -2,6 +2,7 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
+  EditOutlined,
   LoadingOutlined,
   ReloadOutlined,
   StopOutlined,
@@ -10,6 +11,7 @@ import { ProCard } from '@ant-design/pro-components';
 import { Alert, Button, Descriptions, Space, Tag, Typography } from 'antd';
 import React from 'react';
 import type { AiChatResult } from '@/services/myapp/ai';
+import { resolveAiFailureRecovery } from './ai-failure';
 
 export type AiRunDisplayStatus =
   | 'idle'
@@ -51,6 +53,8 @@ function durationText(value: number | null | undefined) {
 export function AiRunInspector({
   activeRunId,
   error,
+  errorCode,
+  onEditRequest,
   onRetry,
   result,
   status,
@@ -59,6 +63,8 @@ export function AiRunInspector({
 }: {
   activeRunId?: string | null;
   error?: string | null;
+  errorCode?: string | null;
+  onEditRequest?: () => void;
   onRetry?: () => void;
   result: AiChatResult | null;
   status: AiRunDisplayStatus;
@@ -68,6 +74,11 @@ export function AiRunInspector({
   const statusMeta = STATUS_META[status];
   const run = result?.run;
   const runId = result?.runId || activeRunId || null;
+  const resolvedError = run?.error || error;
+  const resolvedErrorCode = run?.errorCode || errorCode;
+  const failureRecovery = resolvedError
+    ? resolveAiFailureRecovery(resolvedErrorCode)
+    : null;
 
   return (
     <Space orientation="vertical" size={12} style={{ width: '100%' }}>
@@ -170,22 +181,40 @@ export function AiRunInspector({
         </ProCard>
       ) : null}
 
-      {run?.error || error ? (
+      {resolvedError ? (
         <Alert
           action={
-            onRetry ? (
+            failureRecovery?.action === 'retry' && onRetry ? (
               <Button icon={<ReloadOutlined />} onClick={onRetry} size="small">
-                手动重试
+                稍后重试
+              </Button>
+            ) : failureRecovery?.action === 'edit' && onEditRequest ? (
+              <Button
+                icon={<EditOutlined />}
+                onClick={onEditRequest}
+                size="small"
+              >
+                修改问题
               </Button>
             ) : undefined
           }
-          description={run?.errorCode || undefined}
+          description={
+            <Space orientation="vertical" size={2}>
+              <Typography.Text>{resolvedError}</Typography.Text>
+              <Typography.Text type="secondary">
+                {failureRecovery?.description}
+              </Typography.Text>
+              {resolvedErrorCode ? (
+                <Typography.Text code>{resolvedErrorCode}</Typography.Text>
+              ) : null}
+            </Space>
+          }
           showIcon
-          title={run?.error || error}
-          type="error"
+          title={failureRecovery?.title}
+          type={failureRecovery?.alertType}
         />
       ) : null}
-      {!run?.error && !error && status === 'stopped' && onRetry ? (
+      {!resolvedError && status === 'stopped' && onRetry ? (
         <Button block icon={<ReloadOutlined />} onClick={onRetry}>
           重新发送上次问题
         </Button>

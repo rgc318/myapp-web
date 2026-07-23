@@ -103,7 +103,10 @@ jest.mock('./components/AiMessageContent', () => {
     AiMessageContent: ({
       content,
       error,
+      errorCode,
+      onEditRequest,
       onRetry,
+      onViewDiagnostics,
       progressMessage,
       streaming,
     }: any) =>
@@ -112,11 +115,28 @@ jest.mock('./components/AiMessageContent', () => {
         null,
         content || (streaming ? progressMessage : ''),
         error ? React.createElement('span', null, error) : null,
-        error && onRetry
+        errorCode === 'AI_REQUEST_INVALID'
+          ? React.createElement('span', null, '需要修改本次问题')
+          : null,
+        error && errorCode !== 'AI_REQUEST_INVALID' && onRetry
           ? React.createElement(
               'button',
               { onClick: onRetry, type: 'button' },
-              '重新发送',
+              '稍后重试',
+            )
+          : null,
+        errorCode === 'AI_REQUEST_INVALID' && onEditRequest
+          ? React.createElement(
+              'button',
+              { onClick: onEditRequest, type: 'button' },
+              '修改问题',
+            )
+          : null,
+        error && onViewDiagnostics
+          ? React.createElement(
+              'button',
+              { onClick: onViewDiagnostics, type: 'button' },
+              '查看诊断',
             )
           : null,
       ),
@@ -137,6 +157,7 @@ jest.mock('@/services/myapp/ai', () => ({
   generateAiProductSetupDraft: jest.fn(),
   generateAiPurchaseOrderDraft: jest.fn(),
   generateAiSalesOrderDraft: jest.fn(),
+  getAiErrorCode: (error: { code?: string } | null) => error?.code ?? null,
   getAiConversation: jest.fn(),
   getAiDraft: jest.fn(),
   listAiConversations: jest.fn().mockResolvedValue({ items: [], total: 0 }),
@@ -335,7 +356,29 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     expect(await screen.findByText('AI 服务暂时不可用')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '重新发送' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '稍后重试' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '查看诊断' })).toBeTruthy();
+  });
+
+  it('restores an invalid request for editing instead of retrying it unchanged', async () => {
+    streamAiChatMessage.mockRejectedValueOnce(
+      Object.assign(new Error('请求内容未通过校验'), {
+        code: 'AI_REQUEST_INVALID',
+      }),
+    );
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '原始问题' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByText('需要修改本次问题')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /修改问题/ }));
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' }).value,
+    ).toBe('原始问题');
   });
 
   it('renders archived conversations as read-only', async () => {
@@ -428,7 +471,7 @@ describe('AI workspace page', () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
     expect(await screen.findByText('历史 AI 运行失败')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: '重新发送' }));
+    fireEvent.click(await screen.findByRole('button', { name: '稍后重试' }));
 
     await waitFor(() => {
       expect(streamAiChatMessage).toHaveBeenCalledWith(

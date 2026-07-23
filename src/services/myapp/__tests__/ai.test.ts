@@ -585,6 +585,59 @@ describe('AI domain service', () => {
     fetchMock.mockRestore();
   });
 
+  it('preserves a stable SSE failure code for recovery decisions', async () => {
+    const chunk = new Uint8Array(
+      Buffer.from(
+        'data: {"type":"error","code":"AI_REQUEST_RATE_LIMITED","message":"请求过于频繁","conversation":"AI-CONV-1","run_id":"AI-RUN-1"}\n\n',
+      ),
+    );
+    let read = false;
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () =>
+            read
+              ? { done: true, value: undefined }
+              : ((read = true), { done: false, value: chunk }),
+        }),
+      },
+    } as Response);
+
+    await expect(
+      streamAiChatMessage({ content: '你好' }, jest.fn()),
+    ).rejects.toMatchObject({
+      code: 'AI_REQUEST_RATE_LIMITED',
+      conversationId: 'AI-CONV-1',
+      runId: 'AI-RUN-1',
+    });
+    fetchMock.mockRestore();
+  });
+
+  it('reads gateway error envelopes before an SSE stream is established', async () => {
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      body: null,
+      json: async () => ({
+        message: {
+          code: 'PERMISSION_DENIED',
+          message: '无权访问该公司',
+          ok: false,
+        },
+      }),
+      ok: false,
+      status: 403,
+    } as Response);
+
+    await expect(
+      streamAiChatMessage({ content: '查询其他公司' }, jest.fn()),
+    ).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+      message: '无权访问该公司',
+    });
+    fetchMock.mockRestore();
+  });
+
   it('submits feedback against an audited run', async () => {
     mockedCallGatewayMethod.mockResolvedValue({ data: {}, meta: {}, raw: {} });
 

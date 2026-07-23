@@ -58,6 +58,7 @@ import {
   generateAiPurchaseOrderDraft,
   generateAiSalesOrderDraft,
   getAiConversation,
+  getAiErrorCode,
   listAiConversations,
   listAiDraftVersions,
   listAiSelectableModels,
@@ -175,6 +176,7 @@ export default function AiPage() {
   } | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [runErrorCode, setRunErrorCode] = useState<string | null>(null);
   const [runWarnings, setRunWarnings] = useState<string[]>([]);
   const [toolProgress, setToolProgress] = useState<AiToolProgress[]>([]);
   const [retryRequest, setRetryRequest] = useState<{
@@ -283,6 +285,7 @@ export default function AiPage() {
           item.run?.status === 'failed'
             ? (item.run.error ?? 'AI 服务调用失败')
             : null,
+        errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
         runId: item.runId,
       }));
       setMessages(restoredMessages);
@@ -313,6 +316,7 @@ export default function AiPage() {
       setToolProgress([]);
       setRunProgress(null);
       setRunError(latestRunMessage?.run?.error ?? null);
+      setRunErrorCode(latestRunMessage?.run?.errorCode ?? null);
       setRunStatus(
         latestRunMessage?.run
           ? latestRunMessage.run.status === 'failed'
@@ -420,6 +424,7 @@ export default function AiPage() {
     setLastResult(null);
     setActiveRunId(null);
     setRunError(null);
+    setRunErrorCode(null);
     setRunWarnings([]);
     setToolProgress([]);
     setRunProgress({
@@ -462,6 +467,7 @@ export default function AiPage() {
         setActiveRunId(result.runId);
         setRunWarnings(result.warnings);
         setRunError(null);
+        setRunErrorCode(null);
         setRetryRequest(null);
         setRunStatus('completed');
         setRunProgress(null);
@@ -604,6 +610,7 @@ export default function AiPage() {
       setActiveRunId(result.runId);
       setRunWarnings(result.warnings);
       setRunError(null);
+      setRunErrorCode(null);
       setRetryRequest(null);
       setRunStatus('completed');
       setRunProgress(null);
@@ -635,7 +642,9 @@ export default function AiPage() {
         setRunProgress(null);
         const errorMessage =
           caught instanceof Error ? caught.message : 'AI 服务调用失败';
+        const errorCode = getAiErrorCode(caught);
         setRunError(errorMessage);
+        setRunErrorCode(errorCode);
         setRetryRequest({
           content,
           modelAlias: requestedModelAlias,
@@ -644,7 +653,7 @@ export default function AiPage() {
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessage.id
-              ? { ...item, error: errorMessage }
+              ? { ...item, error: errorMessage, errorCode }
               : item,
           ),
         );
@@ -658,6 +667,21 @@ export default function AiPage() {
 
   const stopGeneration = () => {
     streamAbortRef.current?.abort();
+  };
+
+  const editFailedRequest = () => {
+    if (!retryRequest) return;
+    setDraft(retryRequest.content);
+    setScenario(retryRequest.scenario);
+    setSelectedModelAlias(
+      retryRequest.modelAlias &&
+        selectableModels.some(
+          (model) => model.modelAlias === retryRequest.modelAlias,
+        )
+        ? retryRequest.modelAlias
+        : null,
+    );
+    message.info('已恢复上次问题，请修改后重新发送。');
   };
 
   const handoffDraft = async (draftId: string) => {
@@ -789,6 +813,7 @@ export default function AiPage() {
     setLastResult(null);
     setActiveRunId(null);
     setRunError(null);
+    setRunErrorCode(null);
     setRunWarnings([]);
     setToolProgress([]);
     setRunProgress(null);
@@ -897,9 +922,18 @@ export default function AiPage() {
           citations={item.citations}
           content={item.content}
           error={item.error}
+          errorCode={item.errorCode}
           feedback={item.runId ? feedbackByRun[item.runId] : undefined}
           onDiscardDraft={(draftId) => void discardDraft(draftId)}
           onEditDraft={openDraftEditor}
+          onEditRequest={
+            selectedConversationStatus !== 'archived' &&
+            item.error &&
+            retryRequest &&
+            index === messages.length - 1
+              ? editFailedRequest
+              : undefined
+          }
           onFeedback={(rating) =>
             item.runId
               ? rating === 'positive'
@@ -922,6 +956,14 @@ export default function AiPage() {
                     retryRequest.scenario,
                     retryRequest.modelAlias,
                   )
+              : undefined
+          }
+          onViewDiagnostics={
+            item.error && index === messages.length - 1
+              ? () => {
+                  setActiveRunId(item.runId ?? activeRunId);
+                  setInspectorOpen(true);
+                }
               : undefined
           }
           progressMessage={
@@ -1277,6 +1319,12 @@ export default function AiPage() {
             <AiRunInspector
               activeRunId={activeRunId}
               error={runError}
+              errorCode={runErrorCode}
+              onEditRequest={
+                selectedConversationStatus !== 'archived' && retryRequest
+                  ? editFailedRequest
+                  : undefined
+              }
               onRetry={
                 selectedConversationStatus !== 'archived' && retryRequest
                   ? () =>

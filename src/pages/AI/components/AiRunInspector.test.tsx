@@ -83,7 +83,28 @@ describe('AiRunInspector', () => {
 
     expect(screen.getByText('失败')).toBeTruthy();
     expect(screen.getByText('模型服务暂时不可用')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /手动重试/ }));
+    fireEvent.click(screen.getByRole('button', { name: /稍后重试/ }));
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a stable permission classification without offering a retry', () => {
+    render(
+      <App>
+        <AiRunInspector
+          activeRunId="AI-RUN-DENIED"
+          error="无权访问公司 Demo"
+          errorCode="PERMISSION_DENIED"
+          onRetry={jest.fn()}
+          result={null}
+          status="failed"
+          tools={[]}
+          warnings={[]}
+        />
+      </App>,
+    );
+
+    expect(screen.getByText('当前权限不允许访问')).toBeTruthy();
+    expect(screen.getByText('PERMISSION_DENIED')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
   });
 });
