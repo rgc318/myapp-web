@@ -2,7 +2,7 @@
 
 更新时间：2026-07-23
 
-本文是 `myapp-web` AI 模块的前端设计事实来源，集中记录信息架构、组件选型、状态与数据流、权限边界、异常恢复、测试门禁和后续演进。后端业务安全、数据模型和完整 API 契约仍分别以 `apps/myapp/AI_TECH_DESIGN.zh-CN.md` 与 `apps/myapp/API_GATEWAY.zh-CN.md` 为准。
+本文是 `myapp-web` AI 模块的前端设计事实来源，集中记录信息架构、组件选型、状态与数据流、权限边界、异常恢复、测试门禁和后续演进。后端业务安全、数据模型和完整 API 契约仍分别以 `apps/myapp/AI_TECH_DESIGN.zh-CN.md` 与 `apps/myapp/API_GATEWAY.zh-CN.md` 为准。分阶段交互优化、当前完成状态和治理后台重构顺序见 `AI_WEB_FRONTEND_OPTIMIZATION_ROADMAP.zh-CN.md`。
 
 ## 1. 设计状态
 

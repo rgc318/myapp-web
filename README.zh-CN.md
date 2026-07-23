@@ -4,6 +4,8 @@ MyApp 的桌面端业务前端，基于 Ant Design Pro、Umi 和 ProComponents�
 
 - 开发规范：[WEB_DEVELOPMENT.zh-CN.md](./WEB_DEVELOPMENT.zh-CN.md)
 - 部署说明：[DEPLOYMENT.zh-CN.md](./DEPLOYMENT.zh-CN.md)
+- AI Web 企业级设计：[AI_WEB_FRONTEND_DESIGN.zh-CN.md](./AI_WEB_FRONTEND_DESIGN.zh-CN.md)
+- AI 交互优化路线图：[AI_WEB_FRONTEND_OPTIMIZATION_ROADMAP.zh-CN.md](./AI_WEB_FRONTEND_OPTIMIZATION_ROADMAP.zh-CN.md)
 
 MyApp 的构建、镜像和服务器部署以上述部署说明为准。下方保留上游 Ant Design Pro 的通用说明。
 
