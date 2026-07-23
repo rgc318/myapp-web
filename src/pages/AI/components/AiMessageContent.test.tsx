@@ -74,7 +74,6 @@ const baseProps = {
   citations,
   onDiscardDraft: jest.fn(),
   onEditDraft: jest.fn(),
-  onExecuteDraft: jest.fn(),
   onFeedback: jest.fn(),
   onHandoffDraft: jest.fn(),
   onOpenBusinessDocument: jest.fn(),
@@ -83,8 +82,8 @@ const baseProps = {
 };
 
 describe('AiMessageContent', () => {
-  it('offers confirmed inline execution for a validated draft', () => {
-    const onExecuteDraft = jest.fn();
+  it('opens the shared review and execution workbench for a validated draft', () => {
+    const onEditDraft = jest.fn();
     render(
       React.createElement(AiMessageContent, {
         ...baseProps,
@@ -103,13 +102,15 @@ describe('AiMessageContent', () => {
           },
         ],
         content: '草稿已生成',
-        onExecuteDraft,
+        onEditDraft,
       }),
     );
 
-    expect(screen.getByRole('button', { name: '编辑草稿' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
-    expect(onExecuteDraft).toHaveBeenCalledWith('AI-DRAFT-1', 2);
+    fireEvent.click(screen.getByRole('button', { name: '复核并执行' }));
+    expect(onEditDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'AI-DRAFT-1' }),
+    );
+    expect(screen.queryByRole('button', { name: '确认执行' })).toBeNull();
   });
 
   it('uses a clear action label when a draft still needs information', () => {
@@ -177,5 +178,22 @@ describe('AiMessageContent', () => {
     expect(
       screen.getByText('销售订单返回 1 条，当前范围内不足 5 条。'),
     ).toBeTruthy();
+  });
+
+  it('keeps an inline failure with an explicit retry action', () => {
+    const onRetry = jest.fn();
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [],
+        content: '',
+        error: 'AI 服务暂时不可用',
+        onRetry,
+      }),
+    );
+
+    expect(screen.getByText('AI 服务暂时不可用')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /重新发送/ }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });

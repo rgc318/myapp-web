@@ -28,19 +28,35 @@ jest.mock('@ant-design/x', () => {
         ),
     },
     Conversations: () => React.createElement('div', null, '会话列表'),
-    Prompts: () => React.createElement('div', null, '常用能力'),
-    Sender: ({ onChange, onSubmit, value }: any) =>
+    Prompts: ({ items, onItemClick }: any) =>
+      React.createElement(
+        'div',
+        null,
+        items.map((item: any) =>
+          React.createElement(
+            'button',
+            {
+              key: item.key,
+              onClick: () => onItemClick({ data: item }),
+              type: 'button',
+            },
+            item.label,
+          ),
+        ),
+      ),
+    Sender: ({ disabled, onChange, onSubmit, value }: any) =>
       React.createElement(
         'div',
         null,
         React.createElement('input', {
           'aria-label': 'AI 输入',
+          disabled,
           onChange: (event: any) => onChange(event.target.value),
           value,
         }),
         React.createElement(
           'button',
-          { onClick: () => onSubmit(value), type: 'button' },
+          { disabled, onClick: () => onSubmit(value), type: 'button' },
           '发送',
         ),
       ),
@@ -84,11 +100,25 @@ jest.mock('@/hooks/useWorkspacePreferences', () => ({
 jest.mock('./components/AiMessageContent', () => {
   const React = jest.requireActual('react');
   return {
-    AiMessageContent: ({ content, progressMessage, streaming }: any) =>
+    AiMessageContent: ({
+      content,
+      error,
+      onRetry,
+      progressMessage,
+      streaming,
+    }: any) =>
       React.createElement(
         'div',
         null,
         content || (streaming ? progressMessage : ''),
+        error ? React.createElement('span', null, error) : null,
+        error && onRetry
+          ? React.createElement(
+              'button',
+              { onClick: onRetry, type: 'button' },
+              '重新发送',
+            )
+          : null,
       ),
   };
 });
@@ -278,6 +308,140 @@ describe('AI workspace page', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('fills a common prompt into the composer without sending immediately', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: '查询近30天未完成的大额采购订单，前5条。',
+      }),
+    );
+
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' }).value,
+    ).toBe('查询近30天未完成的大额采购订单，前5条。');
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed answer inline with a retry action', async () => {
+    streamAiChatMessage.mockRejectedValueOnce(new Error('AI 服务暂时不可用'));
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '查询库存' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByText('AI 服务暂时不可用')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '重新发送' })).toBeTruthy();
+  });
+
+  it('renders archived conversations as read-only', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-ARCHIVED';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-07-16 10:00:00',
+        lastMessageAt: '2026-07-16 10:00:00',
+        messageCount: 0,
+        modified: '2026-07-16 10:00:00',
+        name: 'AI-CONV-ARCHIVED',
+        status: 'archived',
+        title: '归档会话',
+      },
+      messages: [],
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    expect(await screen.findByText('当前会话为只读状态')).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' })
+        .disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: '发送' }).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole('button', { name: '归档' })).toBeNull();
+  });
+
+  it('restores a failed active run with its inline retry context', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-FAILED';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-07-23 10:00:00',
+        lastMessageAt: '2026-07-23 10:01:00',
+        messageCount: 2,
+        modified: '2026-07-23 10:01:00',
+        name: 'AI-CONV-FAILED',
+        status: 'active',
+        title: '失败会话',
+      },
+      messages: [
+        {
+          citations: [],
+          content: '查询库存',
+          creation: '2026-07-23 10:00:00',
+          feedback: null,
+          name: 'AI-MSG-USER',
+          promptVersion: null,
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'general',
+          sequence: 1,
+        },
+        {
+          citations: [],
+          content: '',
+          creation: '2026-07-23 10:01:00',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT',
+          promptVersion: 'erp-readonly-v5',
+          role: 'assistant',
+          run: {
+            error: '历史 AI 运行失败',
+            errorCode: 'AI_UPSTREAM_UNAVAILABLE',
+            firstTokenMs: null,
+            latencyMs: 1000,
+            model: null,
+            modelAlias: 'erp-fast-chat',
+            status: 'failed',
+            traceId: 'trace-failed',
+            usage: {
+              completionTokens: 0,
+              promptTokens: 0,
+              reasoningTokens: 0,
+              totalTokens: 0,
+            },
+          },
+          runId: 'AI-RUN-FAILED',
+          scenario: 'general',
+          sequence: 2,
+        },
+      ],
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    expect(await screen.findByText('历史 AI 运行失败')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: '重新发送' }));
+
+    await waitFor(() => {
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '查询库存',
+          conversationId: 'AI-CONV-FAILED',
+          modelAlias: 'erp-fast-chat',
+          scenario: 'general',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
   });
 
   it('allows a new conversation to choose its query company', async () => {

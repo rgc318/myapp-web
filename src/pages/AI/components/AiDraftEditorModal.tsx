@@ -1,6 +1,7 @@
 import { ProCard } from '@ant-design/pro-components';
 import {
   Alert,
+  App,
   Button,
   DatePicker,
   Form,
@@ -18,8 +19,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { UomSelect } from '@/components/UomSelect';
-import { type AiDraft, getAiDraft, updateAiDraft } from '@/services/myapp/ai';
+import {
+  type AiDraft,
+  executeAiDraft,
+  getAiDraft,
+  updateAiDraft,
+} from '@/services/myapp/ai';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import { AiDraftBusinessReview } from './AiDraftReview';
 
 type DraftItemFormValues = {
   itemCode?: string;
@@ -240,10 +247,12 @@ export function AiDraftEditorModal({
   onLoaded?: (draft: AiDraft) => void;
   onUpdated: (draft: AiDraft) => void;
 }) {
+  const { message, modal } = App.useApp();
   const [form] = Form.useForm<FormValues>();
   const [draft, setDraft] = useState<AiDraft | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const onCloseRef = useRef(onClose);
   const onLoadedRef = useRef(onLoaded);
   const company = Form.useWatch('company', form);
@@ -251,6 +260,14 @@ export function AiDraftEditorModal({
   const openingQty = Form.useWatch('openingQty', form);
   const stockUom = Form.useWatch('stockUom', form);
   const hasOpeningStock = Number(openingQty ?? 0) > 0;
+  const busy = saving || executing;
+
+  const applyDraft = (nextDraft: AiDraft) => {
+    setDraft(nextDraft);
+    form.resetFields();
+    form.setFieldsValue(initialValues(nextDraft));
+    onUpdated(nextDraft);
+  };
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -286,13 +303,13 @@ export function AiDraftEditorModal({
     };
   }, [draftId, form]);
 
-  const save = async () => {
-    if (!draft) return;
+  const save = async ({ notify = true }: { notify?: boolean } = {}) => {
+    if (!draft || draft.status !== 'draft') return null;
     let values: FormValues;
     try {
       values = await form.validateFields();
     } catch {
-      return;
+      return null;
     }
     setSaving(true);
     try {
@@ -301,27 +318,116 @@ export function AiDraftEditorModal({
         draft.version,
         buildPayload(draft, values),
       );
-      setDraft(updated);
-      form.setFieldsValue(initialValues(updated));
-      onUpdated(updated);
-      if (updated.validation.readyForHandoff) onClose();
+      applyDraft(updated);
+      if (notify)
+        message.success(`草稿版本 ${updated.version} 已保存并重新校验`);
+      return updated;
     } catch (error) {
       notifyMutationError(error);
+      return null;
     } finally {
       setSaving(false);
     }
   };
 
+  const confirmExecute = async () => {
+    if (!draft || draft.status !== 'draft') return;
+
+    let latestDraft: AiDraft | null = null;
+    if (form.isFieldsTouched()) {
+      latestDraft = await save({ notify: false });
+    } else {
+      setSaving(true);
+      try {
+        latestDraft = await getAiDraft(draft.name);
+        applyDraft(latestDraft);
+      } catch (error) {
+        notifyMutationError(error);
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    if (!latestDraft) return;
+    if (latestDraft.status !== 'draft') {
+      message.info('草稿状态已变化，已刷新为最新状态。');
+      return;
+    }
+    if (!latestDraft.validation.readyForHandoff) {
+      message.warning('草稿仍有未解决的校验问题，请先完善后再执行。');
+      return;
+    }
+
+    modal.confirm({
+      content: (
+        <div style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: 4 }}>
+          <AiDraftBusinessReview draft={latestDraft} />
+        </div>
+      ),
+      okText: '确认执行当前版本',
+      onOk: async () => {
+        setExecuting(true);
+        try {
+          const result = await executeAiDraft(
+            latestDraft.name,
+            latestDraft.version,
+          );
+          applyDraft(result.draft);
+          message.success(
+            result.replayed
+              ? '该草稿已执行，已恢复正式业务回执。'
+              : '草稿执行成功，正式业务回执已生成。',
+          );
+        } catch (error) {
+          notifyMutationError(error);
+          throw error;
+        } finally {
+          setExecuting(false);
+        }
+      },
+      title: `确认执行草稿 ${latestDraft.name} · 版本 ${latestDraft.version}？`,
+      width: 760,
+    });
+  };
+
   return (
     <Modal
-      cancelButtonProps={{ disabled: saving }}
-      closable={!saving}
+      closable={!busy}
       destroyOnHidden
-      mask={{ closable: !saving }}
-      onCancel={onClose}
-      onOk={() => void save()}
-      okButtonProps={{ disabled: loading || !draft, loading: saving }}
-      okText="保存草稿"
+      footer={
+        draft?.status === 'draft' ? (
+          <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+            <Button disabled={busy} onClick={onClose}>
+              取消
+            </Button>
+            <Button
+              disabled={loading || executing}
+              loading={saving}
+              onClick={() => void save()}
+            >
+              保存草稿
+            </Button>
+            <Button
+              disabled={loading || saving}
+              loading={executing}
+              onClick={() => void confirmExecute()}
+              type="primary"
+            >
+              确认执行
+            </Button>
+          </Space>
+        ) : (
+          <Button onClick={onClose} type="primary">
+            关闭
+          </Button>
+        )
+      }
+      keyboard={!busy}
+      mask={{ closable: !busy }}
+      onCancel={() => {
+        if (!busy) onClose();
+      }}
       open={Boolean(draftId)}
       title={
         draft
@@ -339,7 +445,9 @@ export function AiDraftEditorModal({
       width={980}
     >
       <Spin description="正在读取最新草稿版本…" spinning={loading}>
-        {draft ? (
+        {draft && draft.status !== 'draft' ? (
+          <AiDraftBusinessReview draft={draft} />
+        ) : draft ? (
           <Form form={form} layout="vertical">
             {draft.validation.errors.length ||
             draft.validation.warnings.length ? (

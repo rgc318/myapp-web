@@ -27,7 +27,6 @@ import { useRef, useState } from 'react';
 import {
   type AiDraft,
   discardAiDraft,
-  executeAiDraft,
   getAiDraft,
   listAiDrafts,
   listAiDraftVersions,
@@ -63,7 +62,6 @@ export default function AiDraftsPage() {
   const [versions, setVersions] = useState<Record<string, unknown>[]>([]);
   const [versionLoading, setVersionLoading] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
-  const [executeLoading, setExecuteLoading] = useState(false);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
   const loadDraftReview = async (draftName: string) => {
@@ -122,25 +120,6 @@ export default function AiDraftsPage() {
     } finally {
       setVersionLoading(false);
     }
-  };
-
-  const execute = (draft: AiDraft) => {
-    Modal.confirm({
-      content:
-        '系统会锁定当前草稿版本，并通过正式业务服务再次检查权限、主数据、单位、价格或实时库存。成功后会在草稿中保存正式业务对象回执。',
-      okText: `确认执行${DRAFT_TYPE[draft.draftType]}`,
-      onOk: async () => {
-        setExecuteLoading(true);
-        try {
-          await executeAiDraft(draft.name, draft.version);
-          await loadDraftReview(draft.name);
-          actionRef.current?.reload();
-        } finally {
-          setExecuteLoading(false);
-        }
-      },
-      title: `确认执行草稿 ${draft.name}？`,
-    });
   };
 
   const discard = (draft: AiDraft) => {
@@ -251,15 +230,14 @@ export default function AiDraftsPage() {
             <MessageOutlined /> 来源会话
           </a>
         ) : null,
-        row.status === 'draft' && row.validation.readyForHandoff ? (
-          <a key="execute" onClick={() => execute(row)}>
-            <SendOutlined /> 确认执行
-          </a>
-        ) : null,
         row.status === 'draft' ? (
           <a key="edit" onClick={() => setEditingDraftId(row.name)}>
-            <EditOutlined />
-            {row.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
+            {row.validation.readyForHandoff ? (
+              <SendOutlined />
+            ) : (
+              <EditOutlined />
+            )}{' '}
+            {row.validation.readyForHandoff ? '复核并执行' : '完善草稿'}
           </a>
         ) : null,
         row.status === 'draft' && row.validation.readyForHandoff ? (
@@ -305,23 +283,21 @@ export default function AiDraftsPage() {
         extra={
           detail ? (
             <Space>
-              {detail.status === 'draft' &&
-              detail.validation.readyForHandoff ? (
-                <Button
-                  icon={<SendOutlined />}
-                  loading={executeLoading}
-                  onClick={() => execute(detail)}
-                  type="primary"
-                >
-                  确认执行
-                </Button>
-              ) : null}
               {detail.status === 'draft' ? (
                 <Button
-                  icon={<EditOutlined />}
+                  icon={
+                    detail.validation.readyForHandoff ? (
+                      <SendOutlined />
+                    ) : (
+                      <EditOutlined />
+                    )
+                  }
                   onClick={() => setEditingDraftId(detail.name)}
+                  type="primary"
                 >
-                  {detail.validation.readyForHandoff ? '编辑草稿' : '完善草稿'}
+                  {detail.validation.readyForHandoff
+                    ? '复核并执行'
+                    : '完善草稿'}
                 </Button>
               ) : null}
               {detail.status === 'draft' &&

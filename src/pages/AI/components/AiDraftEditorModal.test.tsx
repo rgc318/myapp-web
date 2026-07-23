@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from 'antd';
 import React from 'react';
-import { getAiDraft, updateAiDraft } from '@/services/myapp/ai';
+import { executeAiDraft, getAiDraft, updateAiDraft } from '@/services/myapp/ai';
 import { AiDraftEditorModal } from './AiDraftEditorModal';
 
 jest.mock('@/components', () => {
@@ -38,10 +38,12 @@ jest.mock('@/components/UomSelect', () => {
   };
 });
 jest.mock('@/services/myapp/ai', () => ({
+  executeAiDraft: jest.fn(),
   getAiDraft: jest.fn(),
   updateAiDraft: jest.fn(),
 }));
 
+const mockedExecute = jest.mocked(executeAiDraft);
 const mockedGet = jest.mocked(getAiDraft);
 const mockedUpdate = jest.mocked(updateAiDraft);
 
@@ -70,12 +72,18 @@ describe('AiDraftEditorModal', () => {
   beforeEach(() => {
     mockedGet.mockReset();
     mockedGet.mockResolvedValue(draft);
+    mockedExecute.mockReset();
     mockedUpdate.mockReset();
   });
 
   it('edits and revalidates a product draft without leaving the AI workspace', async () => {
-    const updated = { ...draft, version: 3 };
+    const updated = {
+      ...draft,
+      payload: { ...draft.payload, item_name: '煌星升级版' },
+      version: 3,
+    };
     mockedUpdate.mockResolvedValue(updated);
+    const onClose = jest.fn();
     const onUpdated = jest.fn();
     render(
       React.createElement(
@@ -83,7 +91,7 @@ describe('AiDraftEditorModal', () => {
         null,
         React.createElement(AiDraftEditorModal, {
           draftId: draft.name,
-          onClose: jest.fn(),
+          onClose,
           onUpdated,
         }),
       ),
@@ -103,6 +111,70 @@ describe('AiDraftEditorModal', () => {
       );
       expect(onUpdated).toHaveBeenCalledWith(updated);
     });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('煌星升级版')).toBeTruthy();
+  });
+
+  it('saves the latest form version and executes it without closing the editor', async () => {
+    const updated = {
+      ...draft,
+      payload: { ...draft.payload, item_name: '煌星升级版' },
+      version: 3,
+    };
+    const execution = {
+      executedAt: '2026-07-23 18:00:00',
+      executedBy: 'admin@example.com',
+      requestId: 'REQ-1',
+      result: {},
+      targetDoctype: 'Item',
+      targetName: 'ITEM-0001',
+    };
+    const executed = {
+      ...updated,
+      execution,
+      status: 'executed',
+    };
+    mockedUpdate.mockResolvedValue(updated);
+    mockedExecute.mockResolvedValue({
+      draft: executed,
+      execution,
+      replayed: false,
+    });
+    const onClose = jest.fn();
+    const onUpdated = jest.fn();
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose,
+          onUpdated,
+        }),
+      ),
+    );
+
+    fireEvent.change(await screen.findByDisplayValue('煌星'), {
+      target: { value: '煌星升级版' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(
+      await screen.findByRole('button', { name: '确认执行当前版本' }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '确认执行当前版本' }));
+
+    await waitFor(() => {
+      expect(mockedUpdate).toHaveBeenCalledWith(
+        draft.name,
+        2,
+        expect.objectContaining({ item_name: '煌星升级版' }),
+      );
+      expect(mockedExecute).toHaveBeenCalledWith(draft.name, 3);
+      expect(onUpdated).toHaveBeenLastCalledWith(executed);
+    });
+    expect(await screen.findByText(/已创建 Item ITEM-0001/)).toBeTruthy();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('requires a default buying price for opening stock', async () => {

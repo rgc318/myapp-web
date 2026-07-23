@@ -53,7 +53,6 @@ import {
   type AiScenario,
   archiveAiConversation,
   discardAiDraft,
-  executeAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
   generateAiPurchaseOrderDraft,
@@ -157,6 +156,9 @@ export default function AiPage() {
     'active' | 'archived'
   >('active');
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [selectedConversationStatus, setSelectedConversationStatus] = useState<
+    'active' | 'archived' | null
+  >(null);
   const [conversationCompany, setConversationCompany] = useState<string | null>(
     null,
   );
@@ -266,13 +268,21 @@ export default function AiPage() {
     setConversationLoading(true);
     try {
       const result = await getAiConversation(targetId);
+      const openedConversationStatus =
+        result.conversation.status === 'archived' ? 'archived' : 'active';
       setConversationId(result.conversation.name);
       setConversationCompany(result.conversation.company);
+      setConversationStatus(openedConversationStatus);
+      setSelectedConversationStatus(openedConversationStatus);
       const restoredMessages = result.messages.map((item) => ({
         id: item.name,
         role: item.role,
         content: item.content,
         citations: item.citations,
+        error:
+          item.run?.status === 'failed'
+            ? (item.run.error ?? 'AI 服务调用失败')
+            : null,
         runId: item.runId,
       }));
       setMessages(restoredMessages);
@@ -287,9 +297,17 @@ export default function AiPage() {
       // 问题永久锁定到该场景。重新打开会话时恢复自动识别，避免上一轮
       // 订单查询把后续商品创建等不同意图继续错误路由到 order_query。
       setScenario('auto');
-      const latestRunMessage = [...result.messages]
-        .reverse()
-        .find((item) => item.runId && item.run);
+      const latestRunIndex = result.messages.findLastIndex(
+        (item) => item.runId && item.run,
+      );
+      const latestRunMessage =
+        latestRunIndex >= 0 ? result.messages[latestRunIndex] : null;
+      const failedRequestMessage =
+        latestRunIndex >= 0 && latestRunMessage?.run?.status === 'failed'
+          ? [...result.messages.slice(0, latestRunIndex)]
+              .reverse()
+              .find((item) => item.role === 'user')
+          : null;
       setActiveRunId(latestRunMessage?.runId ?? null);
       setRunWarnings([]);
       setToolProgress([]);
@@ -301,6 +319,17 @@ export default function AiPage() {
             ? 'failed'
             : 'completed'
           : 'idle',
+      );
+      setRetryRequest(
+        openedConversationStatus === 'active' &&
+          latestRunMessage?.run?.status === 'failed' &&
+          failedRequestMessage
+          ? {
+              content: failedRequestMessage.content,
+              modelAlias: latestRunMessage.run.modelAlias,
+              scenario: latestRunMessage.scenario ?? 'auto',
+            }
+          : null,
       );
       setLastResult(
         latestRunMessage?.run
@@ -349,7 +378,7 @@ export default function AiPage() {
     if (!content || loading) {
       return;
     }
-    if (conversationStatus === 'archived' && conversationId) {
+    if (selectedConversationStatus === 'archived' && conversationId) {
       message.warning('已归档会话为只读状态，请新建会话后继续提问。');
       return;
     }
@@ -568,6 +597,8 @@ export default function AiPage() {
         abortController.signal,
       );
       setConversationId(result.conversationId);
+      setConversationStatus('active');
+      setSelectedConversationStatus('active');
       setConversationCompany((current) => current || effectiveCompany);
       setLastResult(result);
       setActiveRunId(result.runId);
@@ -602,20 +633,22 @@ export default function AiPage() {
       } else {
         setRunStatus('failed');
         setRunProgress(null);
-        setRunError(
-          caught instanceof Error ? caught.message : 'AI 服务调用失败',
-        );
+        const errorMessage =
+          caught instanceof Error ? caught.message : 'AI 服务调用失败';
+        setRunError(errorMessage);
         setRetryRequest({
           content,
           modelAlias: requestedModelAlias,
           scenario: resolvedScenario,
         });
         setMessages((current) =>
-          current.filter((item) => item.id !== assistantMessage.id),
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? { ...item, error: errorMessage }
+              : item,
+          ),
         );
-        message.error(
-          caught instanceof Error ? caught.message : 'AI 服务调用失败',
-        );
+        message.error(errorMessage);
       }
     } finally {
       streamAbortRef.current = null;
@@ -662,55 +695,6 @@ export default function AiPage() {
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '草稿放弃失败');
     }
-  };
-
-  const executeDraft = (draftId: string, version: number) => {
-    const citation = messages
-      .flatMap((item) => item.citations ?? [])
-      .find((item) => item.id === draftId);
-    const draftType = String(citation?.data.draft_type ?? 'business');
-    const typeLabel =
-      draftType === 'product_setup'
-        ? '商品建档'
-        : draftType === 'purchase_order'
-          ? '采购订单'
-          : draftType === 'inventory_adjustment'
-            ? '库存调整'
-            : '销售订单';
-    Modal.confirm({
-      content:
-        '系统会使用当前草稿版本重新执行权限、主数据、单位、价格或库存校验，并调用正式业务服务。成功后将生成不可变业务回执。',
-      okText: `确认执行${typeLabel}`,
-      onOk: async () => {
-        const result = await executeAiDraft(draftId, version);
-        setMessages((current) =>
-          current.map((item) => ({
-            ...item,
-            citations: item.citations?.map((currentCitation) =>
-              currentCitation.id === draftId
-                ? {
-                    ...currentCitation,
-                    data: {
-                      ...currentCitation.data,
-                      execution: {
-                        executed_at: result.execution.executedAt,
-                        executed_by: result.execution.executedBy,
-                        request_id: result.execution.requestId,
-                        result: result.execution.result,
-                        target_doctype: result.execution.targetDoctype,
-                        target_name: result.execution.targetName,
-                      },
-                      status: result.draft.status,
-                      version: result.draft.version,
-                    },
-                  }
-                : currentCitation,
-            ),
-          })),
-        );
-      },
-      title: `确认执行草稿 ${draftId}？`,
-    });
   };
 
   const applyUpdatedDraft = (updated: AiDraft) => {
@@ -799,6 +783,7 @@ export default function AiPage() {
 
   const resetConversation = () => {
     setConversationId(null);
+    setSelectedConversationStatus(null);
     setConversationCompany(null);
     setMessages([]);
     setLastResult(null);
@@ -911,10 +896,10 @@ export default function AiPage() {
         <AiMessageContent
           citations={item.citations}
           content={item.content}
+          error={item.error}
           feedback={item.runId ? feedbackByRun[item.runId] : undefined}
           onDiscardDraft={(draftId) => void discardDraft(draftId)}
           onEditDraft={openDraftEditor}
-          onExecuteDraft={executeDraft}
           onFeedback={(rating) =>
             item.runId
               ? rating === 'positive'
@@ -926,6 +911,19 @@ export default function AiPage() {
           onOpenBusinessDocument={setBusinessDocument}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
           onOpenProduct={setProductCitation}
+          onRetry={
+            selectedConversationStatus !== 'archived' &&
+            item.error &&
+            retryRequest &&
+            index === messages.length - 1
+              ? () =>
+                  void submit(
+                    retryRequest.content,
+                    retryRequest.scenario,
+                    retryRequest.modelAlias,
+                  )
+              : undefined
+          }
           progressMessage={
             loading && index === messages.length - 1
               ? runProgress?.message
@@ -955,7 +953,10 @@ export default function AiPage() {
                 </Tag>
               </div>
               <Select
-                onChange={setConversationStatus}
+                onChange={(value) => {
+                  setConversationStatus(value);
+                  resetConversation();
+                }}
                 options={[
                   { label: '活跃会话', value: 'active' },
                   { label: '已归档', value: 'archived' },
@@ -1110,7 +1111,7 @@ export default function AiPage() {
                 >
                   按当前账号权限查询 · 写操作需确认
                 </Tag>
-                {conversationId ? (
+                {conversationId && selectedConversationStatus === 'active' ? (
                   <Button
                     icon={<InboxOutlined />}
                     onClick={() => void archiveCurrentConversation()}
@@ -1148,28 +1149,62 @@ export default function AiPage() {
                   icon={<RobotOutlined />}
                   title="今天想处理什么业务？"
                 />
-                <Prompts
-                  className={styles.promptGrid}
-                  items={promptItems}
-                  onItemClick={({ data }) => {
-                    const prompt = EXAMPLE_PROMPTS[Number(data.key)];
-                    if (prompt) void submit(prompt.content, prompt.scenario);
-                  }}
-                  title="常用能力"
-                  wrap
-                />
+                {selectedConversationStatus !== 'archived' ? (
+                  <Prompts
+                    className={styles.promptGrid}
+                    items={promptItems}
+                    onItemClick={({ data }) => {
+                      const prompt = EXAMPLE_PROMPTS[Number(data.key)];
+                      if (prompt) {
+                        setDraft(prompt.content);
+                        setScenario(prompt.scenario);
+                      }
+                    }}
+                    title="常用能力"
+                    wrap
+                  />
+                ) : null}
               </div>
             )}
 
             <div className={styles.composer}>
               <div className={styles.composerInner}>
+                {selectedConversationStatus === 'archived' && conversationId ? (
+                  <Alert
+                    action={
+                      <Button
+                        onClick={() => {
+                          setConversationStatus('active');
+                          resetConversation();
+                        }}
+                        size="small"
+                        type="primary"
+                      >
+                        新建会话
+                      </Button>
+                    }
+                    description="归档会话保留历史记录，不能继续追加消息。"
+                    showIcon
+                    style={{ marginBottom: 8 }}
+                    title="当前会话为只读状态"
+                    type="info"
+                  />
+                ) : null}
                 <Sender
                   autoSize={{ minRows: 2, maxRows: 7 }}
+                  disabled={
+                    selectedConversationStatus === 'archived' &&
+                    Boolean(conversationId)
+                  }
                   loading={loading}
                   onCancel={stopGeneration}
                   onChange={setDraft}
                   onSubmit={(value) => void submit(value)}
-                  placeholder="输入业务问题；Enter 发送，Shift+Enter 换行"
+                  placeholder={
+                    selectedConversationStatus === 'archived' && conversationId
+                      ? '归档会话为只读状态'
+                      : '输入业务问题；Enter 发送，Shift+Enter 换行'
+                  }
                   value={draft}
                 />
               </div>
@@ -1185,7 +1220,10 @@ export default function AiPage() {
         >
           <Space orientation="vertical" size={12} style={{ width: '100%' }}>
             <Select
-              onChange={setConversationStatus}
+              onChange={(value) => {
+                setConversationStatus(value);
+                resetConversation();
+              }}
               options={[
                 { label: '活跃会话', value: 'active' },
                 { label: '已归档', value: 'archived' },
@@ -1240,7 +1278,7 @@ export default function AiPage() {
               activeRunId={activeRunId}
               error={runError}
               onRetry={
-                retryRequest
+                selectedConversationStatus !== 'archived' && retryRequest
                   ? () =>
                       void submit(
                         retryRequest.content,

@@ -2,11 +2,13 @@ import {
   DislikeOutlined,
   LikeOutlined,
   LoadingOutlined,
+  MoreOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { ProCard } from '@ant-design/pro-components';
 import { Actions } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
-import { Button, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Dropdown, Space, Tag, Typography } from 'antd';
 import React, { useEffect, useState } from 'react';
 import {
   type AiBusinessDocumentResult,
@@ -30,15 +32,16 @@ const REPORT_METRIC_LABELS: Record<string, string> = {
 type Props = {
   content: string;
   citations?: AiCitation[];
+  error?: string | null;
   feedback?: 'positive' | 'negative';
   onDiscardDraft: (draftId: string) => void;
   onEditDraft: (citation: AiCitation) => void;
-  onExecuteDraft: (draftId: string, version: number) => void;
   onFeedback: (rating: 'positive' | 'negative') => void;
   onHandoffDraft: (draftId: string) => void;
   onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
   onOpenProduct: (citation: AiCitation) => void;
+  onRetry?: () => void;
   progressMessage?: string;
   progressStartedAt?: number | null;
   runId?: string | null;
@@ -94,7 +97,6 @@ function CitationCard({
   citation,
   onDiscardDraft,
   onEditDraft,
-  onExecuteDraft,
   onHandoffDraft,
   onOpenDraftHistory,
   onOpenProduct,
@@ -102,7 +104,6 @@ function CitationCard({
   Props,
   | 'onDiscardDraft'
   | 'onEditDraft'
-  | 'onExecuteDraft'
   | 'onHandoffDraft'
   | 'onOpenDraftHistory'
   | 'onOpenProduct'
@@ -212,52 +213,36 @@ function CitationCard({
               ))
             : null}
           <Space wrap>
-            <Button
-              disabled={citation.data.status !== 'draft'}
-              onClick={() => onEditDraft(citation)}
-            >
-              {validation?.ready_for_handoff ? '编辑草稿' : '完善草稿'}
-            </Button>
-            <Button
-              onClick={() => onOpenDraftHistory(String(citation.id ?? ''))}
-            >
-              版本历史
-            </Button>
-            <Button
-              disabled={
-                citation.data.status !== 'draft' ||
-                !validation?.ready_for_handoff
-              }
-              onClick={() =>
-                onExecuteDraft(
-                  String(citation.id ?? ''),
-                  Number(citation.data.version ?? 1),
-                )
-              }
-              type="primary"
-            >
-              确认执行
-            </Button>
+            {citation.data.status === 'draft' ? (
+              <Button onClick={() => onEditDraft(citation)} type="primary">
+                {validation?.ready_for_handoff ? '复核并执行' : '完善草稿'}
+              </Button>
+            ) : null}
             {targetHref && targetName ? (
               <Button href={targetHref}>查看正式业务对象</Button>
-            ) : (
-              <Button
-                disabled={
-                  citation.data.status === 'discarded' ||
-                  !validation?.ready_for_handoff
-                }
-                onClick={() => onHandoffDraft(String(citation.id ?? ''))}
-              >
-                在业务编辑器继续
-              </Button>
-            )}
-            <Button
-              danger
-              disabled={citation.data.status !== 'draft'}
-              onClick={() => onDiscardDraft(String(citation.id ?? ''))}
+            ) : null}
+            <Dropdown
+              menu={{
+                items: [
+                  { key: 'history', label: '版本历史' },
+                  ...(citation.data.status === 'draft' &&
+                  validation?.ready_for_handoff
+                    ? [{ key: 'handoff', label: '在业务编辑器继续' }]
+                    : []),
+                  ...(citation.data.status === 'draft'
+                    ? [{ danger: true, key: 'discard', label: '放弃草稿' }]
+                    : []),
+                ],
+                onClick: ({ key }) => {
+                  const draftId = String(citation.id ?? '');
+                  if (key === 'history') onOpenDraftHistory(draftId);
+                  if (key === 'handoff') onHandoffDraft(draftId);
+                  if (key === 'discard') onDiscardDraft(draftId);
+                },
+              }}
             >
-              {citation.data.status === 'discarded' ? '已放弃' : '放弃草稿'}
-            </Button>
+              <Button icon={<MoreOutlined />}>更多</Button>
+            </Dropdown>
           </Space>
         </Space>
       ) : citation.type === 'business_report' ? (
@@ -296,15 +281,16 @@ function CitationCard({
 export function AiMessageContent({
   content,
   citations = [],
+  error,
   feedback,
   onDiscardDraft,
   onEditDraft,
-  onExecuteDraft,
   onFeedback,
   onHandoffDraft,
   onOpenBusinessDocument,
   onOpenDraftHistory,
   onOpenProduct,
+  onRetry,
   progressMessage,
   progressStartedAt,
   runId,
@@ -353,6 +339,21 @@ export function AiMessageContent({
           <Typography.Text type="secondary">实时输出中</Typography.Text>
         </div>
       ) : null}
+      {error ? (
+        <Alert
+          action={
+            onRetry ? (
+              <Button icon={<ReloadOutlined />} onClick={onRetry} size="small">
+                重新发送
+              </Button>
+            ) : undefined
+          }
+          description="已保留本次问题和运行记录，可以查看诊断或手动重试。"
+          showIcon
+          title={error}
+          type="error"
+        />
+      ) : null}
       {detailCitations.length ? (
         <div className={styles.sourceCards}>
           {detailCitations.map((citation, index) => (
@@ -361,7 +362,6 @@ export function AiMessageContent({
               key={`${citation.type}-${citation.id ?? index}`}
               onDiscardDraft={onDiscardDraft}
               onEditDraft={onEditDraft}
-              onExecuteDraft={onExecuteDraft}
               onHandoffDraft={onHandoffDraft}
               onOpenDraftHistory={onOpenDraftHistory}
               onOpenProduct={onOpenProduct}
@@ -398,6 +398,7 @@ export function AiMessageContent({
 }
 
 export type AiMessageRow = AiChatMessage & {
+  error?: string | null;
   id: string;
   runId?: string | null;
 };
