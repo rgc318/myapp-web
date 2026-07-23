@@ -60,6 +60,39 @@ export type AiDraftExecution = {
   targetName: string | null;
 };
 
+export class AiDraftVersionConflictError extends Error {
+  code = 'AI_DRAFT_VERSION_CONFLICT';
+
+  constructor(message = '草稿版本已变化，请对比最新版本后继续。') {
+    super(message);
+    this.name = 'AiDraftVersionConflictError';
+  }
+}
+
+export function isAiDraftVersionConflictError(
+  error: unknown,
+): error is AiDraftVersionConflictError {
+  if (error instanceof AiDraftVersionConflictError) return true;
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: unknown; message?: unknown };
+  return (
+    candidate.code === 'AI_DRAFT_VERSION_CONFLICT' ||
+    (typeof candidate.message === 'string' &&
+      candidate.message.includes('草稿版本已变化'))
+  );
+}
+
+function translateAiDraftMutationError(error: unknown): never {
+  if (isAiDraftVersionConflictError(error)) {
+    const message =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : undefined;
+    throw new AiDraftVersionConflictError(message);
+  }
+  throw error;
+}
+
 export type AiSalesOrderDraft = AiDraft;
 
 export type AiCitation = {
@@ -891,17 +924,18 @@ export async function executeAiDraft(
   expectedVersion: number,
 ): Promise<{ draft: AiDraft; execution: AiDraftExecution; replayed: boolean }> {
   const result = await runGatewayMutation<Record<string, unknown>>(
-    'execute_ai_draft_v1',
-    {
-      idempotencyKey: `web-execute-ai-draft-${draftId}-v${expectedVersion}`,
-      payload: {
-        confirmed: 1,
-        draft_id: draftId,
-        expected_version: expectedVersion,
+      'execute_ai_draft_v1',
+      {
+        idempotencyKey: `web-execute-ai-draft-${draftId}-v${expectedVersion}`,
+        notifyError: false,
+        payload: {
+          confirmed: 1,
+          draft_id: draftId,
+          expected_version: expectedVersion,
+        },
+        successMessage: 'AI 草稿已执行',
       },
-      successMessage: 'AI 草稿已执行',
-    },
-  );
+    ).catch(translateAiDraftMutationError);
   const data = readObject(result.data);
   const execution = readObject(data.execution);
   return {
@@ -939,15 +973,16 @@ export async function updateAiDraft(
   payload: Record<string, unknown>,
 ): Promise<AiDraft> {
   const result = await runGatewayMutation<Record<string, unknown>>(
-    'update_ai_draft_v1',
-    {
-      payload: {
-        draft_id: draftId,
-        expected_version: expectedVersion,
-        payload,
+      'update_ai_draft_v1',
+      {
+        notifyError: false,
+        payload: {
+          draft_id: draftId,
+          expected_version: expectedVersion,
+          payload,
+        },
       },
-    },
-  );
+    ).catch(translateAiDraftMutationError);
   return mapSalesOrderDraft(result.data);
 }
 

@@ -13,8 +13,6 @@ import {
   Spin,
   Typography,
 } from 'antd';
-import type { Dayjs } from 'dayjs';
-import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { CurrencySelect } from '@/components/CurrencySelect';
@@ -23,218 +21,29 @@ import {
   type AiDraft,
   executeAiDraft,
   getAiDraft,
+  isAiDraftVersionConflictError,
   updateAiDraft,
 } from '@/services/myapp/ai';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import { AiDraftProgress } from './AiDraftProgress';
 import { AiDraftBusinessReview } from './AiDraftReview';
+import { AiDraftVersionConflict } from './AiDraftVersionConflict';
+import {
+  type AiDraftConflictField,
+  type AiDraftFormValues,
+  buildAiDraftConflictFields,
+  buildAiDraftPayload,
+  getAiDraftFormValues,
+  mergeAiDraftConflictValues,
+} from './ai-draft-form';
 
-type DraftItemFormValues = {
-  itemCode?: string;
-  price?: number;
-  qty?: number;
-  uom?: string;
-  warehouse?: string;
+type DraftVersionConflict = {
+  baseVersion: number;
+  differences: AiDraftConflictField[];
+  latestDraft: AiDraft;
+  latestValues: AiDraftFormValues;
+  localValues: AiDraftFormValues;
 };
-
-type FormValues = {
-  adjustmentType?: 'set_target' | 'increase' | 'decrease';
-  brand?: string;
-  company?: string;
-  currency?: string;
-  defaultMode?: 'wholesale' | 'retail';
-  description?: string;
-  itemCode?: string;
-  itemGroup?: string;
-  itemName?: string;
-  items?: DraftItemFormValues[];
-  openingQty?: number;
-  party?: string;
-  postingDate?: Dayjs;
-  quantity?: number;
-  reason?: string;
-  remarks?: string;
-  retailRate?: number;
-  standardBuyingRate?: number;
-  standardSellingRate?: number;
-  stockUom?: string;
-  supplierRef?: string;
-  targetDate?: Dayjs;
-  transactionDate?: Dayjs;
-  uom?: string;
-  warehouse?: string;
-  wholesaleRate?: number;
-};
-
-function readPayloadRow(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object'
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function textValue(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value : undefined;
-}
-
-function numberValue(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
-function dateValue(value: unknown): Dayjs | undefined {
-  return typeof value === 'string' && value ? dayjs(value) : undefined;
-}
-
-function initialValues(draft: AiDraft): FormValues {
-  const payload = draft.payload;
-  if (draft.draftType === 'product_setup') {
-    return {
-      brand: textValue(payload.brand) ?? textValue(payload.brand_query),
-      company: textValue(payload.company) ?? draft.company ?? undefined,
-      currency: textValue(payload.currency) ?? 'CNY',
-      description: textValue(payload.description),
-      itemCode: textValue(payload.item_code),
-      itemGroup:
-        textValue(payload.item_group) ?? textValue(payload.item_group_query),
-      itemName: textValue(payload.item_name),
-      openingQty: numberValue(payload.opening_qty),
-      standardBuyingRate:
-        numberValue(payload.standard_buying_rate) ??
-        numberValue(payload.valuation_rate),
-      retailRate: numberValue(payload.retail_rate),
-      standardSellingRate: numberValue(payload.standard_selling_rate),
-      stockUom: textValue(payload.stock_uom),
-      warehouse:
-        textValue(payload.warehouse) ?? textValue(payload.warehouse_query),
-      wholesaleRate: numberValue(payload.wholesale_rate),
-    };
-  }
-  if (draft.draftType === 'inventory_adjustment') {
-    const item = readPayloadRow(
-      Array.isArray(payload.items) ? payload.items[0] : undefined,
-    );
-    const rawAdjustmentType = textValue(payload.adjustment_type);
-    return {
-      adjustmentType:
-        rawAdjustmentType === 'increase' || rawAdjustmentType === 'decrease'
-          ? rawAdjustmentType
-          : 'set_target',
-      company: textValue(payload.company) ?? draft.company ?? undefined,
-      itemCode: textValue(item.item_code) ?? textValue(item.item_query),
-      postingDate: dateValue(payload.posting_date),
-      quantity: numberValue(item.qty),
-      reason: textValue(payload.reason) ?? textValue(payload.remarks),
-      uom: textValue(item.uom),
-      warehouse: textValue(payload.warehouse),
-    };
-  }
-  return {
-    company: textValue(payload.company) ?? draft.company ?? undefined,
-    defaultMode:
-      (draft.draftType === 'purchase_order'
-        ? textValue(payload.default_purchase_mode)
-        : textValue(payload.default_sales_mode)) === 'retail'
-        ? 'retail'
-        : 'wholesale',
-    items: Array.isArray(payload.items)
-      ? payload.items.map((value) => {
-          const row = readPayloadRow(value);
-          return {
-            itemCode:
-              String(row.item_code ?? row.item_query ?? '') || undefined,
-            price: numberValue(row.price),
-            qty: numberValue(row.qty),
-            uom: textValue(row.uom),
-            warehouse: textValue(row.warehouse),
-          };
-        })
-      : [],
-    party:
-      draft.draftType === 'purchase_order'
-        ? (textValue(payload.supplier) ?? textValue(payload.supplier_query))
-        : (textValue(payload.customer) ?? textValue(payload.customer_query)),
-    currency:
-      draft.draftType === 'purchase_order'
-        ? textValue(payload.currency)
-        : undefined,
-    remarks: textValue(payload.remarks),
-    supplierRef:
-      draft.draftType === 'purchase_order'
-        ? textValue(payload.supplier_ref)
-        : undefined,
-    targetDate: dateValue(
-      draft.draftType === 'purchase_order'
-        ? payload.schedule_date
-        : payload.delivery_date,
-    ),
-    transactionDate: dateValue(payload.transaction_date),
-    warehouse: textValue(payload.warehouse),
-  };
-}
-
-function buildPayload(draft: AiDraft, values: FormValues) {
-  if (draft.draftType === 'product_setup') {
-    return {
-      brand: values.brand,
-      company: values.company,
-      currency: values.currency,
-      description: values.description,
-      item_code: values.itemCode,
-      item_group: values.itemGroup,
-      item_name: values.itemName,
-      opening_qty: values.openingQty,
-      opening_uom: values.stockUom,
-      retail_rate: values.retailRate,
-      standard_buying_rate: values.standardBuyingRate,
-      standard_selling_rate: values.standardSellingRate,
-      stock_uom: values.stockUom,
-      warehouse: values.warehouse,
-      wholesale_rate: values.wholesaleRate,
-    };
-  }
-  if (draft.draftType === 'inventory_adjustment') {
-    return {
-      adjustment_type: values.adjustmentType,
-      company: values.company,
-      item_code: values.itemCode,
-      posting_date: values.postingDate?.format('YYYY-MM-DD'),
-      quantity: values.quantity,
-      reason: values.reason,
-      uom: values.uom,
-      warehouse: values.warehouse,
-    };
-  }
-  return {
-    ...(draft.draftType === 'purchase_order'
-      ? { supplier: values.party }
-      : { customer: values.party }),
-    company: values.company,
-    ...(draft.draftType === 'purchase_order'
-      ? {
-          currency: values.currency,
-          default_purchase_mode: values.defaultMode,
-          schedule_date: values.targetDate?.format('YYYY-MM-DD'),
-          supplier_ref: values.supplierRef,
-        }
-      : {
-          default_sales_mode: values.defaultMode,
-          delivery_date: values.targetDate?.format('YYYY-MM-DD'),
-        }),
-    items: (values.items ?? []).map((row) => ({
-      item_code: row.itemCode,
-      price: row.price,
-      qty: row.qty,
-      uom: row.uom,
-      warehouse: row.warehouse,
-    })),
-    remarks: values.remarks,
-    transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
-    warehouse: values.warehouse,
-  };
-}
 
 export function AiDraftEditorModal({
   draftId,
@@ -248,8 +57,14 @@ export function AiDraftEditorModal({
   onUpdated: (draft: AiDraft) => void;
 }) {
   const { message, modal } = App.useApp();
-  const [form] = Form.useForm<FormValues>();
+  const [form] = Form.useForm<AiDraftFormValues>();
   const [draft, setDraft] = useState<AiDraft | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [versionConflict, setVersionConflict] =
+    useState<DraftVersionConflict | null>(null);
+  const [selectedConflictKeys, setSelectedConflictKeys] = useState<string[]>(
+    [],
+  );
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [executing, setExecuting] = useState(false);
@@ -263,9 +78,13 @@ export function AiDraftEditorModal({
   const busy = saving || executing;
 
   const applyDraft = (nextDraft: AiDraft) => {
+    const nextValues = getAiDraftFormValues(nextDraft);
     setDraft(nextDraft);
+    setDirty(false);
+    setVersionConflict(null);
+    setSelectedConflictKeys([]);
     form.resetFields();
-    form.setFieldsValue(initialValues(nextDraft));
+    form.setFieldsValue(nextValues);
     onUpdated(nextDraft);
   };
 
@@ -277,6 +96,9 @@ export function AiDraftEditorModal({
   useEffect(() => {
     form.resetFields();
     setDraft(null);
+    setDirty(false);
+    setVersionConflict(null);
+    setSelectedConflictKeys([]);
     if (!draftId) {
       setLoading(false);
       return;
@@ -286,8 +108,9 @@ export function AiDraftEditorModal({
     void getAiDraft(draftId)
       .then((latestDraft) => {
         if (!active) return;
+        const values = getAiDraftFormValues(latestDraft);
         setDraft(latestDraft);
-        form.setFieldsValue(initialValues(latestDraft));
+        form.setFieldsValue(values);
         onLoadedRef.current?.(latestDraft);
       })
       .catch((error) => {
@@ -303,9 +126,77 @@ export function AiDraftEditorModal({
     };
   }, [draftId, form]);
 
+  const openVersionConflict = async (
+    baseDraft: AiDraft,
+    localValues: AiDraftFormValues,
+  ) => {
+    try {
+      const latestDraft = await getAiDraft(baseDraft.name);
+      const resolvedBaseValues = getAiDraftFormValues(baseDraft);
+      const latestValues = getAiDraftFormValues(latestDraft);
+      const differences = buildAiDraftConflictFields(
+        baseDraft.draftType,
+        resolvedBaseValues,
+        localValues,
+        latestValues,
+      );
+      setDraft(latestDraft);
+      setDirty(differences.some((field) => field.localChanged));
+      setVersionConflict({
+        baseVersion: baseDraft.version,
+        differences,
+        latestDraft,
+        latestValues,
+        localValues,
+      });
+      setSelectedConflictKeys(
+        differences
+          .filter((field) => field.localChanged)
+          .map((field) => field.key),
+      );
+      onUpdated(latestDraft);
+      message.warning(
+        `草稿已从版本 ${baseDraft.version} 更新到版本 ${latestDraft.version}，请先处理字段差异。`,
+      );
+    } catch (error) {
+      notifyMutationError(error);
+    }
+  };
+
+  const useLatestConflictVersion = () => {
+    if (!versionConflict) return;
+    applyDraft(versionConflict.latestDraft);
+    message.info(
+      `已切换到最新草稿版本 ${versionConflict.latestDraft.version}。`,
+    );
+  };
+
+  const applyConflictSelection = () => {
+    if (!versionConflict || versionConflict.latestDraft.status !== 'draft') {
+      return;
+    }
+    const mergedValues = mergeAiDraftConflictValues(
+      versionConflict.latestValues,
+      versionConflict.localValues,
+      selectedConflictKeys,
+    );
+    setDraft(versionConflict.latestDraft);
+    setVersionConflict(null);
+    setSelectedConflictKeys([]);
+    setDirty(selectedConflictKeys.length > 0);
+    form.resetFields();
+    form.setFieldsValue(mergedValues);
+    onUpdated(versionConflict.latestDraft);
+    message.info(
+      selectedConflictKeys.length
+        ? `已基于版本 ${versionConflict.latestDraft.version} 保留所选本地修改，请再次保存并校验。`
+        : `已采用版本 ${versionConflict.latestDraft.version} 的最新字段。`,
+    );
+  };
+
   const save = async ({ notify = true }: { notify?: boolean } = {}) => {
-    if (!draft || draft.status !== 'draft') return null;
-    let values: FormValues;
+    if (!draft || draft.status !== 'draft' || versionConflict) return null;
+    let values: AiDraftFormValues;
     try {
       values = await form.validateFields();
     } catch {
@@ -316,13 +207,17 @@ export function AiDraftEditorModal({
       const updated = await updateAiDraft(
         draft.name,
         draft.version,
-        buildPayload(draft, values),
+        buildAiDraftPayload(draft, values),
       );
       applyDraft(updated);
       if (notify)
         message.success(`草稿版本 ${updated.version} 已保存并重新校验`);
       return updated;
     } catch (error) {
+      if (isAiDraftVersionConflictError(error)) {
+        await openVersionConflict(draft, values);
+        return null;
+      }
       notifyMutationError(error);
       return null;
     } finally {
@@ -331,16 +226,23 @@ export function AiDraftEditorModal({
   };
 
   const confirmExecute = async () => {
-    if (!draft || draft.status !== 'draft') return;
+    if (!draft || draft.status !== 'draft' || versionConflict) return;
 
     let latestDraft: AiDraft | null = null;
-    if (form.isFieldsTouched()) {
+    if (dirty) {
       latestDraft = await save({ notify: false });
     } else {
+      const openedVersion = draft.version;
       setSaving(true);
       try {
         latestDraft = await getAiDraft(draft.name);
         applyDraft(latestDraft);
+        if (latestDraft.version !== openedVersion) {
+          message.info(
+            `草稿已更新到版本 ${latestDraft.version}，请检查最新内容后重新确认执行。`,
+          );
+          return;
+        }
       } catch (error) {
         notifyMutationError(error);
         return;
@@ -380,6 +282,13 @@ export function AiDraftEditorModal({
               : '草稿执行成功，正式业务回执已生成。',
           );
         } catch (error) {
+          if (isAiDraftVersionConflictError(error)) {
+            await openVersionConflict(
+              latestDraft,
+              getAiDraftFormValues(latestDraft),
+            );
+            return;
+          }
           notifyMutationError(error);
           throw error;
         } finally {
@@ -402,14 +311,14 @@ export function AiDraftEditorModal({
               取消
             </Button>
             <Button
-              disabled={loading || executing}
+              disabled={loading || executing || Boolean(versionConflict)}
               loading={saving}
               onClick={() => void save()}
             >
               保存草稿
             </Button>
             <Button
-              disabled={loading || saving}
+              disabled={loading || saving || Boolean(versionConflict)}
               loading={executing}
               onClick={() => void confirmExecute()}
               type="primary"
@@ -445,31 +354,63 @@ export function AiDraftEditorModal({
       width={980}
     >
       <Spin description="正在读取最新草稿版本…" spinning={loading}>
+        {draft ? (
+          <div style={{ marginBottom: 16 }}>
+            <AiDraftProgress
+              conflict={Boolean(versionConflict)}
+              dirty={dirty}
+              draft={draft}
+              executing={executing}
+            />
+          </div>
+        ) : null}
+        {versionConflict ? (
+          <div style={{ marginBottom: 16 }}>
+            <AiDraftVersionConflict
+              baseVersion={versionConflict.baseVersion}
+              canKeepLocal={versionConflict.latestDraft.status === 'draft'}
+              differences={versionConflict.differences}
+              latestVersion={versionConflict.latestDraft.version}
+              onApplySelection={applyConflictSelection}
+              onSelectedKeysChange={setSelectedConflictKeys}
+              onUseLatest={useLatestConflictVersion}
+              selectedKeys={selectedConflictKeys}
+            />
+          </div>
+        ) : null}
         {draft && draft.status !== 'draft' ? (
           <AiDraftBusinessReview draft={draft} />
         ) : draft ? (
-          <Form form={form} layout="vertical">
-            {draft.validation.errors.length ||
-            draft.validation.warnings.length ? (
-              <Alert
-                description={
-                  <Space orientation="vertical" size={2}>
-                    {draft.validation.errors.map((error) => (
-                      <Typography.Text key={error} type="danger">
-                        {error}
-                      </Typography.Text>
-                    ))}
-                    {draft.validation.warnings.map((warning) => (
-                      <Typography.Text key={warning}>{warning}</Typography.Text>
-                    ))}
-                  </Space>
-                }
-                showIcon
-                style={{ marginBottom: 16 }}
-                title="请补充以下信息"
-                type={draft.validation.errors.length ? 'warning' : 'info'}
-              />
-            ) : null}
+          <Form
+            disabled={busy || Boolean(versionConflict)}
+            form={form}
+            layout="vertical"
+            onValuesChange={() => setDirty(true)}
+          >
+            {!versionConflict &&
+              (draft.validation.errors.length ||
+              draft.validation.warnings.length ? (
+                <Alert
+                  description={
+                    <Space orientation="vertical" size={2}>
+                      {draft.validation.errors.map((error) => (
+                        <Typography.Text key={error} type="danger">
+                          {error}
+                        </Typography.Text>
+                      ))}
+                      {draft.validation.warnings.map((warning) => (
+                        <Typography.Text key={warning}>
+                          {warning}
+                        </Typography.Text>
+                      ))}
+                    </Space>
+                  }
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  title="请补充以下信息"
+                  type={draft.validation.errors.length ? 'warning' : 'info'}
+                />
+              ) : null)}
             <Form.Item label="公司" name="company" rules={[{ required: true }]}>
               <Input disabled />
             </Form.Item>

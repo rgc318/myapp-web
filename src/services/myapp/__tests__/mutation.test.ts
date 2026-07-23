@@ -1,5 +1,5 @@
 import { notification } from 'antd';
-import { callGatewayMethod } from '../api-client';
+import { callGatewayMethod, MyAppApiError } from '../api-client';
 import { notifyMutationError, runGatewayMutation } from '../mutation';
 import { getMutationErrorMessage } from '../mutation';
 
@@ -43,6 +43,16 @@ describe('mutation feedback', () => {
     );
   });
 
+  it('allows callers to handle recoverable mutation errors inline', async () => {
+    const error = new Error('草稿版本已变化');
+    mockedCallGatewayMethod.mockRejectedValue(error);
+
+    await expect(
+      runGatewayMutation('update_ai_draft_v1', { notifyError: false }),
+    ).rejects.toBe(error);
+    expect(mockedNotificationError).not.toHaveBeenCalled();
+  });
+
   it('does not display the same error object twice', () => {
     const error = new Error('重复错误');
 
@@ -50,6 +60,18 @@ describe('mutation feedback', () => {
     notifyMutationError(error);
 
     expect(mockedNotificationError).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels draft version conflicts separately from ordinary validation errors', () => {
+    notifyMutationError(
+      new MyAppApiError('草稿版本已变化', {
+        code: 'AI_DRAFT_VERSION_CONFLICT',
+      }),
+    );
+
+    expect(mockedNotificationError).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '草稿版本已变化' }),
+    );
   });
 
   it('converts Frappe password feedback HTML to readable text', () => {

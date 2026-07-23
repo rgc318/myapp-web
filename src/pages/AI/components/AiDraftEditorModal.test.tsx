@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from 'antd';
 import React from 'react';
-import { executeAiDraft, getAiDraft, updateAiDraft } from '@/services/myapp/ai';
+import {
+  AiDraftVersionConflictError,
+  executeAiDraft,
+  getAiDraft,
+  updateAiDraft,
+} from '@/services/myapp/ai';
 import { AiDraftEditorModal } from './AiDraftEditorModal';
 
 jest.mock('@/components', () => {
@@ -37,11 +42,25 @@ jest.mock('@/components/UomSelect', () => {
       }),
   };
 });
-jest.mock('@/services/myapp/ai', () => ({
-  executeAiDraft: jest.fn(),
-  getAiDraft: jest.fn(),
-  updateAiDraft: jest.fn(),
-}));
+jest.mock('@/services/myapp/ai', () => {
+  class MockAiDraftVersionConflictError extends Error {
+    code = 'AI_DRAFT_VERSION_CONFLICT';
+
+    constructor(message = '草稿版本已变化') {
+      super(message);
+      this.name = 'AiDraftVersionConflictError';
+    }
+  }
+
+  return {
+    AiDraftVersionConflictError: MockAiDraftVersionConflictError,
+    executeAiDraft: jest.fn(),
+    getAiDraft: jest.fn(),
+    isAiDraftVersionConflictError: (error: unknown) =>
+      error instanceof MockAiDraftVersionConflictError,
+    updateAiDraft: jest.fn(),
+  };
+});
 
 const mockedExecute = jest.mocked(executeAiDraft);
 const mockedGet = jest.mocked(getAiDraft);
@@ -98,6 +117,8 @@ describe('AiDraftEditorModal', () => {
     );
 
     expect(await screen.findByDisplayValue('煌星')).toBeTruthy();
+    expect(screen.getByText('版本 2 已保存')).toBeTruthy();
+    expect(screen.getByText('后端校验通过')).toBeTruthy();
     fireEvent.change(screen.getByDisplayValue('煌星'), {
       target: { value: '煌星升级版' },
     });
@@ -175,6 +196,140 @@ describe('AiDraftEditorModal', () => {
     });
     expect(await screen.findByText(/已创建 Item ITEM-0001/)).toBeTruthy();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('compares a stale form with the latest draft and rebases selected local fields', async () => {
+    const latest = {
+      ...draft,
+      payload: {
+        ...draft.payload,
+        brand: '服务器品牌',
+        item_name: '服务器名称',
+      },
+      version: 3,
+    };
+    const rebased = {
+      ...latest,
+      payload: {
+        ...latest.payload,
+        item_name: '我的名称',
+      },
+      version: 4,
+    };
+    mockedGet.mockResolvedValueOnce(draft).mockResolvedValueOnce(latest);
+    mockedUpdate
+      .mockRejectedValueOnce(new AiDraftVersionConflictError())
+      .mockResolvedValueOnce(rebased);
+    const onUpdated = jest.fn();
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated,
+        }),
+      ),
+    );
+
+    fireEvent.change(await screen.findByDisplayValue('煌星'), {
+      target: { value: '我的名称' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+
+    expect(await screen.findByText('检测到草稿版本冲突')).toBeTruthy();
+    expect(screen.getAllByText('原打开版本').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('我的输入').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('最新持久版本').length).toBeGreaterThan(0);
+    expect(screen.getByText('我的名称')).toBeTruthy();
+    expect(screen.getByText('服务器名称')).toBeTruthy();
+    expect(screen.getByText('服务器品牌')).toBeTruthy();
+    expect(screen.getByText('双方均修改')).toBeTruthy();
+    expect(screen.getByText('仅最新版本修改')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '应用选择并继续' }));
+    expect(screen.getByDisplayValue('我的名称')).toBeTruthy();
+    expect(screen.getByDisplayValue('服务器品牌')).toBeTruthy();
+    expect(screen.getByText(/商品建档草稿 · 版本 3$/)).toBeTruthy();
+    expect(screen.getByText('有未保存修改')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => {
+      expect(mockedUpdate).toHaveBeenLastCalledWith(
+        draft.name,
+        3,
+        expect.objectContaining({
+          brand: '服务器品牌',
+          item_name: '我的名称',
+        }),
+      );
+      expect(onUpdated).toHaveBeenLastCalledWith(rebased);
+    });
+  });
+
+  it('refreshes a changed persisted version before asking the user to execute', async () => {
+    const latest = {
+      ...draft,
+      payload: { ...draft.payload, item_name: '服务器最新名称' },
+      version: 3,
+    };
+    mockedGet.mockResolvedValueOnce(draft).mockResolvedValueOnce(latest);
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    await screen.findByDisplayValue('煌星');
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(await screen.findByDisplayValue('服务器最新名称')).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: '确认执行当前版本' }),
+    ).toBeNull();
+    expect(mockedExecute).not.toHaveBeenCalled();
+  });
+
+  it('opens version comparison when the draft changes after execution confirmation', async () => {
+    const latest = {
+      ...draft,
+      payload: { ...draft.payload, item_name: '确认后被其他页面修改' },
+      version: 3,
+    };
+    mockedGet
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(draft)
+      .mockResolvedValueOnce(latest);
+    mockedExecute.mockRejectedValueOnce(new AiDraftVersionConflictError());
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    await screen.findByDisplayValue('煌星');
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: '确认执行当前版本' }),
+    );
+
+    expect(await screen.findByText('检测到草稿版本冲突')).toBeTruthy();
+    expect(screen.getByText('确认后被其他页面修改')).toBeTruthy();
+    expect(screen.getByText('仅最新版本修改')).toBeTruthy();
+    expect(mockedExecute).toHaveBeenCalledWith(draft.name, 2);
   });
 
   it('requires a default buying price for opening stock', async () => {

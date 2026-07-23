@@ -8,6 +8,7 @@ import {
 
 export type MyAppMutationOptions<T> = {
   idempotencyKey?: string;
+  notifyError?: boolean;
   payload?: Record<string, unknown>;
   successMessage?: string;
   transform?: (data: unknown) => T;
@@ -28,6 +29,7 @@ function errorTitle(error: unknown) {
     if (error.code === 'DUPLICATE_ENTRY') return '数据已存在';
     if (error.code === 'RESOURCE_NOT_FOUND') return '目标数据不存在';
     if (error.code === 'WORKFLOW_ACTION_INVALID') return '当前状态不允许此操作';
+    if (error.code === 'AI_DRAFT_VERSION_CONFLICT') return '草稿版本已变化';
   }
   return '操作未完成';
 }
@@ -94,7 +96,9 @@ export async function runGatewayMutation<T = unknown>(
       idempotencyKey,
     };
   } catch (error) {
-    notifyMutationError(error);
+    if (options.notifyError !== false) {
+      notifyMutationError(error);
+    }
     throw error;
   }
 }

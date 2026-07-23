@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '../api-client';
 import {
+  AiDraftVersionConflictError,
   executeAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
@@ -74,6 +75,7 @@ describe('AI domain service', () => {
       'execute_ai_draft_v1',
       expect.objectContaining({
         idempotencyKey: 'web-execute-ai-draft-AI-DRAFT-1-v3',
+        notifyError: false,
         payload: {
           confirmed: 1,
           draft_id: 'AI-DRAFT-1',
@@ -105,6 +107,7 @@ describe('AI domain service', () => {
     expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
       'update_ai_draft_v1',
       {
+        notifyError: false,
         payload: {
           draft_id: 'AI-DRAFT-1',
           expected_version: 2,
@@ -113,6 +116,17 @@ describe('AI domain service', () => {
       },
     );
     expect(result.version).toBe(3);
+  });
+
+  it('maps the stable draft conflict code to a recoverable domain error', async () => {
+    mockedRunGatewayMutation.mockRejectedValue({
+      code: 'AI_DRAFT_VERSION_CONFLICT',
+      message: '草稿版本已变化，请重新打开最新版本后再保存。',
+    });
+
+    await expect(
+      updateAiDraft('AI-DRAFT-1', 2, { remarks: '本地修改' }),
+    ).rejects.toBeInstanceOf(AiDraftVersionConflictError);
   });
 
   it('restores a draft version through an idempotent current-version mutation', async () => {
