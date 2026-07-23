@@ -1,7 +1,11 @@
 import { Tag } from 'antd';
 import React from 'react';
 
-export { formatDisplayUom, resolveDisplayUom } from './display-uom';
+export {
+  formatDisplayUom,
+  resolveDisplayUom,
+  sortUomsByBusinessPriority,
+} from './display-uom';
 
 export function getCurrencyDisplayUnit(currency: string | null | undefined) {
   const normalized =

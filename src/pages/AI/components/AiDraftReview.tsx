@@ -163,9 +163,25 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'sellingRate',
-              label: '标准售价',
+              label: '标准售价（默认单价）',
               children: formatCurrencyValue(
                 payload.standard_selling_rate as number | string | null,
+                typeof payload.currency === 'string' ? payload.currency : 'CNY',
+              ),
+            },
+            {
+              key: 'wholesaleRate',
+              label: '批发价',
+              children: formatCurrencyValue(
+                payload.wholesale_rate as number | string | null,
+                typeof payload.currency === 'string' ? payload.currency : 'CNY',
+              ),
+            },
+            {
+              key: 'retailRate',
+              label: '零售价',
+              children: formatCurrencyValue(
+                payload.retail_rate as number | string | null,
                 typeof payload.currency === 'string' ? payload.currency : 'CNY',
               ),
             },
@@ -188,7 +204,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'standardBuyingRate',
-              label: '默认采购价',
+              label: '成本价（默认采购价）',
               children: formatCurrencyValue(
                 (payload.standard_buying_rate ?? payload.valuation_rate) as
                   | number

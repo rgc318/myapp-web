@@ -976,8 +976,8 @@ describe('myapp domain services', () => {
       retailDefaultUom: 'Nos',
       totalQty: 5,
       uomConversions: [
-        { conversionFactor: 1, uom: 'Nos' },
         { conversionFactor: 12, uom: 'Box' },
+        { conversionFactor: 1, uom: 'Nos' },
       ],
       warehouseStockDetails: [
         { company: 'rgc (Demo)', qty: 3, warehouse: 'Stores - RD' },

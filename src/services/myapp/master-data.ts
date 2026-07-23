@@ -1,6 +1,7 @@
 import { callGatewayMethod } from './api-client';
 import { resolveMediaUrl } from './media-url';
 import { runGatewayMutation } from './mutation';
+import { sortUomsByBusinessPriority } from '@/utils/display-uom';
 import {
   compactPayload,
   readObject,
@@ -431,18 +432,21 @@ function mapUomNames(value: unknown) {
     return [] as string[];
   }
 
-  return value
-    .map((entry) => {
-      if (typeof entry === 'string') {
-        return entry.trim();
-      }
-      if (entry && typeof entry === 'object') {
-        const row = entry as Record<string, unknown>;
-        return typeof row.uom === 'string' ? row.uom.trim() : '';
-      }
-      return '';
-    })
-    .filter(Boolean);
+  return sortUomsByBusinessPriority(
+    value
+      .map((entry) => {
+        if (typeof entry === 'string') {
+          return entry.trim();
+        }
+        if (entry && typeof entry === 'object') {
+          const row = entry as Record<string, unknown>;
+          return typeof row.uom === 'string' ? row.uom.trim() : '';
+        }
+        return '';
+      })
+      .filter(Boolean),
+    (uom) => uom,
+  );
 }
 
 function mapUomDisplays(value: unknown) {
@@ -470,25 +474,28 @@ function mapUomConversions(value: unknown) {
     return [] as ProductSummary['uomConversions'];
   }
 
-  return value
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
-      const row = entry as Record<string, unknown>;
-      const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
-      if (!uom) {
-        return null;
-      }
-      return {
-        conversionFactor: toOptionalNumber(row.conversion_factor),
-        uom,
-      };
-    })
-    .filter(
-      (entry): entry is ProductSummary['uomConversions'][number] =>
-        Boolean(entry),
-    );
+  return sortUomsByBusinessPriority(
+    value
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return null;
+        }
+        const row = entry as Record<string, unknown>;
+        const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+        if (!uom) {
+          return null;
+        }
+        return {
+          conversionFactor: toOptionalNumber(row.conversion_factor),
+          uom,
+        };
+      })
+      .filter(
+        (entry): entry is ProductSummary['uomConversions'][number] =>
+          Boolean(entry),
+      ),
+    (entry) => entry.uom,
+  );
 }
 
 function mapPriceSummary(value: unknown): ProductSummary['priceSummary'] {
@@ -1243,7 +1250,15 @@ export async function listUoms(options: ListOptions = {}) {
       start: options.start ?? 0,
     }),
   );
-  return pageResult(result.data, mapUom);
+  const page = pageResult(result.data, mapUom);
+  return {
+    ...page,
+    items: sortUomsByBusinessPriority(
+      page.items,
+      (uom) => uom.name,
+      (uom) => uom.displayName,
+    ),
+  };
 }
 
 export async function createUom(payload: SaveUomPayload) {

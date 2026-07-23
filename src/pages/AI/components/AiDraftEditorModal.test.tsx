@@ -136,7 +136,7 @@ describe('AiDraftEditorModal', () => {
     expect(screen.queryByText('初始库存单位')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     expect(
-      await screen.findByText('填写初始库存时，请输入默认采购价'),
+      await screen.findByText('填写初始库存时，请输入成本价（默认采购价）'),
     ).toBeTruthy();
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
@@ -147,7 +147,9 @@ describe('AiDraftEditorModal', () => {
       payload: {
         ...draft.payload,
         opening_qty: 1000,
+        retail_rate: 6500,
         standard_buying_rate: 5000,
+        wholesale_rate: 6000,
         warehouse: 'Stores - RD',
       },
       validation: {
@@ -180,7 +182,9 @@ describe('AiDraftEditorModal', () => {
         2,
         expect.objectContaining({
           opening_uom: 'Unit',
+          retail_rate: 6500,
           standard_buying_rate: 5000,
+          wholesale_rate: 6000,
         }),
       );
     });
@@ -188,7 +192,7 @@ describe('AiDraftEditorModal', () => {
     expect(
       Number(
         screen.getByRole<HTMLInputElement>('spinbutton', {
-          name: '默认采购价',
+          name: '成本价（默认采购价）',
         }).value,
       ),
     ).toBe(5000);

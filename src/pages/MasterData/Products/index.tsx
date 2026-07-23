@@ -780,6 +780,15 @@ const ProductsPage: React.FC = () => {
           payload.standard_buying_rate === undefined
             ? undefined
             : Number(payload.standard_buying_rate),
+        wholesaleRate:
+          payload.wholesale_rate === null ||
+          payload.wholesale_rate === undefined
+            ? undefined
+            : Number(payload.wholesale_rate),
+        retailRate:
+          payload.retail_rate === null || payload.retail_rate === undefined
+            ? undefined
+            : Number(payload.retail_rate),
         stockUom:
           typeof payload.stock_uom === 'string' ? payload.stock_uom : 'Nos',
         valuationRate:

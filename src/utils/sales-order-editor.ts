@@ -1,5 +1,8 @@
 import type { ProductSummary } from '@/services/myapp/master-data';
-import { resolveDisplayUomFromMap } from '@/utils/display-uom';
+import {
+  resolveDisplayUomFromMap,
+  sortUomsByBusinessPriority,
+} from '@/utils/display-uom';
 import {
   convertQtyToStockQty,
   formatConvertedQty,
@@ -88,13 +91,17 @@ export function resolveUomDisplay(
 }
 
 export function getProductAvailableUoms(product: ProductSummary) {
-  return uniqueText([
-    ...(product.allUoms ?? []),
-    product.wholesaleDefaultUom,
-    product.retailDefaultUom,
-    product.uom,
-    product.stockUom,
-  ]);
+  return sortUomsByBusinessPriority(
+    uniqueText([
+      ...(product.allUoms ?? []),
+      product.wholesaleDefaultUom,
+      product.retailDefaultUom,
+      product.uom,
+      product.stockUom,
+    ]),
+    (uom) => uom,
+    (uom) => product.allUomDisplays?.[uom],
+  );
 }
 
 export function getProductModeDefaultUom(

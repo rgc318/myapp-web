@@ -5,6 +5,7 @@ import {
   formatDisplayUom,
   formatStatusLabel,
   getCurrencyDisplayUnit,
+  sortUomsByBusinessPriority,
 } from '../myapp-display';
 
 describe('myapp display utilities', () => {
@@ -30,6 +31,12 @@ describe('myapp display utilities', () => {
     expect(formatDisplayUom('BOX')).toBe('箱');
     expect(formatDisplayUom('KG')).toBe('千克');
     expect(formatDisplayUom('Custom UOM')).toBe('Custom UOM');
+  });
+
+  it('prioritizes box and nos while preserving the remaining uom order', () => {
+    expect(
+      sortUomsByBusinessPriority(['Kg', 'Nos', 'Bottle', 'Box'], (uom) => uom),
+    ).toEqual(['Box', 'Nos', 'Kg', 'Bottle']);
   });
 
   it('formats business status labels in Chinese', () => {

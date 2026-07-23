@@ -46,6 +46,7 @@ type FormValues = {
   quantity?: number;
   reason?: string;
   remarks?: string;
+  retailRate?: number;
   standardBuyingRate?: number;
   standardSellingRate?: number;
   stockUom?: string;
@@ -54,6 +55,7 @@ type FormValues = {
   transactionDate?: Dayjs;
   uom?: string;
   warehouse?: string;
+  wholesaleRate?: number;
 };
 
 function readPayloadRow(value: unknown): Record<string, unknown> {
@@ -95,10 +97,12 @@ function initialValues(draft: AiDraft): FormValues {
       standardBuyingRate:
         numberValue(payload.standard_buying_rate) ??
         numberValue(payload.valuation_rate),
+      retailRate: numberValue(payload.retail_rate),
       standardSellingRate: numberValue(payload.standard_selling_rate),
       stockUom: textValue(payload.stock_uom),
       warehouse:
         textValue(payload.warehouse) ?? textValue(payload.warehouse_query),
+      wholesaleRate: numberValue(payload.wholesale_rate),
     };
   }
   if (draft.draftType === 'inventory_adjustment') {
@@ -176,10 +180,12 @@ function buildPayload(draft: AiDraft, values: FormValues) {
       item_name: values.itemName,
       opening_qty: values.openingQty,
       opening_uom: values.stockUom,
+      retail_rate: values.retailRate,
       standard_buying_rate: values.standardBuyingRate,
       standard_selling_rate: values.standardSellingRate,
       stock_uom: values.stockUom,
       warehouse: values.warehouse,
+      wholesale_rate: values.wholesaleRate,
     };
   }
   if (draft.draftType === 'inventory_adjustment') {
@@ -402,7 +408,11 @@ export function AiDraftEditorModal({
                   >
                     <CurrencySelect />
                   </Form.Item>
-                  <Form.Item label="标准售价" name="standardSellingRate">
+                  <Form.Item
+                    label="标准售价（默认单价）"
+                    name="standardSellingRate"
+                    extra="写入 Standard Selling，作为未指定销售模式时的默认销售单价。"
+                  >
                     <InputNumber
                       min={0}
                       precision={6}
@@ -410,12 +420,34 @@ export function AiDraftEditorModal({
                     />
                   </Form.Item>
                   <Form.Item
-                    label="默认采购价"
+                    label="批发价"
+                    name="wholesaleRate"
+                    extra="写入 Wholesale 价格表，供批发销售模式默认取价。"
+                  >
+                    <InputNumber
+                      min={0}
+                      precision={6}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    label="零售价"
+                    name="retailRate"
+                    extra="写入 Retail 价格表，供零售销售模式默认取价。"
+                  >
+                    <InputNumber
+                      min={0}
+                      precision={6}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    label="成本价（默认采购价）"
                     name="standardBuyingRate"
                     extra={
                       hasOpeningStock
-                        ? '用于首次入库成本和默认采购价格；不会使用标准售价代替。'
-                        : '用于采购业务的默认参考价。'
+                        ? '用于首次入库成本，同时写入 Standard Buying 作为默认采购参考价；不会使用售价代替。'
+                        : '写入 Standard Buying，作为采购业务的默认成本参考价。'
                     }
                     required={hasOpeningStock}
                     rules={[
@@ -427,7 +459,9 @@ export function AiDraftEditorModal({
                               value === undefined ||
                               value === '')
                           ) {
-                            throw new Error('填写初始库存时，请输入默认采购价');
+                            throw new Error(
+                              '填写初始库存时，请输入成本价（默认采购价）',
+                            );
                           }
                         },
                       },

@@ -74,7 +74,7 @@ describe('sales order editor utils', () => {
   it('resolves sales mode default units from shared uom context', () => {
     expect(getProductModeDefaultUom(product, 'wholesale')).toBe('Box');
     expect(getProductModeDefaultUom(product, 'retail')).toBe('Nos');
-    expect(getProductAvailableUoms(product)).toEqual(['Nos', 'Box']);
+    expect(getProductAvailableUoms(product)).toEqual(['Box', 'Nos']);
   });
 
   it('keeps explicit zero mode price instead of falling back', () => {

@@ -1,6 +1,7 @@
 import { Select } from 'antd';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { listUoms, type UomSummary } from '@/services/myapp/master-data';
+import { sortUomsByBusinessPriority } from '@/utils/display-uom';
 
 function optionLabel(uom: UomSummary) {
   const display = uom.displayName || uom.uomName || uom.name;
@@ -19,13 +20,17 @@ async function loadCachedUoms(query: string) {
 
   const request = listUoms({
     enabled: 1,
-    limit: 40,
+    limit: 100,
     searchKey: query,
   }).then((result) => {
     result.items.forEach((uom) => {
       uomCache.set(uom.name, uom);
     });
-    return result.items;
+    return sortUomsByBusinessPriority(
+      result.items,
+      (uom) => uom.name,
+      (uom) => uom.displayName,
+    );
   });
   uomRequestCache.set(cacheKey, request);
   try {
