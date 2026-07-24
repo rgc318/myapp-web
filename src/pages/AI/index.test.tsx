@@ -31,7 +31,40 @@ jest.mock('@ant-design/x', () => {
           ),
         ),
     },
-    Conversations: () => React.createElement('div', null, '会话列表'),
+    Conversations: ({ items = [], menu, onActiveChange }: any) =>
+      React.createElement(
+        'div',
+        null,
+        '会话列表',
+        items.map((item: any) => {
+          const itemMenu = typeof menu === 'function' ? menu(item) : null;
+          return React.createElement(
+            'div',
+            { key: item.key },
+            React.createElement(
+              'button',
+              {
+                'aria-label': `打开会话 ${item.key}`,
+                onClick: () => onActiveChange?.(item.key),
+                type: 'button',
+              },
+              item.label,
+            ),
+            itemMenu?.items?.map((menuItem: any) =>
+              React.createElement(
+                'button',
+                {
+                  'aria-label': `${menuItem.label} ${item.key}`,
+                  key: menuItem.key,
+                  onClick: () => itemMenu.onClick?.({ key: menuItem.key }),
+                  type: 'button',
+                },
+                menuItem.label,
+              ),
+            ),
+          );
+        }),
+      ),
     Prompts: ({ items, onItemClick }: any) =>
       React.createElement(
         'div',
@@ -202,7 +235,9 @@ jest.mock('@/services/myapp/ai', () => ({
   getAiErrorCode: (error: { code?: string } | null) => error?.code ?? null,
   getAiConversation: jest.fn(),
   getAiDraft: jest.fn(),
-  listAiConversations: jest.fn().mockResolvedValue({ items: [], total: 0 }),
+  listAiConversations: jest
+    .fn()
+    .mockResolvedValue({ items: [], pendingDraftTotal: 0, total: 0 }),
   listAiSelectableModels: jest.fn().mockResolvedValue([
     {
       capability: 'fast_chat',
@@ -215,6 +250,7 @@ jest.mock('@/services/myapp/ai', () => ({
   ]),
   listAiDraftVersions: jest.fn(),
   prepareAiDraftHandoff: jest.fn(),
+  renameAiConversation: jest.fn(),
   refreshAiBusinessResult: jest.fn(),
   resolveAiScenario: jest.fn(),
   restoreAiDraftVersion: jest.fn(),
@@ -226,6 +262,8 @@ jest.mock('@/services/myapp/ai', () => ({
 const {
   generateAiProductSetupDraft,
   getAiConversation,
+  listAiConversations,
+  renameAiConversation,
   resolveAiScenario,
   refreshAiBusinessResult,
   streamAiChatMessage,
@@ -235,6 +273,22 @@ describe('AI workspace page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLocationSearch = '';
+    listAiConversations.mockResolvedValue({
+      items: [],
+      pendingDraftTotal: 0,
+      total: 0,
+    });
+    renameAiConversation.mockResolvedValue({
+      company: 'Demo Company',
+      creation: null,
+      lastMessageAt: null,
+      messageCount: 0,
+      modified: null,
+      name: 'AI-CONV-1',
+      pendingDraftCount: 0,
+      status: 'active',
+      title: '新名称',
+    });
     resolveAiScenario.mockImplementation(async (content: string) => {
       if (content.includes('销售订单')) return 'order_query';
       if (
@@ -853,6 +907,149 @@ describe('AI workspace page', () => {
       screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' }).value,
     ).toBe('查询近30天未完成的大额采购订单，前5条。');
     expect(streamAiChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('searches conversations on the server and shows draft workload metadata', async () => {
+    listAiConversations.mockResolvedValue({
+      items: [
+        {
+          company: 'Demo Company',
+          creation: '2026-07-24 09:00:00',
+          lastMessageAt: '2026-07-24 10:30:00',
+          messageCount: 6,
+          modified: '2026-07-24 10:30:00',
+          name: 'AI-CONV-1',
+          pendingDraftCount: 2,
+          status: 'active',
+          title: '采购跟进',
+        },
+      ],
+      pendingDraftTotal: 3,
+      total: 1,
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    expect(await screen.findAllByText('采购跟进')).not.toHaveLength(0);
+    expect(screen.getAllByText('待复核草稿 2')).not.toHaveLength(0);
+    expect(screen.getByText('3')).toBeTruthy();
+
+    const search = screen.getByRole<HTMLInputElement>('searchbox', {
+      name: '搜索 AI 会话',
+    });
+    fireEvent.change(search, { target: { value: ' 相机 ' } });
+    fireEvent.keyDown(search, { code: 'Enter', key: 'Enter' });
+
+    await waitFor(() =>
+      expect(listAiConversations).toHaveBeenLastCalledWith({
+        limit: 50,
+        search: '相机',
+        status: 'active',
+      }),
+    );
+  });
+
+  it('renames a conversation from the conversation menu', async () => {
+    listAiConversations.mockResolvedValue({
+      items: [
+        {
+          company: 'Demo Company',
+          creation: '2026-07-24 09:00:00',
+          lastMessageAt: '2026-07-24 10:30:00',
+          messageCount: 6,
+          modified: '2026-07-24 10:30:00',
+          name: 'AI-CONV-1',
+          pendingDraftCount: 0,
+          status: 'active',
+          title: '旧名称',
+        },
+      ],
+      pendingDraftTotal: 0,
+      total: 1,
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(
+      (
+        await screen.findAllByRole('button', {
+          name: '重命名 AI-CONV-1',
+        })
+      )[0],
+    );
+    const titleInput = screen.getByRole<HTMLInputElement>('textbox', {
+      name: '会话名称',
+    });
+    expect(titleInput.value).toBe('旧名称');
+    fireEvent.change(titleInput, { target: { value: '采购跟进' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存名称' }));
+
+    await waitFor(() =>
+      expect(renameAiConversation).toHaveBeenCalledWith(
+        'AI-CONV-1',
+        '采购跟进',
+      ),
+    );
+  });
+
+  it('keeps unsent composer text separately for each conversation', async () => {
+    const conversationItems = ['AI-CONV-1', 'AI-CONV-2'].map((name) => ({
+      company: 'Demo Company',
+      creation: '2026-07-24 09:00:00',
+      lastMessageAt: '2026-07-24 10:30:00',
+      messageCount: 0,
+      modified: '2026-07-24 10:30:00',
+      name,
+      pendingDraftCount: 0,
+      status: 'active',
+      title: name,
+    }));
+    listAiConversations.mockResolvedValue({
+      items: conversationItems,
+      pendingDraftTotal: 0,
+      total: 2,
+    });
+    getAiConversation.mockImplementation(async (targetId: string) => ({
+      conversation: conversationItems.find((item) => item.name === targetId),
+      messages: [],
+      pagination: {
+        hasMore: false,
+        limit: 40,
+        nextBeforeSequence: null,
+        returnedCount: 0,
+        total: 0,
+      },
+    }));
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    const openConversation = async (targetId: string) => {
+      fireEvent.click(
+        (
+          await screen.findAllByRole('button', {
+            name: `打开会话 ${targetId}`,
+          })
+        )[0],
+      );
+      await waitFor(() =>
+        expect(getAiConversation).toHaveBeenLastCalledWith(targetId, {
+          limit: 40,
+        }),
+      );
+    };
+    const composer = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'AI 输入',
+    });
+
+    await openConversation('AI-CONV-1');
+    fireEvent.change(composer, { target: { value: '会话一未发送' } });
+    await openConversation('AI-CONV-2');
+    expect(composer.value).toBe('');
+    fireEvent.change(composer, { target: { value: '会话二未发送' } });
+    await openConversation('AI-CONV-1');
+    expect(composer.value).toBe('会话一未发送');
+    await openConversation('AI-CONV-2');
+    expect(composer.value).toBe('会话二未发送');
   });
 
   it('keeps a failed answer inline with a retry action', async () => {

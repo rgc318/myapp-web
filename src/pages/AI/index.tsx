@@ -2,6 +2,7 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   DashboardOutlined,
+  EditOutlined,
   FileTextOutlined,
   InboxOutlined,
   LockOutlined,
@@ -27,6 +28,7 @@ import { history } from '@umijs/max';
 import {
   Alert,
   Avatar,
+  Badge,
   Button,
   Drawer,
   Form,
@@ -68,6 +70,7 @@ import {
   listAiSelectableModels,
   prepareAiDraftHandoff,
   refreshAiBusinessResult,
+  renameAiConversation,
   resolveAiScenario,
   restoreAiDraftVersion,
   streamAiChatMessage,
@@ -101,6 +104,7 @@ type ChatRow = AiMessageRow & {
 };
 
 const AI_MESSAGE_PAGE_SIZE = 40;
+const NEW_CONVERSATION_DRAFT_KEY = '__new_ai_conversation__';
 
 const EMPTY_MESSAGE_PAGINATION: AiConversationMessagePagination = {
   hasMore: false,
@@ -231,6 +235,10 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
   }));
 }
 
+function getConversationDraftKey(conversationId: string | null) {
+  return conversationId ?? NEW_CONVERSATION_DRAFT_KEY;
+}
+
 export default function AiPage() {
   const { styles } = useAiWorkspaceStyles();
   const [feedbackForm] = Form.useForm<{
@@ -246,6 +254,10 @@ export default function AiPage() {
   const [messagePagination, setMessagePagination] =
     useState<AiConversationMessagePagination>(EMPTY_MESSAGE_PAGINATION);
   const [conversations, setConversations] = useState<AiConversation[]>([]);
+  const [conversationTotal, setConversationTotal] = useState(0);
+  const [pendingDraftTotal, setPendingDraftTotal] = useState(0);
+  const [conversationSearchInput, setConversationSearchInput] = useState('');
+  const [conversationSearch, setConversationSearch] = useState('');
   const [conversationStatus, setConversationStatus] = useState<
     'active' | 'archived'
   >('active');
@@ -301,6 +313,9 @@ export default function AiPage() {
     null,
   );
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<AiConversation | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+  const [renaming, setRenaming] = useState(false);
   const [businessDocument, setBusinessDocument] =
     useState<AiBusinessDocumentResult | null>(null);
   const [productCitation, setProductCitation] = useState<AiCitation | null>(
@@ -308,6 +323,7 @@ export default function AiPage() {
   );
   const streamAbortRef = useRef<AbortController | null>(null);
   const activeConversationIdRef = useRef<string | null>(null);
+  const draftByConversationRef = useRef<Record<string, string>>({});
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
   const pendingPrependScrollRef = useRef<{
     previousHeight: number;
@@ -317,6 +333,26 @@ export default function AiPage() {
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
     : selectedCompany || defaultCompany;
+
+  const setComposerDraft = useCallback(
+    (value: string, targetConversationId?: string | null) => {
+      const resolvedConversationId =
+        targetConversationId === undefined
+          ? activeConversationIdRef.current
+          : targetConversationId;
+      draftByConversationRef.current[
+        getConversationDraftKey(resolvedConversationId)
+      ] = value;
+      setDraft(value);
+    },
+    [],
+  );
+
+  const rememberCurrentComposerDraft = useCallback(() => {
+    draftByConversationRef.current[
+      getConversationDraftKey(activeConversationIdRef.current)
+    ] = draft;
+  }, [draft]);
 
   useEffect(() => {
     if (!conversationId && !selectedCompany && defaultCompany) {
@@ -369,15 +405,18 @@ export default function AiPage() {
     try {
       const result = await listAiConversations({
         limit: 50,
+        search: conversationSearch,
         status: conversationStatus,
       });
       setConversations(result.items);
+      setConversationTotal(result.total);
+      setPendingDraftTotal(result.pendingDraftTotal);
     } catch (caught) {
       message.error(
         caught instanceof Error ? caught.message : '会话列表加载失败',
       );
     }
-  }, [conversationStatus]);
+  }, [conversationSearch, conversationStatus]);
 
   useEffect(() => {
     void refreshConversations();
@@ -388,6 +427,7 @@ export default function AiPage() {
       return;
     }
     setConversationLoading(true);
+    rememberCurrentComposerDraft();
     setInspectorOpen(false);
     setInspectedMessageId(null);
     try {
@@ -398,6 +438,12 @@ export default function AiPage() {
         result.conversation.status === 'archived' ? 'archived' : 'active';
       setConversationId(result.conversation.name);
       activeConversationIdRef.current = result.conversation.name;
+      setComposerDraft(
+        draftByConversationRef.current[
+          getConversationDraftKey(result.conversation.name)
+        ] ?? '',
+        result.conversation.name,
+      );
       setConversationCompany(result.conversation.company);
       setConversationStatus(openedConversationStatus);
       setSelectedConversationStatus(openedConversationStatus);
@@ -610,7 +656,7 @@ export default function AiPage() {
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setInspectorOpen(false);
     setInspectedMessageId(null);
-    setDraft('');
+    setComposerDraft('', conversationId);
     // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
     // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
     setScenario('auto');
@@ -655,6 +701,12 @@ export default function AiPage() {
                 ? await generateAiInventoryAdjustmentDraft(draftPayload)
                 : await generateAiProductSetupDraft(draftPayload);
         setConversationId(result.conversationId);
+        activeConversationIdRef.current = result.conversationId;
+        if (!conversationId) {
+          draftByConversationRef.current[
+            getConversationDraftKey(result.conversationId)
+          ] = '';
+        }
         setConversationCompany((current) => current || effectiveCompany);
         setLastResult(result);
         setActiveRunId(result.runId);
@@ -704,6 +756,12 @@ export default function AiPage() {
             const nextConversationId = String(event.conversation ?? '');
             if (nextConversationId) {
               setConversationId(nextConversationId);
+              activeConversationIdRef.current = nextConversationId;
+              if (!conversationId) {
+                draftByConversationRef.current[
+                  getConversationDraftKey(nextConversationId)
+                ] = '';
+              }
               setConversationCompany((current) => current || effectiveCompany);
             }
             const nextRunId = String(event.run_id ?? '');
@@ -858,6 +916,12 @@ export default function AiPage() {
         abortController.signal,
       );
       setConversationId(result.conversationId);
+      activeConversationIdRef.current = result.conversationId;
+      if (!conversationId) {
+        draftByConversationRef.current[
+          getConversationDraftKey(result.conversationId)
+        ] = '';
+      }
       setConversationStatus('active');
       setSelectedConversationStatus('active');
       setConversationCompany((current) => current || effectiveCompany);
@@ -953,7 +1017,7 @@ export default function AiPage() {
 
   const editFailedRequest = () => {
     if (!retryRequest) return;
-    setDraft(retryRequest.content);
+    setComposerDraft(retryRequest.content, conversationId);
     setScenario(retryRequest.scenario);
     setSelectedModelAlias(
       retryRequest.modelAlias &&
@@ -997,6 +1061,7 @@ export default function AiPage() {
           ),
         })),
       );
+      await refreshConversations();
       message.success('AI 草稿已放弃');
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '草稿放弃失败');
@@ -1038,6 +1103,9 @@ export default function AiPage() {
         ),
       })),
     );
+    if (updated.status !== 'draft') {
+      void refreshConversations();
+    }
   };
 
   const refreshBusinessResult = async (
@@ -1113,6 +1181,7 @@ export default function AiPage() {
   };
 
   const resetConversation = () => {
+    rememberCurrentComposerDraft();
     setConversationId(null);
     activeConversationIdRef.current = null;
     setSelectedConversationStatus(null);
@@ -1133,7 +1202,10 @@ export default function AiPage() {
     setRunStatus('idle');
     setInspectorOpen(false);
     setInspectedMessageId(null);
-    setDraft('');
+    setComposerDraft(
+      draftByConversationRef.current[NEW_CONVERSATION_DRAFT_KEY] ?? '',
+      null,
+    );
     setScenario('auto');
   };
 
@@ -1144,6 +1216,9 @@ export default function AiPage() {
     try {
       await archiveAiConversation(conversationId);
       resetConversation();
+      delete draftByConversationRef.current[
+        getConversationDraftKey(conversationId)
+      ];
       await refreshConversations();
       message.success('会话已归档');
     } catch (caught) {
@@ -1179,6 +1254,71 @@ export default function AiPage() {
     }
   };
 
+  const openConversationRename = (targetId: string) => {
+    const target = conversations.find((item) => item.name === targetId);
+    if (!target) return;
+    setRenameTarget(target);
+    setRenameTitle(target.title);
+  };
+
+  const submitConversationRename = async () => {
+    if (!renameTarget) return;
+    const title = renameTitle.trim();
+    if (!title) {
+      message.warning('请输入会话名称');
+      return;
+    }
+    setRenaming(true);
+    try {
+      await renameAiConversation(renameTarget.name, title);
+      setRenameTarget(null);
+      setRenameTitle('');
+      await refreshConversations();
+      message.success('会话名称已更新');
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : '会话重命名失败',
+      );
+    } finally {
+      setRenaming(false);
+    }
+  };
+
+  const archiveConversationById = async (targetId: string) => {
+    try {
+      await archiveAiConversation(targetId);
+      if (conversationId === targetId) resetConversation();
+      delete draftByConversationRef.current[getConversationDraftKey(targetId)];
+      await refreshConversations();
+      message.success('会话已归档');
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '会话归档失败');
+    }
+  };
+
+  const buildConversationMenu = (target: { key: string }) => ({
+    items: [
+      {
+        icon: <EditOutlined />,
+        key: 'rename',
+        label: '重命名',
+      },
+      ...(conversationStatus === 'active'
+        ? [
+            {
+              icon: <InboxOutlined />,
+              key: 'archive',
+              label: '归档会话',
+            },
+          ]
+        : []),
+    ],
+    onClick: ({ key }: { key: string }) => {
+      if (key === 'rename') openConversationRename(target.key);
+      if (key === 'archive') void archiveConversationById(target.key);
+    },
+  });
+
   const conversationItems = conversations.map((item) => {
     const lastMessageAt = item.lastMessageAt ? dayjs(item.lastMessageAt) : null;
     const group = lastMessageAt?.isSame(dayjs(), 'day')
@@ -1186,6 +1326,11 @@ export default function AiPage() {
       : lastMessageAt?.isSame(dayjs().subtract(1, 'day'), 'day')
         ? '昨天'
         : '更早';
+    const updatedAt = lastMessageAt
+      ? lastMessageAt.isSame(dayjs(), 'day')
+        ? lastMessageAt.format('HH:mm')
+        : lastMessageAt.format('MM-DD HH:mm')
+      : '暂无消息';
     return {
       key: item.name,
       group,
@@ -1193,9 +1338,14 @@ export default function AiPage() {
         <Space orientation="vertical" size={0}>
           <Typography.Text ellipsis>{item.title}</Typography.Text>
           <Typography.Text type="secondary">
-            {item.messageCount} 条消息
+            {item.messageCount} 条消息 · {updatedAt}
             {item.company ? ` · ${item.company}` : ''}
           </Typography.Text>
+          {item.pendingDraftCount > 0 ? (
+            <Tag color="orange" variant="filled">
+              待复核草稿 {item.pendingDraftCount}
+            </Tag>
+          ) : null}
         </Space>
       ),
     };
@@ -1353,9 +1503,21 @@ export default function AiPage() {
               <div className={styles.sidebarTitle}>
                 <Typography.Title level={5}>对话</Typography.Title>
                 <Tag color="processing" variant="filled">
-                  {conversations.length}
+                  {conversationTotal}
                 </Tag>
               </div>
+              <Input.Search
+                allowClear
+                aria-label="搜索 AI 会话"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setConversationSearchInput(value);
+                  if (!value) setConversationSearch('');
+                }}
+                onSearch={(value) => setConversationSearch(value.trim())}
+                placeholder="搜索标题或消息内容"
+                value={conversationSearchInput}
+              />
               <Select
                 onChange={(value) => {
                   setConversationStatus(value);
@@ -1382,32 +1544,7 @@ export default function AiPage() {
                   }}
                   groupable
                   items={conversationItems}
-                  menu={
-                    conversationStatus === 'active'
-                      ? (conversation) => ({
-                          items: [
-                            {
-                              icon: <InboxOutlined />,
-                              key: 'archive',
-                              label: '归档会话',
-                            },
-                          ],
-                          onClick: ({ key }) => {
-                            if (key === 'archive') {
-                              void archiveAiConversation(conversation.key).then(
-                                () => {
-                                  if (conversationId === conversation.key) {
-                                    resetConversation();
-                                  }
-                                  void refreshConversations();
-                                  message.success('会话已归档');
-                                },
-                              );
-                            }
-                          },
-                        })
-                      : undefined
-                  }
+                  menu={buildConversationMenu}
                   onActiveChange={(key) => void openConversation(key)}
                 />
               </Spin>
@@ -1437,9 +1574,15 @@ export default function AiPage() {
                 </div>
               </div>
               <Space>
-                <Button onClick={() => history.push('/ai/drafts')}>
-                  我的草稿
-                </Button>
+                <Badge
+                  count={pendingDraftTotal}
+                  overflowCount={99}
+                  size="small"
+                >
+                  <Button onClick={() => history.push('/ai/drafts')}>
+                    我的草稿
+                  </Button>
+                </Badge>
                 {loading ? (
                   <Button
                     aria-label="当前运行"
@@ -1583,7 +1726,7 @@ export default function AiPage() {
                     onItemClick={({ data }) => {
                       const prompt = EXAMPLE_PROMPTS[Number(data.key)];
                       if (prompt) {
-                        setDraft(prompt.content);
+                        setComposerDraft(prompt.content, conversationId);
                         setScenario(prompt.scenario);
                       }
                     }}
@@ -1625,7 +1768,7 @@ export default function AiPage() {
                   }
                   loading={loading}
                   onCancel={stopGeneration}
-                  onChange={setDraft}
+                  onChange={(value) => setComposerDraft(value, conversationId)}
                   onSubmit={(value) => void submit(value)}
                   placeholder={
                     selectedConversationStatus === 'archived' && conversationId
@@ -1646,6 +1789,18 @@ export default function AiPage() {
           size={360}
         >
           <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+            <Input.Search
+              allowClear
+              aria-label="移动端搜索 AI 会话"
+              onChange={(event) => {
+                const value = event.target.value;
+                setConversationSearchInput(value);
+                if (!value) setConversationSearch('');
+              }}
+              onSearch={(value) => setConversationSearch(value.trim())}
+              placeholder="搜索标题或消息内容"
+              value={conversationSearchInput}
+            />
             <Select
               onChange={(value) => {
                 setConversationStatus(value);
@@ -1671,6 +1826,7 @@ export default function AiPage() {
                 }}
                 groupable
                 items={conversationItems}
+                menu={buildConversationMenu}
                 onActiveChange={(key) => {
                   setConversationDrawerOpen(false);
                   void openConversation(key);
@@ -1732,6 +1888,28 @@ export default function AiPage() {
           </div>
         </Drawer>
       </XProvider>
+      <Modal
+        confirmLoading={renaming}
+        okText="保存名称"
+        onCancel={() => {
+          if (renaming) return;
+          setRenameTarget(null);
+          setRenameTitle('');
+        }}
+        onOk={() => void submitConversationRename()}
+        open={Boolean(renameTarget)}
+        title="重命名会话"
+      >
+        <Input
+          aria-label="会话名称"
+          maxLength={120}
+          onChange={(event) => setRenameTitle(event.target.value)}
+          onPressEnter={() => void submitConversationRename()}
+          placeholder="输入便于识别的会话名称"
+          showCount
+          value={renameTitle}
+        />
+      </Modal>
       <Modal
         destroyOnHidden
         okText="提交改进反馈"

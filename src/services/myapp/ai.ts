@@ -226,6 +226,7 @@ export type AiConversation = {
   status: 'active' | 'archived';
   company: string | null;
   messageCount: number;
+  pendingDraftCount: number;
   lastMessageAt: string | null;
   creation: string | null;
   modified: string | null;
@@ -739,6 +740,7 @@ function mapConversation(value: unknown): AiConversation {
     status: row.status === 'archived' ? 'archived' : 'active',
     company: typeof row.company === 'string' ? row.company : null,
     messageCount: toNumber(row.message_count),
+    pendingDraftCount: toNumber(row.pending_draft_count),
     lastMessageAt:
       typeof row.last_message_at === 'string' ? row.last_message_at : null,
     creation: typeof row.creation === 'string' ? row.creation : null,
@@ -828,13 +830,19 @@ export async function listAiSelectableModels(): Promise<AiSelectableModel[]> {
 
 export async function listAiConversations(params?: {
   status?: 'active' | 'archived' | 'all';
+  search?: string;
   start?: number;
   limit?: number;
-}): Promise<{ items: AiConversation[]; total: number }> {
+}): Promise<{
+  items: AiConversation[];
+  pendingDraftTotal: number;
+  total: number;
+}> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'list_ai_conversations_v1',
     {
       status: params?.status ?? 'active',
+      ...(params?.search?.trim() ? { search: params.search.trim() } : {}),
       start: params?.start ?? 0,
       limit: params?.limit ?? 50,
     },
@@ -843,8 +851,23 @@ export async function listAiConversations(params?: {
   const pagination = readObject(data.pagination);
   return {
     items: Array.isArray(data.items) ? data.items.map(mapConversation) : [],
+    pendingDraftTotal: toNumber(data.pending_draft_total),
     total: toNumber(pagination.total),
   };
+}
+
+export async function renameAiConversation(
+  conversationId: string,
+  title: string,
+): Promise<AiConversation> {
+  const result = await runGatewayMutation<AiConversation>(
+    'rename_ai_conversation_v1',
+    {
+      payload: { conversation_id: conversationId, title },
+      transform: mapConversation,
+    },
+  );
+  return result.data;
 }
 
 export async function createAiConversation(payload: {

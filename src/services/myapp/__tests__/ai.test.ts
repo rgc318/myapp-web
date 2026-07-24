@@ -8,6 +8,7 @@ import {
   listAiConversations,
   listAiDrafts,
   listAiSelectableModels,
+  renameAiConversation,
   refreshAiBusinessResult,
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
@@ -231,18 +232,54 @@ describe('AI domain service', () => {
             status: 'active',
             company: 'rgc (Demo)',
             message_count: 2,
+            pending_draft_count: 2,
           },
         ],
         pagination: { total: 1 },
+        pending_draft_total: 3,
       },
       meta: {},
       raw: {},
     });
 
-    const result = await listAiConversations();
+    const result = await listAiConversations({ search: ' 采购 ' });
 
     expect(result.total).toBe(1);
+    expect(result.pendingDraftTotal).toBe(3);
     expect(result.items[0].messageCount).toBe(2);
+    expect(result.items[0].pendingDraftCount).toBe(2);
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_ai_conversations_v1',
+      { limit: 50, search: '采购', start: 0, status: 'active' },
+    );
+  });
+
+  it('renames a conversation through the mutation layer', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {
+        company: 'Demo Company',
+        creation: null,
+        lastMessageAt: null,
+        messageCount: 4,
+        modified: '2026-07-24 13:00:00',
+        name: 'AI-CONV-1',
+        pendingDraftCount: 1,
+        status: 'active',
+        title: '采购跟进',
+      },
+      idempotencyKey: 'REQ-1',
+    });
+
+    const result = await renameAiConversation('AI-CONV-1', '采购跟进');
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'rename_ai_conversation_v1',
+      {
+        payload: { conversation_id: 'AI-CONV-1', title: '采购跟进' },
+        transform: expect.any(Function),
+      },
+    );
+    expect(result.title).toBe('采购跟进');
   });
 
   it('maps user-selectable active model aliases', async () => {
