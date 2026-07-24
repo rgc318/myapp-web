@@ -50,6 +50,7 @@ import {
   type AiCitation,
   type AiConversation,
   type AiDraft,
+  type AiRunSummary,
   type AiScenario,
   archiveAiConversation,
   discardAiDraft,
@@ -83,7 +84,50 @@ import { BusinessDocumentDrawer } from './components/BusinessDocumentDrawer';
 import { ProductDetailDrawer } from './components/ProductDetailDrawer';
 import { useAiWorkspaceStyles } from './styles';
 
-type ChatRow = AiMessageRow;
+type ChatRow = AiMessageRow & {
+  creation?: string | null;
+  run?: AiRunSummary | null;
+  runResult?: AiChatResult | null;
+  runStatus?: AiRunDisplayStatus;
+  runStream?: AiChatResult['stream'];
+  runTools?: AiToolProgress[];
+  runWarnings?: string[];
+  scenario?: AiScenario | null;
+};
+
+function resolveRunDisplayStatus(
+  status: string | null | undefined,
+): AiRunDisplayStatus {
+  if (status === 'running') return 'running';
+  if (status === 'failed') return 'failed';
+  if (status === 'stopped') return 'stopped';
+  if (status === 'completed') return 'completed';
+  return 'idle';
+}
+
+function buildMessageRunResult(
+  messageRow: ChatRow | null,
+  conversationId: string | null,
+): AiChatResult | null {
+  if (!messageRow?.run || !messageRow.runId) return null;
+  return {
+    conversationId: conversationId ?? '',
+    events: [],
+    message: {
+      citations: messageRow.citations,
+      content: messageRow.content,
+      role: 'assistant',
+    },
+    model: messageRow.run.model,
+    modelAlias: messageRow.run.modelAlias,
+    run: messageRow.run,
+    runId: messageRow.runId,
+    stream: messageRow.runStream ?? { deltaCount: 0, streamedChars: 0 },
+    traceId: messageRow.run.traceId,
+    usage: messageRow.run.usage,
+    warnings: messageRow.runWarnings ?? [],
+  };
+}
 
 const EXAMPLE_PROMPTS: { content: string; scenario: AiScenario }[] = [
   { content: '你目前可以帮助我做什么？', scenario: 'general' },
@@ -204,6 +248,9 @@ export default function AiPage() {
   );
   const [versionLoading, setVersionLoading] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [inspectedMessageId, setInspectedMessageId] = useState<string | null>(
+    null,
+  );
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const [businessDocument, setBusinessDocument] =
     useState<AiBusinessDocumentResult | null>(null);
@@ -268,6 +315,8 @@ export default function AiPage() {
       return;
     }
     setConversationLoading(true);
+    setInspectorOpen(false);
+    setInspectedMessageId(null);
     try {
       const result = await getAiConversation(targetId);
       const openedConversationStatus =
@@ -286,7 +335,14 @@ export default function AiPage() {
             ? (item.run.error ?? 'AI 服务调用失败')
             : null,
         errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
+        creation: item.creation,
+        run: item.run,
         runId: item.runId,
+        runStatus: resolveRunDisplayStatus(item.run?.status),
+        runStream: { deltaCount: 0, streamedChars: 0 },
+        runTools: [],
+        runWarnings: [],
+        scenario: item.scenario,
       }));
       setMessages(restoredMessages);
       const restoredFeedback: Record<string, 'positive' | 'negative'> = {};
@@ -415,8 +471,18 @@ export default function AiPage() {
     }
 
     const userMessage = createMessage('user', content);
-    const assistantMessage = createMessage('assistant', '');
+    const assistantMessage: ChatRow = {
+      ...createMessage('assistant', ''),
+      creation: dayjs().format('YYYY-MM-DD HH:mm:ss'),
+      runStatus: 'running',
+      runStream: { deltaCount: 0, streamedChars: 0 },
+      runTools: [],
+      runWarnings: [],
+      scenario: resolvedScenario,
+    };
     setMessages((current) => [...current, userMessage, assistantMessage]);
+    setInspectorOpen(false);
+    setInspectedMessageId(null);
     setDraft('');
     // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
     // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
@@ -478,7 +544,12 @@ export default function AiPage() {
                   ...item,
                   content: result.message.content,
                   citations: result.message.citations,
+                  run: result.run,
                   runId: result.runId,
+                  runResult: result,
+                  runStatus: 'completed',
+                  runStream: result.stream,
+                  runWarnings: result.warnings,
                 }
               : item,
           ),
@@ -539,6 +610,21 @@ export default function AiPage() {
               ...current.filter((item) => item.name !== toolName),
               { name: toolName, status: 'running' },
             ]);
+            setMessages((current) =>
+              current.map((item) =>
+                item.id === assistantMessage.id
+                  ? {
+                      ...item,
+                      runTools: [
+                        ...(item.runTools ?? []).filter(
+                          (tool) => tool.name !== toolName,
+                        ),
+                        { name: toolName, status: 'running' },
+                      ],
+                    }
+                  : item,
+              ),
+            );
           }
           if (event.type === 'tool_completed') {
             const toolName = String(event.tool ?? '业务工具');
@@ -558,12 +644,46 @@ export default function AiPage() {
                 status: 'completed',
               },
             ]);
+            setMessages((current) =>
+              current.map((item) =>
+                item.id === assistantMessage.id
+                  ? {
+                      ...item,
+                      runTools: [
+                        ...(item.runTools ?? []).filter(
+                          (tool) => tool.name !== toolName,
+                        ),
+                        {
+                          name: toolName,
+                          resultCount:
+                            event.result_count === undefined
+                              ? undefined
+                              : Number(event.result_count),
+                          status: 'completed',
+                        },
+                      ],
+                    }
+                  : item,
+              ),
+            );
           }
           if (event.type === 'warning') {
             const warning = String(event.message ?? '').trim();
             if (warning) {
               setRunWarnings((current) =>
                 current.includes(warning) ? current : [...current, warning],
+              );
+              setMessages((current) =>
+                current.map((item) =>
+                  item.id === assistantMessage.id
+                    ? {
+                        ...item,
+                        runWarnings: item.runWarnings?.includes(warning)
+                          ? item.runWarnings
+                          : [...(item.runWarnings ?? []), warning],
+                      }
+                    : item,
+                ),
               );
             }
           }
@@ -577,7 +697,15 @@ export default function AiPage() {
             setMessages((current) =>
               current.map((item) =>
                 item.id === assistantMessage.id
-                  ? { ...item, content: `${item.content}${delta}` }
+                  ? {
+                      ...item,
+                      content: `${item.content}${delta}`,
+                      runStream: {
+                        deltaCount: (item.runStream?.deltaCount ?? 0) + 1,
+                        streamedChars:
+                          (item.runStream?.streamedChars ?? 0) + delta.length,
+                      },
+                    }
                   : item,
               ),
             );
@@ -621,7 +749,14 @@ export default function AiPage() {
                 ...item,
                 content: result.message.content,
                 citations: result.message.citations,
+                run: result.run,
                 runId: result.runId,
+                runResult: result,
+                runStatus: 'completed',
+                runStream: result.stream,
+                runWarnings: Array.from(
+                  new Set([...(item.runWarnings ?? []), ...result.warnings]),
+                ),
               }
             : item,
         ),
@@ -636,6 +771,13 @@ export default function AiPage() {
           modelAlias: requestedModelAlias,
           scenario: resolvedScenario,
         });
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? { ...item, runStatus: 'stopped' }
+              : item,
+          ),
+        );
         message.info('已停止本次生成，当前已接收内容会保留。');
       } else {
         setRunStatus('failed');
@@ -643,6 +785,13 @@ export default function AiPage() {
         const errorMessage =
           caught instanceof Error ? caught.message : 'AI 服务调用失败';
         const errorCode = getAiErrorCode(caught);
+        const failedRunId =
+          caught &&
+          typeof caught === 'object' &&
+          typeof (caught as { runId?: unknown }).runId === 'string'
+            ? (caught as { runId: string }).runId || null
+            : null;
+        if (failedRunId) setActiveRunId(failedRunId);
         setRunError(errorMessage);
         setRunErrorCode(errorCode);
         setRetryRequest({
@@ -653,7 +802,13 @@ export default function AiPage() {
         setMessages((current) =>
           current.map((item) =>
             item.id === assistantMessage.id
-              ? { ...item, error: errorMessage, errorCode }
+              ? {
+                  ...item,
+                  error: errorMessage,
+                  errorCode,
+                  runId: failedRunId ?? item.runId,
+                  runStatus: 'failed',
+                }
               : item,
           ),
         );
@@ -819,6 +974,8 @@ export default function AiPage() {
     setRunProgress(null);
     setRetryRequest(null);
     setRunStatus('idle');
+    setInspectorOpen(false);
+    setInspectedMessageId(null);
     setDraft('');
     setScenario('auto');
   };
@@ -907,6 +1064,53 @@ export default function AiPage() {
       ),
   }));
 
+  const openMessageRun = (messageId: string) => {
+    setInspectedMessageId(messageId);
+    setInspectorOpen(true);
+  };
+
+  const openCurrentRun = () => {
+    const currentMessage = [...messages]
+      .reverse()
+      .find(
+        (item) => item.role === 'assistant' && item.runStatus === 'running',
+      );
+    setInspectedMessageId(currentMessage?.id ?? null);
+    setInspectorOpen(true);
+  };
+
+  const inspectedMessageIndex = inspectedMessageId
+    ? messages.findIndex((item) => item.id === inspectedMessageId)
+    : -1;
+  const inspectedMessage =
+    inspectedMessageIndex >= 0 ? messages[inspectedMessageIndex] : null;
+  const inspectedResult = inspectedMessage
+    ? (inspectedMessage.runResult ??
+      buildMessageRunResult(inspectedMessage, conversationId))
+    : lastResult;
+  const inspectedStatus =
+    inspectedMessage?.runStatus ??
+    (inspectedMessage
+      ? resolveRunDisplayStatus(inspectedMessage.run?.status)
+      : runStatus);
+  const inspectedRunId = inspectedMessage
+    ? (inspectedMessage.runId ?? null)
+    : activeRunId;
+  const inspectedError = inspectedMessage
+    ? (inspectedMessage.error ?? inspectedMessage.run?.error ?? null)
+    : runError;
+  const inspectedErrorCode = inspectedMessage
+    ? (inspectedMessage.errorCode ?? inspectedMessage.run?.errorCode ?? null)
+    : runErrorCode;
+  const inspectedTools = inspectedMessage?.runTools ?? toolProgress;
+  const inspectedWarnings = inspectedMessage?.runWarnings ?? runWarnings;
+  const canRecoverInspectedRun = Boolean(
+    inspectedMessage?.error &&
+      inspectedMessageIndex === messages.length - 1 &&
+      selectedConversationStatus !== 'archived' &&
+      retryRequest,
+  );
+
   const bubbleItems: BubbleItemType[] = messages.map((item, index) => ({
     key: item.id,
     role: item.role === 'user' ? 'user' : 'ai',
@@ -959,13 +1163,9 @@ export default function AiPage() {
               : undefined
           }
           onViewDiagnostics={
-            item.error && index === messages.length - 1
-              ? () => {
-                  setActiveRunId(item.runId ?? activeRunId);
-                  setInspectorOpen(true);
-                }
-              : undefined
+            item.error ? () => openMessageRun(item.id) : undefined
           }
+          onViewRun={item.runId ? () => openMessageRun(item.id) : undefined}
           progressMessage={
             loading && index === messages.length - 1
               ? runProgress?.message
@@ -1078,12 +1278,15 @@ export default function AiPage() {
                 <Button onClick={() => history.push('/ai/drafts')}>
                   我的草稿
                 </Button>
-                <Button
-                  icon={<DashboardOutlined />}
-                  onClick={() => setInspectorOpen(true)}
-                >
-                  运行详情
-                </Button>
+                {loading ? (
+                  <Button
+                    aria-label="当前运行"
+                    icon={<DashboardOutlined />}
+                    onClick={openCurrentRun}
+                  >
+                    当前运行
+                  </Button>
+                ) : null}
               </Space>
             </div>
             <div className={styles.contextBar}>
@@ -1303,9 +1506,12 @@ export default function AiPage() {
           onClose={() => setProductCitation(null)}
         />
         <Drawer
-          onClose={() => setInspectorOpen(false)}
+          onClose={() => {
+            setInspectorOpen(false);
+            setInspectedMessageId(null);
+          }}
           open={inspectorOpen}
-          title="运行详情"
+          title={inspectedStatus === 'running' ? '当前运行' : '运行详情'}
           width={440}
         >
           <div className={styles.drawerContent}>
@@ -1317,16 +1523,16 @@ export default function AiPage() {
               type="info"
             />
             <AiRunInspector
-              activeRunId={activeRunId}
-              error={runError}
-              errorCode={runErrorCode}
+              activeRunId={inspectedRunId}
+              company={effectiveCompany}
+              createdAt={inspectedMessage?.creation}
+              error={inspectedError}
+              errorCode={inspectedErrorCode}
               onEditRequest={
-                selectedConversationStatus !== 'archived' && retryRequest
-                  ? editFailedRequest
-                  : undefined
+                canRecoverInspectedRun ? editFailedRequest : undefined
               }
               onRetry={
-                selectedConversationStatus !== 'archived' && retryRequest
+                canRecoverInspectedRun && retryRequest
                   ? () =>
                       void submit(
                         retryRequest.content,
@@ -1335,10 +1541,11 @@ export default function AiPage() {
                       )
                   : undefined
               }
-              result={lastResult}
-              status={runStatus}
-              tools={toolProgress}
-              warnings={runWarnings}
+              result={inspectedResult}
+              scenario={inspectedMessage?.scenario}
+              status={inspectedStatus}
+              tools={inspectedTools}
+              warnings={inspectedWarnings}
             />
           </div>
         </Drawer>

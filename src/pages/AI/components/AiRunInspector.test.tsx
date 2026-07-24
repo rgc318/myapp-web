@@ -39,12 +39,15 @@ const result: AiChatResult = {
 };
 
 describe('AiRunInspector', () => {
-  it('renders persisted run diagnostics, tool progress and warnings', () => {
+  it('separates the business overview from advanced diagnostics', () => {
     render(
       <App>
         <AiRunInspector
           activeRunId={null}
+          company="Demo Company"
+          createdAt="2026-07-24 09:30:00"
           result={result}
+          scenario="product_search"
           status="completed"
           tools={[
             { name: 'search_products', resultCount: 3, status: 'completed' },
@@ -55,8 +58,13 @@ describe('AiRunInspector', () => {
     );
 
     expect(screen.getByText('已完成')).toBeTruthy();
-    expect(screen.getByText('erp-fast-chat')).toBeTruthy();
+    expect(screen.getByText('商品查询')).toBeTruthy();
+    expect(screen.getByText('Demo Company · 当前账号权限')).toBeTruthy();
     expect(screen.getByText('920 ms')).toBeTruthy();
+    expect(screen.getByText('2026-07-24 09:30:00')).toBeTruthy();
+    expect(screen.queryByText('erp-fast-chat')).toBeNull();
+    fireEvent.click(screen.getByText('高级诊断'));
+    expect(screen.getByText('erp-fast-chat')).toBeTruthy();
     expect(screen.getByText('180 ms')).toBeTruthy();
     expect(screen.getByText('流式 24 段 · 56 字符')).toBeTruthy();
     expect(screen.getByText('105（输入 80 / 输出 20 / 推理 5）')).toBeTruthy();
@@ -103,7 +111,7 @@ describe('AiRunInspector', () => {
       </App>,
     );
 
-    expect(screen.getByText('当前权限不允许访问')).toBeTruthy();
+    expect(screen.getAllByText('当前权限不允许访问')).toHaveLength(2);
     expect(screen.getByText('PERMISSION_DENIED')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
   });

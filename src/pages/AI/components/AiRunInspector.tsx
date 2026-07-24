@@ -8,9 +8,17 @@ import {
   StopOutlined,
 } from '@ant-design/icons';
 import { ProCard } from '@ant-design/pro-components';
-import { Alert, Button, Descriptions, Space, Tag, Typography } from 'antd';
+import {
+  Alert,
+  Button,
+  Collapse,
+  Descriptions,
+  Space,
+  Tag,
+  Typography,
+} from 'antd';
 import React from 'react';
-import type { AiChatResult } from '@/services/myapp/ai';
+import type { AiChatResult, AiScenario } from '@/services/myapp/ai';
 import { resolveAiFailureRecovery } from './ai-failure';
 
 export type AiRunDisplayStatus =
@@ -45,6 +53,18 @@ const STATUS_META: Record<
   stopped: { color: 'warning', icon: <StopOutlined />, text: '已停止' },
 };
 
+const SCENARIO_LABELS: Record<AiScenario, string> = {
+  auto: '智能模式',
+  general: '通用助手',
+  inventory_adjustment_draft: '库存调整草稿',
+  order_query: '订单查询',
+  product_search: '商品查询',
+  product_setup_draft: '商品建档草稿',
+  purchase_order_draft: '采购订单草稿',
+  report_summary: '经营报表解释',
+  sales_order_draft: '销售订单草稿',
+};
+
 function durationText(value: number | null | undefined) {
   if (value === null || value === undefined || value <= 0) return '-';
   return value >= 1000 ? `${(value / 1000).toFixed(2)} 秒` : `${value} ms`;
@@ -52,21 +72,27 @@ function durationText(value: number | null | undefined) {
 
 export function AiRunInspector({
   activeRunId,
+  company,
+  createdAt,
   error,
   errorCode,
   onEditRequest,
   onRetry,
   result,
+  scenario,
   status,
   tools,
   warnings,
 }: {
   activeRunId?: string | null;
+  company?: string | null;
+  createdAt?: string | null;
   error?: string | null;
   errorCode?: string | null;
   onEditRequest?: () => void;
   onRetry?: () => void;
   result: AiChatResult | null;
+  scenario?: AiScenario | null;
   status: AiRunDisplayStatus;
   tools: AiToolProgress[];
   warnings: string[];
@@ -88,7 +114,7 @@ export function AiRunInspector({
             {statusMeta.text}
           </Tag>
         }
-        title="本次运行"
+        title="运行概览"
         variant="outlined"
       >
         <Descriptions
@@ -96,14 +122,16 @@ export function AiRunInspector({
           size="small"
           items={[
             {
-              key: 'modelAlias',
-              label: '能力模型',
-              children: result?.modelAlias || '等待首次调用',
+              key: 'scenario',
+              label: '业务场景',
+              children: scenario ? SCENARIO_LABELS[scenario] : '-',
             },
             {
-              key: 'model',
-              label: '实际模型',
-              children: result?.model || '-',
+              key: 'company',
+              label: '数据范围',
+              children: company
+                ? `${company} · 当前账号权限`
+                : '当前账号权限范围',
             },
             {
               key: 'latency',
@@ -111,53 +139,99 @@ export function AiRunInspector({
               children: durationText(run?.latencyMs),
             },
             {
-              key: 'firstToken',
-              label: '首 Token',
-              children: durationText(run?.firstTokenMs),
+              key: 'createdAt',
+              label: '消息时间',
+              children: createdAt || '-',
             },
-            {
-              key: 'stream',
-              label: '输出方式',
-              children: result
-                ? result.stream.deltaCount > 0
-                  ? [
-                      '流式',
-                      result.stream.deltaCount,
-                      '段 ·',
-                      result.stream.streamedChars,
-                      '字符',
-                    ].join(' ')
-                  : '结构化结果完成后展示'
-                : '-',
-            },
-            {
-              key: 'tokens',
-              label: 'Token',
-              children: result
-                ? `${result.usage.totalTokens}（输入 ${result.usage.promptTokens} / 输出 ${result.usage.completionTokens} / 推理 ${result.usage.reasoningTokens}）`
-                : '0',
-            },
-            {
-              key: 'run',
-              label: 'Run',
-              children: (
-                <Typography.Text copyable={Boolean(runId)} ellipsis>
-                  {runId || '-'}
-                </Typography.Text>
-              ),
-            },
-            {
-              key: 'trace',
-              label: 'Trace',
-              children: (
-                <Typography.Text copyable={Boolean(result?.traceId)} ellipsis>
-                  {result?.traceId || '-'}
-                </Typography.Text>
-              ),
-            },
+            ...(resolvedError
+              ? [
+                  {
+                    key: 'errorCategory',
+                    label: '错误类别',
+                    children:
+                      failureRecovery?.title || resolvedErrorCode || '运行失败',
+                  },
+                ]
+              : []),
           ]}
         />
       </ProCard>
+
+      <Collapse
+        items={[
+          {
+            children: (
+              <Descriptions
+                column={1}
+                size="small"
+                items={[
+                  {
+                    key: 'modelAlias',
+                    label: '能力模型',
+                    children: result?.modelAlias || '等待首次调用',
+                  },
+                  {
+                    key: 'model',
+                    label: '实际模型',
+                    children: result?.model || '-',
+                  },
+                  {
+                    key: 'firstToken',
+                    label: '首 Token',
+                    children: durationText(run?.firstTokenMs),
+                  },
+                  {
+                    key: 'stream',
+                    label: '输出方式',
+                    children: result
+                      ? result.stream.deltaCount > 0
+                        ? [
+                            '流式',
+                            result.stream.deltaCount,
+                            '段 ·',
+                            result.stream.streamedChars,
+                            '字符',
+                          ].join(' ')
+                        : '结构化结果完成后展示'
+                      : '-',
+                  },
+                  {
+                    key: 'tokens',
+                    label: 'Token',
+                    children: result
+                      ? `${result.usage.totalTokens}（输入 ${result.usage.promptTokens} / 输出 ${result.usage.completionTokens} / 推理 ${result.usage.reasoningTokens}）`
+                      : '0',
+                  },
+                  {
+                    key: 'run',
+                    label: 'Run',
+                    children: (
+                      <Typography.Text copyable={Boolean(runId)} ellipsis>
+                        {runId || '-'}
+                      </Typography.Text>
+                    ),
+                  },
+                  {
+                    key: 'trace',
+                    label: 'Trace',
+                    children: (
+                      <Typography.Text
+                        copyable={Boolean(result?.traceId)}
+                        ellipsis
+                      >
+                        {result?.traceId || '-'}
+                      </Typography.Text>
+                    ),
+                  },
+                ]}
+              />
+            ),
+            key: 'advanced',
+            label: '高级诊断',
+          },
+        ]}
+        size="small"
+      />
 
       {tools.length ? (
         <ProCard size="small" title="业务工具" variant="outlined">

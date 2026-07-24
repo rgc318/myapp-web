@@ -1,4 +1,5 @@
 import {
+  DashboardOutlined,
   DislikeOutlined,
   EditOutlined,
   InfoCircleOutlined,
@@ -50,6 +51,7 @@ type Props = {
   onOpenProduct: (citation: AiCitation) => void;
   onRetry?: () => void;
   onViewDiagnostics?: () => void;
+  onViewRun?: () => void;
   progressMessage?: string;
   progressStartedAt?: number | null;
   runId?: string | null;
@@ -294,6 +296,7 @@ export function AiMessageContent({
   onOpenProduct,
   onRetry,
   onViewDiagnostics,
+  onViewRun,
   progressMessage,
   progressStartedAt,
   runId,
@@ -404,29 +407,46 @@ export function AiMessageContent({
           ))}
         </div>
       ) : null}
-      {runId && content ? (
-        <Actions
-          items={[
-            {
-              key: 'positive',
-              label: '有帮助',
-              icon: <LikeOutlined />,
-              actionRender:
-                feedback === 'positive' ? (
-                  <Button icon={<LikeOutlined />} size="small" type="primary" />
-                ) : undefined,
-            },
-            {
-              key: 'negative',
-              label: '需要改进',
-              icon: <DislikeOutlined />,
-              danger: feedback === 'negative',
-            },
-          ]}
-          onClick={({ key }) =>
-            onFeedback(key === 'positive' ? 'positive' : 'negative')
-          }
-        />
+      {runId && content && !error ? (
+        <Space size={8} wrap>
+          {onViewRun ? (
+            <Button
+              aria-label="运行详情"
+              icon={<DashboardOutlined />}
+              onClick={onViewRun}
+              size="small"
+              type="link"
+            >
+              运行详情
+            </Button>
+          ) : null}
+          <Actions
+            items={[
+              {
+                key: 'positive',
+                label: '有帮助',
+                icon: <LikeOutlined />,
+                actionRender:
+                  feedback === 'positive' ? (
+                    <Button
+                      icon={<LikeOutlined />}
+                      size="small"
+                      type="primary"
+                    />
+                  ) : undefined,
+              },
+              {
+                key: 'negative',
+                label: '需要改进',
+                icon: <DislikeOutlined />,
+                danger: feedback === 'negative',
+              },
+            ]}
+            onClick={({ key }) =>
+              onFeedback(key === 'positive' ? 'positive' : 'negative')
+            }
+          />
+        </Space>
       ) : null}
     </div>
   );

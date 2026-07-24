@@ -188,6 +188,22 @@ describe('AiMessageContent', () => {
     ).toBeTruthy();
   });
 
+  it('opens the run attached to this answer', () => {
+    const onViewRun = jest.fn();
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [],
+        content: '回答已完成',
+        onViewRun,
+        runId: 'AI-RUN-1',
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /运行详情/ }));
+    expect(onViewRun).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps an inline failure with an explicit retry action', () => {
     const onRetry = jest.fn();
     render(

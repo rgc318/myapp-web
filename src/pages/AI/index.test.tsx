@@ -107,7 +107,9 @@ jest.mock('./components/AiMessageContent', () => {
       onEditRequest,
       onRetry,
       onViewDiagnostics,
+      onViewRun,
       progressMessage,
+      runId,
       streaming,
     }: any) =>
       React.createElement(
@@ -137,6 +139,13 @@ jest.mock('./components/AiMessageContent', () => {
               'button',
               { onClick: onViewDiagnostics, type: 'button' },
               '查看诊断',
+            )
+          : null,
+        runId && !error && onViewRun
+          ? React.createElement(
+              'button',
+              { onClick: onViewRun, type: 'button' },
+              '运行详情',
             )
           : null,
       ),
@@ -323,12 +332,131 @@ describe('AI workspace page', () => {
       );
     });
     expect(await screen.findByText('找到两个商品')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '当前运行' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /运行详情/ }));
     expect(screen.getByText('已完成')).toBeTruthy();
     expect(screen.getByText('760 ms')).toBeTruthy();
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('opens the persisted Run attached to each historical answer', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-HISTORY';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-07-24 09:00:00',
+        lastMessageAt: '2026-07-24 09:05:00',
+        messageCount: 4,
+        modified: '2026-07-24 09:05:00',
+        name: 'AI-CONV-HISTORY',
+        status: 'active',
+        title: '历史运行',
+      },
+      messages: [
+        {
+          citations: [],
+          content: '查询商品',
+          creation: '2026-07-24 09:00:00',
+          feedback: null,
+          name: 'AI-MSG-USER-1',
+          promptVersion: null,
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'product_search',
+          sequence: 1,
+        },
+        {
+          citations: [],
+          content: '第一条回答',
+          creation: '2026-07-24 09:01:00',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT-1',
+          promptVersion: 'erp-readonly-v5',
+          role: 'assistant',
+          run: {
+            error: null,
+            errorCode: null,
+            firstTokenMs: 90,
+            latencyMs: 410,
+            model: 'provider-model-old',
+            modelAlias: 'erp-history-old',
+            status: 'completed',
+            traceId: 'trace-history-1',
+            usage: {
+              completionTokens: 12,
+              promptTokens: 30,
+              reasoningTokens: 0,
+              totalTokens: 42,
+            },
+          },
+          runId: 'AI-RUN-HISTORY-1',
+          scenario: 'product_search',
+          sequence: 2,
+        },
+        {
+          citations: [],
+          content: '查询订单',
+          creation: '2026-07-24 09:04:00',
+          feedback: null,
+          name: 'AI-MSG-USER-2',
+          promptVersion: null,
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'order_query',
+          sequence: 3,
+        },
+        {
+          citations: [],
+          content: '第二条回答',
+          creation: '2026-07-24 09:05:00',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT-2',
+          promptVersion: 'erp-readonly-v5',
+          role: 'assistant',
+          run: {
+            error: null,
+            errorCode: null,
+            firstTokenMs: 180,
+            latencyMs: 1200,
+            model: 'provider-model-new',
+            modelAlias: 'erp-history-new',
+            status: 'completed',
+            traceId: 'trace-history-2',
+            usage: {
+              completionTokens: 24,
+              promptTokens: 60,
+              reasoningTokens: 3,
+              totalTokens: 87,
+            },
+          },
+          runId: 'AI-RUN-HISTORY-2',
+          scenario: 'order_query',
+          sequence: 4,
+        },
+      ],
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    const runButtons = await screen.findAllByRole('button', {
+      name: '运行详情',
+    });
+    fireEvent.click(runButtons[0]);
+    expect(screen.getByText('商品查询')).toBeTruthy();
+    expect(screen.getByText('410 ms')).toBeTruthy();
+    fireEvent.click(screen.getByText('高级诊断'));
+    expect(screen.getByText('erp-history-old')).toBeTruthy();
+    expect(screen.getByText('AI-RUN-HISTORY-1')).toBeTruthy();
+
+    fireEvent.click(runButtons[1]);
+    expect(screen.getByText('订单查询')).toBeTruthy();
+    expect(screen.getByText('1.20 秒')).toBeTruthy();
+    expect(screen.getByText('erp-history-new')).toBeTruthy();
+    expect(screen.getByText('AI-RUN-HISTORY-2')).toBeTruthy();
   });
 
   it('fills a common prompt into the composer without sending immediately', async () => {
@@ -567,6 +695,10 @@ describe('AI workspace page', () => {
     expect(
       await screen.findByText('模型已接收请求，等待首个 Token'),
     ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '当前运行' }));
+    expect(screen.getByText('生成中')).toBeTruthy();
+    fireEvent.click(screen.getByText('高级诊断'));
+    expect(screen.getByText('AI-RUN-PROGRESS')).toBeTruthy();
 
     finishStream?.({
       conversationId: 'AI-CONV-PROGRESS',
@@ -602,6 +734,7 @@ describe('AI workspace page', () => {
       warnings: [],
     });
     expect(await screen.findByText('库存周转率说明')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '当前运行' })).toBeNull();
   });
 
   it('keeps an existing conversation bound to its original company', async () => {
