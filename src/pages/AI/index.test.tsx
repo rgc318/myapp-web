@@ -21,9 +21,13 @@ jest.mock('@ant-design/x', () => {
       List: ({ items }: any) =>
         React.createElement(
           'div',
-          null,
-          items.map((item: any) =>
-            React.createElement('div', { key: item.key }, item.content),
+          { className: 'ant-bubble-list' },
+          React.createElement(
+            'div',
+            { className: 'ant-bubble-list-scroll-box' },
+            items.map((item: any) =>
+              React.createElement('div', { key: item.key }, item.content),
+            ),
           ),
         ),
     },
@@ -105,6 +109,7 @@ jest.mock('./components/AiMessageContent', () => {
       citations,
       error,
       errorCode,
+      feedback,
       onEditRequest,
       onRetry,
       onRefreshBusinessResult,
@@ -126,6 +131,7 @@ jest.mock('./components/AiMessageContent', () => {
             )
           : null,
         error ? React.createElement('span', null, error) : null,
+        feedback ? React.createElement('span', null, `反馈 ${feedback}`) : null,
         errorCode === 'AI_REQUEST_INVALID'
           ? React.createElement('span', null, '需要修改本次问题')
           : null,
@@ -486,6 +492,216 @@ describe('AI workspace page', () => {
     expect(screen.getByText('1.20 秒')).toBeTruthy();
     expect(screen.getByText('erp-history-new')).toBeTruthy();
     expect(screen.getByText('AI-RUN-HISTORY-2')).toBeTruthy();
+  });
+
+  it('loads older messages without replacing the composer or current message state', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-LONG';
+    const conversation = {
+      company: 'Demo Company',
+      creation: '2026-07-24 09:00:00',
+      lastMessageAt: '2026-07-24 10:00:00',
+      messageCount: 6,
+      modified: '2026-07-24 10:00:00',
+      name: 'AI-CONV-LONG',
+      status: 'active',
+      title: '长会话',
+    };
+    getAiConversation
+      .mockResolvedValueOnce({
+        conversation,
+        messages: [
+          {
+            citations: [],
+            content: '当前问题',
+            creation: '2026-07-24 09:59:00',
+            feedback: null,
+            name: 'AI-MSG-5',
+            promptVersion: null,
+            role: 'user',
+            run: null,
+            runId: null,
+            scenario: 'general',
+            sequence: 5,
+          },
+          {
+            citations: [],
+            content: '当前回答',
+            creation: '2026-07-24 10:00:00',
+            feedback: null,
+            name: 'AI-MSG-6',
+            promptVersion: 'erp-readonly-v7',
+            role: 'assistant',
+            run: {
+              error: null,
+              errorCode: null,
+              firstTokenMs: 100,
+              latencyMs: 600,
+              model: 'provider-current',
+              modelAlias: 'erp-current',
+              status: 'completed',
+              traceId: 'trace-current',
+              usage: {
+                completionTokens: 5,
+                promptTokens: 10,
+                reasoningTokens: 0,
+                totalTokens: 15,
+              },
+            },
+            runId: 'AI-RUN-6',
+            scenario: 'general',
+            sequence: 6,
+          },
+        ],
+        pagination: {
+          hasMore: true,
+          limit: 40,
+          nextBeforeSequence: 5,
+          returnedCount: 2,
+          total: 6,
+        },
+      })
+      .mockResolvedValueOnce({
+        conversation,
+        messages: [
+          {
+            citations: [],
+            content: '较早问题',
+            creation: '2026-07-24 09:00:00',
+            feedback: null,
+            name: 'AI-MSG-1',
+            promptVersion: null,
+            role: 'user',
+            run: null,
+            runId: null,
+            scenario: 'product_search',
+            sequence: 1,
+          },
+          {
+            citations: [
+              {
+                data: {},
+                href: '/products/ITEM-OLD',
+                id: 'ITEM-OLD',
+                label: '旧商品',
+                type: 'product',
+              },
+            ],
+            content: '较早回答',
+            creation: '2026-07-24 09:01:00',
+            feedback: {
+              category: 'helpful',
+              comment: null,
+              rating: 'positive',
+            },
+            name: 'AI-MSG-2',
+            promptVersion: 'erp-readonly-v7',
+            role: 'assistant',
+            run: {
+              error: null,
+              errorCode: null,
+              firstTokenMs: 120,
+              latencyMs: 450,
+              model: 'provider-old',
+              modelAlias: 'erp-old',
+              status: 'completed',
+              traceId: 'trace-old',
+              usage: {
+                completionTokens: 4,
+                promptTokens: 8,
+                reasoningTokens: 0,
+                totalTokens: 12,
+              },
+            },
+            runId: 'AI-RUN-2',
+            scenario: 'product_search',
+            sequence: 2,
+          },
+          {
+            citations: [],
+            content: '失败问题',
+            creation: '2026-07-24 09:10:00',
+            feedback: null,
+            name: 'AI-MSG-3',
+            promptVersion: null,
+            role: 'user',
+            run: null,
+            runId: null,
+            scenario: 'order_query',
+            sequence: 3,
+          },
+          {
+            citations: [],
+            content: '',
+            creation: '2026-07-24 09:11:00',
+            feedback: null,
+            name: 'AI-MSG-4',
+            promptVersion: 'erp-readonly-v7',
+            role: 'assistant',
+            run: {
+              error: '历史请求失败',
+              errorCode: 'AI_SERVICE_UNAVAILABLE',
+              firstTokenMs: null,
+              latencyMs: 300,
+              model: null,
+              modelAlias: 'erp-old',
+              status: 'failed',
+              traceId: 'trace-failed',
+              usage: {
+                completionTokens: 0,
+                promptTokens: 0,
+                reasoningTokens: 0,
+                totalTokens: 0,
+              },
+            },
+            runId: 'AI-RUN-4',
+            scenario: 'order_query',
+            sequence: 4,
+          },
+        ],
+        pagination: {
+          hasMore: false,
+          limit: 40,
+          nextBeforeSequence: null,
+          returnedCount: 4,
+          total: 6,
+        },
+      });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    const composer = await screen.findByRole<HTMLInputElement>('textbox', {
+      name: 'AI 输入',
+    });
+    const scrollBox = document.querySelector<HTMLElement>(
+      '.ant-bubble-list-scroll-box',
+    );
+    expect(scrollBox).not.toBeNull();
+    Object.defineProperty(scrollBox, 'scrollHeight', {
+      configurable: true,
+      get: () => (screen.queryByText('较早回答') ? 500 : 200),
+    });
+    if (scrollBox) scrollBox.scrollTop = 50;
+    fireEvent.change(composer, { target: { value: '尚未发送的文本' } });
+    fireEvent.click(
+      await screen.findByRole('button', { name: /加载更早消息/ }),
+    );
+
+    expect(await screen.findByText('较早回答')).toBeTruthy();
+    expect(screen.getByText(/来源 ITEM-OLD/)).toBeTruthy();
+    expect(screen.getByText('反馈 positive')).toBeTruthy();
+    expect(screen.getByText('历史请求失败')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    expect(composer.value).toBe('尚未发送的文本');
+    await waitFor(() => expect(scrollBox?.scrollTop).toBe(350));
+    expect(getAiConversation).toHaveBeenLastCalledWith('AI-CONV-LONG', {
+      beforeSequence: 5,
+      limit: 40,
+    });
+
+    const runButtons = screen.getAllByRole('button', { name: '运行详情' });
+    fireEvent.click(runButtons[0]);
+    expect(screen.getByText('商品查询')).toBeTruthy();
+    expect(screen.getByText('450 ms')).toBeTruthy();
   });
 
   it('refreshes only the selected historical business result without calling the model', async () => {

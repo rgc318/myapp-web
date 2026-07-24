@@ -668,12 +668,22 @@ describe('AI domain service', () => {
             feedback: { rating: 'positive', category: 'helpful' },
           },
         ],
+        pagination: {
+          has_more: true,
+          limit: 40,
+          next_before_sequence: 1,
+          returned_count: 1,
+          total: 81,
+        },
       },
       meta: {},
       raw: {},
     });
 
-    const result = await getAiConversation('AI-CONV-1');
+    const result = await getAiConversation('AI-CONV-1', {
+      beforeSequence: 41,
+      limit: 40,
+    });
 
     expect(result.messages[0].scenario).toBe('product_search');
     expect(result.messages[0].citations?.[0].id).toBe('ITEM-001');
@@ -684,6 +694,21 @@ describe('AI domain service', () => {
       usage: { totalTokens: 12 },
     });
     expect(result.messages[0].feedback?.rating).toBe('positive');
+    expect(result.pagination).toEqual({
+      hasMore: true,
+      limit: 40,
+      nextBeforeSequence: 1,
+      returnedCount: 1,
+      total: 81,
+    });
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'get_ai_conversation_v1',
+      {
+        before_sequence: 41,
+        conversation_id: 'AI-CONV-1',
+        limit: 40,
+      },
+    );
   });
 
   it('consumes POST SSE events and returns completed chat metadata', async () => {

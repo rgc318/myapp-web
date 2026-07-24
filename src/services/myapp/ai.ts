@@ -242,6 +242,14 @@ export type AiConversationMessage = AiChatMessage & {
   creation: string | null;
 };
 
+export type AiConversationMessagePagination = {
+  hasMore: boolean;
+  limit: number;
+  nextBeforeSequence: number | null;
+  returnedCount: number;
+  total: number;
+};
+
 export type AiTokenUsage = {
   promptTokens: number;
   completionTokens: number;
@@ -738,6 +746,66 @@ function mapConversation(value: unknown): AiConversation {
   };
 }
 
+function mapConversationMessage(value: unknown): AiConversationMessage {
+  const row = readObject(value);
+  return {
+    name: String(row.name ?? ''),
+    sequence: toNumber(row.sequence),
+    role: row.role === 'assistant' ? 'assistant' : 'user',
+    content: String(row.content ?? ''),
+    scenario:
+      typeof row.scenario === 'string' ? (row.scenario as AiScenario) : null,
+    runId: typeof row.run_id === 'string' ? row.run_id : null,
+    citations: Array.isArray(row.citations)
+      ? row.citations.map(mapCitation)
+      : [],
+    promptVersion:
+      typeof row.prompt_version === 'string' ? row.prompt_version : null,
+    run: (() => {
+      const run = readObject(row.run);
+      if (!Object.keys(run).length) return null;
+      const usage = readObject(run.usage);
+      return {
+        error: typeof run.error === 'string' ? run.error : null,
+        errorCode:
+          typeof run.error_code === 'string' ? run.error_code : null,
+        firstTokenMs:
+          run.first_token_ms === null || run.first_token_ms === undefined
+            ? null
+            : toNumber(run.first_token_ms),
+        latencyMs: toNumber(run.latency_ms),
+        model: typeof run.model === 'string' ? run.model : null,
+        modelAlias:
+          typeof run.model_alias === 'string' ? run.model_alias : null,
+        status: String(run.status ?? ''),
+        traceId: typeof run.trace_id === 'string' ? run.trace_id : null,
+        usage: {
+          promptTokens: toNumber(usage.prompt_tokens),
+          completionTokens: toNumber(usage.completion_tokens),
+          totalTokens: toNumber(usage.total_tokens),
+          reasoningTokens: toNumber(usage.reasoning_tokens),
+        },
+      };
+    })(),
+    feedback: (() => {
+      const feedback = readObject(row.feedback);
+      if (
+        feedback.rating !== 'positive' &&
+        feedback.rating !== 'negative'
+      ) {
+        return null;
+      }
+      return {
+        category:
+          typeof feedback.category === 'string' ? feedback.category : null,
+        comment: typeof feedback.comment === 'string' ? feedback.comment : null,
+        rating: feedback.rating,
+      };
+    })(),
+    creation: typeof row.creation === 'string' ? row.creation : null,
+  };
+}
+
 export async function listAiSelectableModels(): Promise<AiSelectableModel[]> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'list_ai_selectable_models_v1',
@@ -795,84 +863,43 @@ export async function createAiConversation(payload: {
 
 export async function getAiConversation(
   conversationId: string,
-): Promise<{ conversation: AiConversation; messages: AiConversationMessage[] }> {
+  params?: { beforeSequence?: number | null; limit?: number },
+): Promise<{
+  conversation: AiConversation;
+  messages: AiConversationMessage[];
+  pagination: AiConversationMessagePagination;
+}> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'get_ai_conversation_v1',
-    { conversation_id: conversationId },
+    {
+      conversation_id: conversationId,
+      limit: params?.limit ?? 40,
+      ...(params?.beforeSequence
+        ? { before_sequence: params.beforeSequence }
+        : {}),
+    },
   );
   const data = readObject(result.data);
+  const conversation = mapConversation(data.conversation);
+  const pagination = readObject(data.pagination);
+  const messages = Array.isArray(data.messages)
+    ? data.messages.map(mapConversationMessage)
+    : [];
   return {
-    conversation: mapConversation(data.conversation),
-    messages: Array.isArray(data.messages)
-      ? data.messages.map((value) => {
-          const row = readObject(value);
-          return {
-            name: String(row.name ?? ''),
-            sequence: toNumber(row.sequence),
-            role: row.role === 'assistant' ? 'assistant' : 'user',
-            content: String(row.content ?? ''),
-            scenario:
-              typeof row.scenario === 'string'
-                ? (row.scenario as AiScenario)
-                : null,
-            runId: typeof row.run_id === 'string' ? row.run_id : null,
-            citations: Array.isArray(row.citations)
-              ? row.citations.map(mapCitation)
-              : [],
-            promptVersion:
-              typeof row.prompt_version === 'string'
-                ? row.prompt_version
-                : null,
-            run: (() => {
-              const run = readObject(row.run);
-              if (!Object.keys(run).length) return null;
-              const usage = readObject(run.usage);
-              return {
-                error: typeof run.error === 'string' ? run.error : null,
-                errorCode:
-                  typeof run.error_code === 'string' ? run.error_code : null,
-                firstTokenMs:
-                  run.first_token_ms === null ||
-                  run.first_token_ms === undefined
-                    ? null
-                    : toNumber(run.first_token_ms),
-                latencyMs: toNumber(run.latency_ms),
-                model: typeof run.model === 'string' ? run.model : null,
-                modelAlias:
-                  typeof run.model_alias === 'string' ? run.model_alias : null,
-                status: String(run.status ?? ''),
-                traceId:
-                  typeof run.trace_id === 'string' ? run.trace_id : null,
-                usage: {
-                  promptTokens: toNumber(usage.prompt_tokens),
-                  completionTokens: toNumber(usage.completion_tokens),
-                  totalTokens: toNumber(usage.total_tokens),
-                  reasoningTokens: toNumber(usage.reasoning_tokens),
-                },
-              };
-            })(),
-            feedback: (() => {
-              const feedback = readObject(row.feedback);
-              if (
-                feedback.rating !== 'positive' &&
-                feedback.rating !== 'negative'
-              ) {
-                return null;
-              }
-              return {
-                category:
-                  typeof feedback.category === 'string'
-                    ? feedback.category
-                    : null,
-                comment:
-                  typeof feedback.comment === 'string' ? feedback.comment : null,
-                rating: feedback.rating,
-              };
-            })(),
-            creation: typeof row.creation === 'string' ? row.creation : null,
-          };
-        })
-      : [],
+    conversation,
+    messages,
+    pagination: {
+      hasMore: Boolean(pagination.has_more),
+      limit: toNumber(pagination.limit) || params?.limit || 40,
+      nextBeforeSequence:
+        pagination.next_before_sequence === null ||
+        pagination.next_before_sequence === undefined
+          ? null
+          : toNumber(pagination.next_before_sequence),
+      returnedCount:
+        toNumber(pagination.returned_count) || messages.length,
+      total: toNumber(pagination.total) || conversation.messageCount,
+    },
   };
 }
 

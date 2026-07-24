@@ -50,6 +50,8 @@ import {
   type AiChatResult,
   type AiCitation,
   type AiConversation,
+  type AiConversationMessage,
+  type AiConversationMessagePagination,
   type AiDraft,
   type AiRunSummary,
   type AiScenario,
@@ -95,6 +97,17 @@ type ChatRow = AiMessageRow & {
   runTools?: AiToolProgress[];
   runWarnings?: string[];
   scenario?: AiScenario | null;
+  sequence?: number | null;
+};
+
+const AI_MESSAGE_PAGE_SIZE = 40;
+
+const EMPTY_MESSAGE_PAGINATION: AiConversationMessagePagination = {
+  hasMore: false,
+  limit: AI_MESSAGE_PAGE_SIZE,
+  nextBeforeSequence: null,
+  returnedCount: 0,
+  total: 0,
 };
 
 const BUSINESS_RESULT_CITATION_TYPES = new Set([
@@ -195,6 +208,29 @@ function createMessage(
   };
 }
 
+function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
+  return items.map((item) => ({
+    id: item.name,
+    role: item.role,
+    content: item.content,
+    citations: item.citations,
+    error:
+      item.run?.status === 'failed'
+        ? (item.run.error ?? 'AI 服务调用失败')
+        : null,
+    errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
+    creation: item.creation,
+    run: item.run,
+    runId: item.runId,
+    runStatus: resolveRunDisplayStatus(item.run?.status),
+    runStream: { deltaCount: 0, streamedChars: 0 },
+    runTools: [],
+    runWarnings: [],
+    scenario: item.scenario,
+    sequence: item.sequence,
+  }));
+}
+
 export default function AiPage() {
   const { styles } = useAiWorkspaceStyles();
   const [feedbackForm] = Form.useForm<{
@@ -205,7 +241,10 @@ export default function AiPage() {
   const [draft, setDraft] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
+  const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
   const [messages, setMessages] = useState<ChatRow[]>([]);
+  const [messagePagination, setMessagePagination] =
+    useState<AiConversationMessagePagination>(EMPTY_MESSAGE_PAGINATION);
   const [conversations, setConversations] = useState<AiConversation[]>([]);
   const [conversationStatus, setConversationStatus] = useState<
     'active' | 'archived'
@@ -268,6 +307,13 @@ export default function AiPage() {
     null,
   );
   const streamAbortRef = useRef<AbortController | null>(null);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null);
+  const pendingPrependScrollRef = useRef<{
+    previousHeight: number;
+    previousTop: number;
+    scrollBox: HTMLElement;
+  } | null>(null);
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
     : selectedCompany || defaultCompany;
@@ -277,6 +323,23 @@ export default function AiPage() {
       setSelectedCompany(defaultCompany);
     }
   }, [conversationId, defaultCompany, selectedCompany]);
+
+  useEffect(() => {
+    activeConversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
+    const pending = pendingPrependScrollRef.current;
+    if (!pending) return;
+    pendingPrependScrollRef.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      const heightDelta =
+        pending.scrollBox.scrollHeight - pending.previousHeight;
+      pending.scrollBox.scrollTop =
+        pending.previousTop + Math.max(0, heightDelta);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [messages.length]);
 
   useEffect(() => {
     let active = true;
@@ -328,33 +391,25 @@ export default function AiPage() {
     setInspectorOpen(false);
     setInspectedMessageId(null);
     try {
-      const result = await getAiConversation(targetId);
+      const result = await getAiConversation(targetId, {
+        limit: AI_MESSAGE_PAGE_SIZE,
+      });
       const openedConversationStatus =
         result.conversation.status === 'archived' ? 'archived' : 'active';
       setConversationId(result.conversation.name);
+      activeConversationIdRef.current = result.conversation.name;
       setConversationCompany(result.conversation.company);
       setConversationStatus(openedConversationStatus);
       setSelectedConversationStatus(openedConversationStatus);
-      const restoredMessages = result.messages.map((item) => ({
-        id: item.name,
-        role: item.role,
-        content: item.content,
-        citations: item.citations,
-        error:
-          item.run?.status === 'failed'
-            ? (item.run.error ?? 'AI 服务调用失败')
-            : null,
-        errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
-        creation: item.creation,
-        run: item.run,
-        runId: item.runId,
-        runStatus: resolveRunDisplayStatus(item.run?.status),
-        runStream: { deltaCount: 0, streamedChars: 0 },
-        runTools: [],
-        runWarnings: [],
-        scenario: item.scenario,
-      }));
+      const restoredMessages = mapConversationMessages(result.messages);
       setMessages(restoredMessages);
+      setMessagePagination(
+        result.pagination ?? {
+          ...EMPTY_MESSAGE_PAGINATION,
+          returnedCount: result.messages.length,
+          total: result.conversation.messageCount,
+        },
+      );
       const restoredFeedback: Record<string, 'positive' | 'negative'> = {};
       result.messages.forEach((item) => {
         if (item.runId && item.feedback) {
@@ -426,6 +481,68 @@ export default function AiPage() {
       message.error(caught instanceof Error ? caught.message : '会话加载失败');
     } finally {
       setConversationLoading(false);
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    const targetId = conversationId;
+    const beforeSequence = messagePagination.nextBeforeSequence;
+    if (
+      !targetId ||
+      !beforeSequence ||
+      !messagePagination.hasMore ||
+      loading ||
+      conversationLoading ||
+      olderMessagesLoading
+    ) {
+      return;
+    }
+
+    const scrollBox = messagesViewportRef.current?.querySelector<HTMLElement>(
+      '.ant-bubble-list-scroll-box',
+    );
+    if (scrollBox) {
+      pendingPrependScrollRef.current = {
+        previousHeight: scrollBox.scrollHeight,
+        previousTop: scrollBox.scrollTop,
+        scrollBox,
+      };
+    }
+
+    setOlderMessagesLoading(true);
+    try {
+      const result = await getAiConversation(targetId, {
+        beforeSequence,
+        limit: AI_MESSAGE_PAGE_SIZE,
+      });
+      if (activeConversationIdRef.current !== targetId) return;
+
+      const olderMessages = mapConversationMessages(result.messages);
+      setMessages((current) => {
+        const existingIds = new Set(current.map((item) => item.id));
+        return [
+          ...olderMessages.filter((item) => !existingIds.has(item.id)),
+          ...current,
+        ];
+      });
+      setMessagePagination(result.pagination);
+
+      const restoredFeedback: Record<string, 'positive' | 'negative'> = {};
+      result.messages.forEach((item) => {
+        if (item.runId && item.feedback) {
+          restoredFeedback[item.runId] = item.feedback.rating;
+        }
+      });
+      setFeedbackByRun((current) => ({ ...current, ...restoredFeedback }));
+    } catch (caught) {
+      pendingPrependScrollRef.current = null;
+      message.error(
+        caught instanceof Error ? caught.message : '更早消息加载失败',
+      );
+    } finally {
+      if (activeConversationIdRef.current === targetId) {
+        setOlderMessagesLoading(false);
+      }
     }
   };
 
@@ -997,9 +1114,14 @@ export default function AiPage() {
 
   const resetConversation = () => {
     setConversationId(null);
+    activeConversationIdRef.current = null;
     setSelectedConversationStatus(null);
     setConversationCompany(null);
     setMessages([]);
+    setMessagePagination(EMPTY_MESSAGE_PAGINATION);
+    setOlderMessagesLoading(false);
+    pendingPrependScrollRef.current = null;
+    setFeedbackByRun({});
     setLastResult(null);
     setActiveRunId(null);
     setRunError(null);
@@ -1230,7 +1352,7 @@ export default function AiPage() {
             <div className={styles.sidebarHeader}>
               <div className={styles.sidebarTitle}>
                 <Typography.Title level={5}>对话</Typography.Title>
-                <Tag bordered={false} color="processing">
+                <Tag color="processing" variant="filled">
                   {conversations.length}
                 </Tag>
               </div>
@@ -1390,9 +1512,9 @@ export default function AiPage() {
               </Space>
               <Space wrap>
                 <Tag
-                  bordered={false}
                   color="success"
                   icon={<SafetyCertificateOutlined />}
+                  variant="filled"
                 >
                   按当前账号权限查询 · 写操作需确认
                 </Tag>
@@ -1409,7 +1531,27 @@ export default function AiPage() {
             </div>
 
             {messages.length ? (
-              <div className={styles.messages}>
+              <div className={styles.messages} ref={messagesViewportRef}>
+                {messagePagination.hasMore ? (
+                  <div className={styles.messageHistoryBar}>
+                    <Button
+                      disabled={loading || conversationLoading}
+                      loading={olderMessagesLoading}
+                      onClick={() => void loadOlderMessages()}
+                      size="small"
+                    >
+                      加载更早消息（已显示 {messages.length} /{' '}
+                      {Math.max(messagePagination.total, messages.length)}）
+                    </Button>
+                  </div>
+                ) : messagePagination.total > messages.length ? (
+                  <Typography.Text
+                    className={styles.messageHistoryBar}
+                    type="secondary"
+                  >
+                    已显示最近 {messages.length} 条消息
+                  </Typography.Text>
+                ) : null}
                 <Bubble.List
                   autoScroll
                   items={bubbleItems}
@@ -1501,7 +1643,7 @@ export default function AiPage() {
           open={conversationDrawerOpen}
           placement="left"
           title="对话"
-          width={360}
+          size={360}
         >
           <Space orientation="vertical" size={12} style={{ width: '100%' }}>
             <Select
@@ -1552,7 +1694,7 @@ export default function AiPage() {
           }}
           open={inspectorOpen}
           title={inspectedStatus === 'running' ? '当前运行' : '运行详情'}
-          width={440}
+          size={440}
         >
           <div className={styles.drawerContent}>
             <Alert

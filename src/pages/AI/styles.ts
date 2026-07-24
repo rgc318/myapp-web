@@ -144,6 +144,8 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     box-sizing: border-box;
     display: flex;
     flex: 1;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
     min-height: 0;
     overflow: hidden;
@@ -173,6 +175,12 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     .ant-bubble-content {
       border-radius: 18px;
     }
+  `,
+  messageHistoryBar: css`
+    flex: none;
+    margin-block-end: ${token.marginSM}px;
+    text-align: center;
+    width: 100%;
   `,
   mobileOnly: css`
     display: none;
