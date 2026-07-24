@@ -21,6 +21,11 @@ Object.defineProperty(URL, 'createObjectURL', {
   value: jest.fn(),
 });
 
+Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+  writable: true,
+  value: jest.fn(),
+});
+
 class Worker {
   constructor(stringUrl) {
     this.url = stringUrl;
