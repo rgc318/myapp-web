@@ -118,7 +118,9 @@ describe('AiDraftEditorModal', () => {
 
     expect(await screen.findByDisplayValue('煌星')).toBeTruthy();
     expect(screen.getByText('版本 2 已保存')).toBeTruthy();
-    expect(screen.getByText('后端校验通过')).toBeTruthy();
+    expect(
+      screen.getByText('后端校验通过 · 最近校验 2026-07-18 10:00:00'),
+    ).toBeTruthy();
     fireEvent.change(screen.getByDisplayValue('煌星'), {
       target: { value: '煌星升级版' },
     });

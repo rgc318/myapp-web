@@ -1,4 +1,5 @@
-import { ExportOutlined } from '@ant-design/icons';
+import { ExportOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ProCard } from '@ant-design/pro-components';
 import {
   Alert,
   Button,
@@ -8,8 +9,10 @@ import {
   Spin,
   Table,
   Tag,
+  Typography,
 } from 'antd';
-import React, { useEffect, useState } from 'react';
+import dayjs from 'dayjs';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { AiCitation } from '@/services/myapp/ai';
 import {
   getProductDetail,
@@ -27,50 +30,79 @@ export function ProductDetailDrawer({
   const [detail, setDetail] = useState<ProductSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readAt, setReadAt] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+
+  const loadCurrentData = useCallback(
+    async (clearDetail = false) => {
+      if (!citation?.id) return;
+      const requestId = ++requestSequence.current;
+      if (clearDetail) setDetail(null);
+      setError(null);
+      setLoading(true);
+      try {
+        const result = await getProductDetail(citation.id, {
+          company:
+            typeof citation.data.company === 'string'
+              ? citation.data.company
+              : undefined,
+        });
+        if (requestId !== requestSequence.current) return;
+        setDetail(result);
+        setReadAt(dayjs().format('YYYY-MM-DD HH:mm:ss'));
+        if (!result) setError('未能读取当前商品详情。');
+      } catch (caught) {
+        if (requestId !== requestSequence.current) return;
+        setError(caught instanceof Error ? caught.message : '商品详情加载失败');
+      } finally {
+        if (requestId === requestSequence.current) setLoading(false);
+      }
+    },
+    [citation],
+  );
 
   useEffect(() => {
-    let active = true;
+    requestSequence.current += 1;
     setDetail(null);
     setError(null);
-    if (!citation?.id) return () => undefined;
-    setLoading(true);
-    void getProductDetail(citation.id, {
-      company:
-        typeof citation.data.company === 'string'
-          ? citation.data.company
-          : undefined,
-    })
-      .then((result) => {
-        if (!active) return;
-        setDetail(result);
-        if (!result) setError('未能读取当前商品详情。');
-      })
-      .catch((caught) => {
-        if (active) {
-          setError(
-            caught instanceof Error ? caught.message : '商品详情加载失败',
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    setReadAt(null);
+    setLoading(false);
+    if (citation?.id) void loadCurrentData(true);
     return () => {
-      active = false;
+      requestSequence.current += 1;
     };
-  }, [citation]);
+  }, [citation, loadCurrentData]);
+
+  const snapshotAt =
+    typeof citation?.data.queried_at === 'string'
+      ? citation.data.queried_at
+      : null;
+  const snapshotUom = String(
+    citation?.data.uom_display ?? citation?.data.uom ?? '',
+  );
 
   return (
     <Drawer
       extra={
-        citation?.id ? (
-          <Button
-            href={`/master-data/products/${encodeURIComponent(citation.id)}`}
-            icon={<ExportOutlined />}
-          >
-            在商品模块打开
-          </Button>
-        ) : null
+        <Space wrap>
+          {citation?.id ? (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => void loadCurrentData(false)}
+            >
+              刷新当前数据
+            </Button>
+          ) : null}
+          {citation?.id ? (
+            <Button
+              href={`/master-data/products/${encodeURIComponent(citation.id)}`}
+              icon={<ExportOutlined />}
+            >
+              在商品模块打开
+            </Button>
+          ) : null}
+        </Space>
       }
       onClose={onClose}
       open={Boolean(citation)}
@@ -79,8 +111,64 @@ export function ProductDetailDrawer({
     >
       <Spin spinning={loading}>
         {error ? <Alert showIcon title={error} type="error" /> : null}
+        {citation ? (
+          <ProCard
+            headerBordered
+            style={{ marginBottom: 16 }}
+            title={
+              <Space wrap>
+                <span>回答时数据</span>
+                <Tag color="blue">生成时快照</Tag>
+              </Space>
+            }
+            variant="outlined"
+          >
+            <Descriptions
+              column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
+              items={[
+                {
+                  key: 'snapshotAt',
+                  label: '查询时间',
+                  children: snapshotAt || '历史记录未保存查询时间',
+                },
+                {
+                  key: 'scope',
+                  label: '数据范围',
+                  children: `${String(citation.data.company ?? '未记录公司')} · 当前账号权限`,
+                },
+                {
+                  key: 'qty',
+                  label: '回答时库存',
+                  children:
+                    `${Number(citation.data.qty ?? 0).toLocaleString('zh-CN')} ${snapshotUom}`.trim(),
+                },
+                {
+                  key: 'price',
+                  label: '回答时参考价',
+                  children: formatCurrencyValue(
+                    Number(citation.data.price ?? 0),
+                    'CNY',
+                  ),
+                },
+              ]}
+              size="small"
+            />
+          </ProCard>
+        ) : null}
         {detail ? (
           <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={2}>
+              <Space wrap>
+                <Typography.Title level={5} style={{ margin: 0 }}>
+                  当前数据
+                </Typography.Title>
+                <Tag color="success">实时读取</Tag>
+              </Space>
+              <Typography.Text type="secondary">
+                读取时间：{readAt ?? '-'}
+                {detail.modified ? ` · 商品最近修改：${detail.modified}` : ''}
+              </Typography.Text>
+            </Space>
             <Descriptions
               bordered
               column={{ lg: 2, md: 2, sm: 1, xs: 1 }}

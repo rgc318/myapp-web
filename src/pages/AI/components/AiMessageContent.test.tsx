@@ -20,11 +20,18 @@ jest.mock('@ant-design/x-markdown', () => {
 jest.mock('./BusinessResultPanel', () => {
   const React = jest.requireActual('react');
   return {
-    BusinessResultPanel: ({ resultSet }: any) =>
+    BusinessResultPanel: ({ onRefresh, resultSet }: any) =>
       React.createElement(
         'div',
         null,
         `结构化结果 ${resultSet.groups[0].label} ${resultSet.groups[0].returnedCount}`,
+        onRefresh
+          ? React.createElement(
+              'button',
+              { onClick: onRefresh, type: 'button' },
+              '刷新当前数据',
+            )
+          : null,
       ),
   };
 });
@@ -97,6 +104,7 @@ describe('AiMessageContent', () => {
                 stock_uom_display: '件',
                 standard_selling_rate: 5,
               },
+              modified: '2026-07-24 10:10:00',
               status: 'draft',
               validation: { errors: [], ready_for_handoff: true, warnings: [] },
               version: 2,
@@ -118,7 +126,53 @@ describe('AiMessageContent', () => {
     );
     expect(screen.getByText('迪莫')).toBeTruthy();
     expect(screen.getByText('标准 5.00 元')).toBeTruthy();
+    expect(screen.getByText(/最近校验：2026-07-24 10:10:00/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认执行' })).toBeNull();
+  });
+
+  it('labels product citations as answer-time permission-scoped data', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [
+          {
+            data: {
+              company: 'Demo Company',
+              price: 88,
+              qty: 4,
+              queried_at: '2026-07-24 09:20:00',
+              uom_display: '个',
+            },
+            href: '/products/ITEM-001',
+            id: 'ITEM-001',
+            label: '煌星',
+            type: 'product',
+          },
+        ],
+        content: '找到商品',
+      }),
+    );
+
+    expect(screen.getByText('回答时数据')).toBeTruthy();
+    expect(screen.getByText(/查询时间：2026-07-24 09:20:00/)).toBeTruthy();
+    expect(screen.getByText(/公司：Demo Company/)).toBeTruthy();
+    expect(screen.getByText(/当前账号权限范围/)).toBeTruthy();
+  });
+
+  it('delegates a no-model refresh for this result set', () => {
+    const onRefreshBusinessResult = jest.fn().mockResolvedValue(undefined);
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        content: '销售订单返回 1 条。',
+        onRefreshBusinessResult,
+      }),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '刷新当前数据' }));
+    expect(onRefreshBusinessResult).toHaveBeenCalledWith(
+      expect.objectContaining({ resultType: 'business_documents' }),
+    );
   });
 
   it('uses a clear action label when a draft still needs information', () => {

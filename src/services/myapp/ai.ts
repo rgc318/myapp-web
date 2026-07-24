@@ -149,28 +149,37 @@ export type AiBusinessDocumentResult = {
   outstandingAmount: number;
   paidAmount: number;
   party: string | null;
+  snapshotAt: string | null;
+  snapshotSource: 'answer' | 'refresh';
   transactionDate: string | null;
   type: AiBusinessDocumentType;
 };
 
 export type AiBusinessResultGroup = {
+  availableCount: number | null;
   entity: AiBusinessDocumentType;
   items: AiBusinessDocumentResult[];
   label: string;
+  moduleHref: string | null;
   requestedCount: number | null;
   returnedCount: number;
   status: 'success' | 'partial' | 'empty';
+  truncated: boolean | null;
 };
 
 export type AiBusinessResultSet = {
   groups: AiBusinessResultGroup[];
+  permissionFiltered: boolean;
+  queriedAt: string | null;
   resultType: 'business_documents';
   schemaVersion: string;
+  snapshotSource: 'answer' | 'refresh';
   scope: {
     company: string | null;
     dateFrom: string | null;
     dateRange: string | null;
     dateTo: string | null;
+    excludeCancelled: boolean;
     limitPerGroup: number | null;
     minAmount: number | null;
     sortBy: string | null;
@@ -395,6 +404,9 @@ export function resolveAiBusinessResultSet(
       outstandingAmount: toNumber(citation.data.outstanding_amount),
       paidAmount: toNumber(citation.data.paid_amount),
       party: optionalText(citation.data.party),
+      snapshotAt: optionalText(resultSetData.queried_at),
+      snapshotSource:
+        resultSetData.snapshot_source === 'refresh' ? 'refresh' : 'answer',
       transactionDate: optionalText(citation.data.transaction_date),
       type: citation.type as AiBusinessDocumentType,
     }));
@@ -432,18 +444,29 @@ export function resolveAiBusinessResultSet(
           : requestedCount !== null && items.length < requestedCount
             ? 'partial'
             : 'success';
+    const availableCount =
+      metadata.available_count === null ||
+      metadata.available_count === undefined
+        ? null
+        : toNumber(metadata.available_count);
     return {
+      availableCount,
       entity,
       items,
       label: optionalText(metadata.label) ?? BUSINESS_DOCUMENT_LABELS[entity],
+      moduleHref: optionalText(metadata.module_href),
       requestedCount,
       returnedCount: items.length,
       status,
+      truncated:
+        typeof metadata.truncated === 'boolean' ? metadata.truncated : null,
     };
   });
 
   return {
     groups,
+    permissionFiltered: Boolean(resultSetData.permission_filtered),
+    queriedAt: optionalText(resultSetData.queried_at),
     resultType: 'business_documents',
     schemaVersion:
       optionalText(resultSetData.schema_version) ?? 'business-result-set-v0',
@@ -452,6 +475,10 @@ export function resolveAiBusinessResultSet(
       dateFrom: optionalText(scope.date_from),
       dateRange: optionalText(scope.date_range),
       dateTo: optionalText(scope.date_to),
+      excludeCancelled:
+        typeof scope.exclude_cancelled === 'boolean'
+          ? scope.exclude_cancelled
+          : true,
       limitPerGroup:
         scope.limit_per_group === null || scope.limit_per_group === undefined
           ? null
@@ -463,7 +490,49 @@ export function resolveAiBusinessResultSet(
       sortBy: optionalText(scope.sort_by),
       statusFilter: optionalText(scope.status_filter),
     },
+    snapshotSource:
+      resultSetData.snapshot_source === 'refresh' ? 'refresh' : 'answer',
   };
+}
+
+function serializeAiBusinessResultSet(resultSet: AiBusinessResultSet) {
+  return {
+    groups: resultSet.groups.map((group) => ({
+      entity: group.entity,
+      requested_count: group.requestedCount,
+    })),
+    result_type: resultSet.resultType,
+    schema_version: resultSet.schemaVersion,
+    scope: {
+      company: resultSet.scope.company,
+      date_from: resultSet.scope.dateFrom,
+      date_range: resultSet.scope.dateRange,
+      date_to: resultSet.scope.dateTo,
+      exclude_cancelled: resultSet.scope.excludeCancelled,
+      limit_per_group: resultSet.scope.limitPerGroup,
+      min_amount: resultSet.scope.minAmount,
+      sort_by: resultSet.scope.sortBy,
+      status_filter: resultSet.scope.statusFilter,
+    },
+  };
+}
+
+export async function refreshAiBusinessResult(
+  resultSet: AiBusinessResultSet,
+): Promise<{ citations: AiCitation[]; resultSet: AiBusinessResultSet }> {
+  const response = await callGatewayMethod<Record<string, unknown>>(
+    'refresh_ai_business_result_v1',
+    { result_set: serializeAiBusinessResultSet(resultSet) },
+  );
+  const data = readObject(response.data);
+  const citations = Array.isArray(data.citations)
+    ? data.citations.map(mapCitation)
+    : [];
+  const refreshed = resolveAiBusinessResultSet(citations);
+  if (!refreshed) {
+    throw new Error('刷新结果缺少结构化业务数据。');
+  }
+  return { citations, resultSet: refreshed };
 }
 
 export async function getAiBusinessDocumentDetail(

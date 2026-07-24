@@ -1,6 +1,6 @@
-import { ExportOutlined } from '@ant-design/icons';
+import { ExportOutlined, ReloadOutlined } from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
-import { ProTable } from '@ant-design/pro-components';
+import { ProCard, ProTable } from '@ant-design/pro-components';
 import {
   Alert,
   Button,
@@ -11,7 +11,8 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import React, { useEffect, useState } from 'react';
+import dayjs from 'dayjs';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type AiBusinessDocumentDetail,
   type AiBusinessDocumentResult,
@@ -75,42 +76,63 @@ export function BusinessDocumentDrawer({
   const [detail, setDetail] = useState<AiBusinessDocumentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [readAt, setReadAt] = useState<string | null>(null);
+  const requestSequence = useRef(0);
+
+  const loadCurrentData = useCallback(
+    async (clearDetail = false) => {
+      if (!document) return;
+      const requestId = ++requestSequence.current;
+      if (clearDetail) setDetail(null);
+      setError(null);
+      setLoading(true);
+      try {
+        const result = await getAiBusinessDocumentDetail(document);
+        if (requestId !== requestSequence.current) return;
+        setDetail(result);
+        setReadAt(dayjs().format('YYYY-MM-DD HH:mm:ss'));
+        if (!result) setError('未能读取当前单据详情。');
+      } catch (caught) {
+        if (requestId !== requestSequence.current) return;
+        setError(caught instanceof Error ? caught.message : '单据详情加载失败');
+      } finally {
+        if (requestId === requestSequence.current) setLoading(false);
+      }
+    },
+    [document],
+  );
 
   useEffect(() => {
-    let active = true;
+    requestSequence.current += 1;
     setDetail(null);
     setError(null);
-    if (!document) return () => undefined;
-    setLoading(true);
-    void getAiBusinessDocumentDetail(document)
-      .then((result) => {
-        if (!active) return;
-        setDetail(result);
-        if (!result) setError('未能读取当前单据详情。');
-      })
-      .catch((caught) => {
-        if (active) {
-          setError(
-            caught instanceof Error ? caught.message : '单据详情加载失败',
-          );
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    setReadAt(null);
+    setLoading(false);
+    if (document) void loadCurrentData(true);
     return () => {
-      active = false;
+      requestSequence.current += 1;
     };
-  }, [document]);
+  }, [document, loadCurrentData]);
 
   return (
     <Drawer
       extra={
-        document?.href ? (
-          <Button href={document.href} icon={<ExportOutlined />}>
-            在业务模块打开
-          </Button>
-        ) : null
+        <Space wrap>
+          {document ? (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => void loadCurrentData(false)}
+            >
+              刷新当前数据
+            </Button>
+          ) : null}
+          {document?.href ? (
+            <Button href={document.href} icon={<ExportOutlined />}>
+              在业务模块打开
+            </Button>
+          ) : null}
+        </Space>
       }
       onClose={onClose}
       open={Boolean(document)}
@@ -123,8 +145,79 @@ export function BusinessDocumentDrawer({
     >
       <Spin spinning={loading}>
         {error ? <Alert showIcon title={error} type="error" /> : null}
+        {document ? (
+          <ProCard
+            headerBordered
+            style={{ marginBottom: 16 }}
+            title={
+              <Space wrap>
+                <span>
+                  {document.snapshotSource === 'refresh'
+                    ? '当前刷新快照'
+                    : '回答时数据'}
+                </span>
+                <Tag color="blue">结构化快照</Tag>
+              </Space>
+            }
+            variant="outlined"
+          >
+            <Descriptions
+              column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
+              items={[
+                {
+                  key: 'snapshotAt',
+                  label:
+                    document.snapshotSource === 'refresh'
+                      ? '刷新时间'
+                      : '查询时间',
+                  children: document.snapshotAt || '历史记录未保存查询时间',
+                },
+                {
+                  key: 'scope',
+                  label: '数据范围',
+                  children: `${document.company ?? '未记录公司'} · 当前账号权限`,
+                },
+                {
+                  key: 'status',
+                  label: '快照状态',
+                  children: <StatusTag value={document.documentStatus} />,
+                },
+                {
+                  key: 'party',
+                  label: '快照往来单位',
+                  children: document.party || '-',
+                },
+                {
+                  key: 'date',
+                  label: '快照交易日期',
+                  children: document.transactionDate || '-',
+                },
+                {
+                  key: 'amount',
+                  label: '快照金额',
+                  children: formatCurrencyValue(
+                    document.amount,
+                    document.currency,
+                  ),
+                },
+              ]}
+              size="small"
+            />
+          </ProCard>
+        ) : null}
         {detail ? (
           <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={2}>
+              <Space wrap>
+                <Typography.Title level={5} style={{ margin: 0 }}>
+                  当前数据
+                </Typography.Title>
+                <Tag color="success">实时读取</Tag>
+              </Space>
+              <Typography.Text type="secondary">
+                读取时间：{readAt ?? '-'}
+              </Typography.Text>
+            </Space>
             <Descriptions
               bordered
               column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
@@ -209,7 +302,11 @@ export function BusinessDocumentDrawer({
               dataSource={detail.items}
               options={false}
               pagination={false}
-              rowKey={(row, index) => `${row.itemCode}-${index}`}
+              rowKey={(row) =>
+                [row.itemCode, row.warehouse, row.uom, row.qty, row.rate].join(
+                  '-',
+                )
+              }
               search={false}
               size="small"
               toolBarRender={false}

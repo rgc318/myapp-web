@@ -45,6 +45,7 @@ import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   type AiBusinessDocumentResult,
+  type AiBusinessResultSet,
   type AiChatMessage,
   type AiChatResult,
   type AiCitation,
@@ -64,6 +65,7 @@ import {
   listAiDraftVersions,
   listAiSelectableModels,
   prepareAiDraftHandoff,
+  refreshAiBusinessResult,
   resolveAiScenario,
   restoreAiDraftVersion,
   streamAiChatMessage,
@@ -94,6 +96,14 @@ type ChatRow = AiMessageRow & {
   runWarnings?: string[];
   scenario?: AiScenario | null;
 };
+
+const BUSINESS_RESULT_CITATION_TYPES = new Set([
+  'business_result_set',
+  'sales_order',
+  'sales_invoice',
+  'purchase_order',
+  'purchase_invoice',
+]);
 
 function resolveRunDisplayStatus(
   status: string | null | undefined,
@@ -897,6 +907,7 @@ export default function AiPage() {
                       }
                     : null,
                   payload: updated.payload,
+                  modified: updated.modified,
                   status: updated.status,
                   validation: {
                     errors: updated.validation.errors,
@@ -910,6 +921,30 @@ export default function AiPage() {
         ),
       })),
     );
+  };
+
+  const refreshBusinessResult = async (
+    messageId: string,
+    resultSet: AiBusinessResultSet,
+  ) => {
+    const refreshed = await refreshAiBusinessResult(resultSet);
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === messageId
+          ? {
+              ...item,
+              citations: [
+                ...(item.citations ?? []).filter(
+                  (citation) =>
+                    !BUSINESS_RESULT_CITATION_TYPES.has(citation.type),
+                ),
+                ...refreshed.citations,
+              ],
+            }
+          : item,
+      ),
+    );
+    message.success('已按当前账号权限刷新业务数据');
   };
 
   const openDraftEditor = (
@@ -1149,6 +1184,11 @@ export default function AiPage() {
           onOpenBusinessDocument={setBusinessDocument}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
           onOpenProduct={setProductCitation}
+          onRefreshBusinessResult={
+            loading && index === messages.length - 1
+              ? undefined
+              : (resultSet) => refreshBusinessResult(item.id, resultSet)
+          }
           onRetry={
             selectedConversationStatus !== 'archived' &&
             item.error &&

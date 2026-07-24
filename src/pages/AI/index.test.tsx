@@ -102,10 +102,12 @@ jest.mock('./components/AiMessageContent', () => {
   return {
     AiMessageContent: ({
       content,
+      citations,
       error,
       errorCode,
       onEditRequest,
       onRetry,
+      onRefreshBusinessResult,
       onViewDiagnostics,
       onViewRun,
       progressMessage,
@@ -116,6 +118,13 @@ jest.mock('./components/AiMessageContent', () => {
         'div',
         null,
         content || (streaming ? progressMessage : ''),
+        citations?.length
+          ? React.createElement(
+              'span',
+              null,
+              `来源 ${citations.map((citation: any) => citation.id).join(',')}`,
+            )
+          : null,
         error ? React.createElement('span', null, error) : null,
         errorCode === 'AI_REQUEST_INVALID'
           ? React.createElement('span', null, '需要修改本次问题')
@@ -146,6 +155,24 @@ jest.mock('./components/AiMessageContent', () => {
               'button',
               { onClick: onViewRun, type: 'button' },
               '运行详情',
+            )
+          : null,
+        onRefreshBusinessResult &&
+          citations?.some(
+            (citation: any) => citation.type === 'business_result_set',
+          )
+          ? React.createElement(
+              'button',
+              {
+                onClick: () =>
+                  onRefreshBusinessResult({
+                    groups: [],
+                    resultType: 'business_documents',
+                    scope: {},
+                  }),
+                type: 'button',
+              },
+              `刷新 ${content}`,
             )
           : null,
       ),
@@ -182,6 +209,7 @@ jest.mock('@/services/myapp/ai', () => ({
   ]),
   listAiDraftVersions: jest.fn(),
   prepareAiDraftHandoff: jest.fn(),
+  refreshAiBusinessResult: jest.fn(),
   resolveAiScenario: jest.fn(),
   restoreAiDraftVersion: jest.fn(),
   streamAiChatMessage: jest.fn(),
@@ -193,6 +221,7 @@ const {
   generateAiProductSetupDraft,
   getAiConversation,
   resolveAiScenario,
+  refreshAiBusinessResult,
   streamAiChatMessage,
 } = jest.requireMock('@/services/myapp/ai');
 
@@ -457,6 +486,142 @@ describe('AI workspace page', () => {
     expect(screen.getByText('1.20 秒')).toBeTruthy();
     expect(screen.getByText('erp-history-new')).toBeTruthy();
     expect(screen.getByText('AI-RUN-HISTORY-2')).toBeTruthy();
+  });
+
+  it('refreshes only the selected historical business result without calling the model', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-RESULTS';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-07-24 09:00:00',
+        lastMessageAt: '2026-07-24 09:05:00',
+        messageCount: 4,
+        modified: '2026-07-24 09:05:00',
+        name: 'AI-CONV-RESULTS',
+        status: 'active',
+        title: '业务结果刷新',
+      },
+      messages: [
+        {
+          citations: [],
+          content: '第一次查询',
+          creation: '2026-07-24 09:00:00',
+          feedback: null,
+          name: 'AI-MSG-USER-1',
+          promptVersion: null,
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'order_query',
+          sequence: 1,
+        },
+        {
+          citations: [
+            {
+              data: { result_type: 'business_documents' },
+              href: null,
+              id: 'RESULT-OLD-1',
+              label: '业务查询结果',
+              type: 'business_result_set',
+            },
+            {
+              data: {},
+              href: '/sales/orders/SO-OLD-1',
+              id: 'SO-OLD-1',
+              label: 'SO-OLD-1',
+              type: 'sales_order',
+            },
+            {
+              data: {},
+              href: '/products/ITEM-KEEP',
+              id: 'ITEM-KEEP',
+              label: '保留来源',
+              type: 'product',
+            },
+          ],
+          content: '第一条业务回答',
+          creation: '2026-07-24 09:01:00',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT-1',
+          promptVersion: 'erp-readonly-v5',
+          role: 'assistant',
+          run: null,
+          runId: null,
+          scenario: 'order_query',
+          sequence: 2,
+        },
+        {
+          citations: [],
+          content: '第二次查询',
+          creation: '2026-07-24 09:04:00',
+          feedback: null,
+          name: 'AI-MSG-USER-2',
+          promptVersion: null,
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'order_query',
+          sequence: 3,
+        },
+        {
+          citations: [
+            {
+              data: { result_type: 'business_documents' },
+              href: null,
+              id: 'RESULT-OLD-2',
+              label: '业务查询结果',
+              type: 'business_result_set',
+            },
+          ],
+          content: '第二条业务回答',
+          creation: '2026-07-24 09:05:00',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT-2',
+          promptVersion: 'erp-readonly-v5',
+          role: 'assistant',
+          run: null,
+          runId: null,
+          scenario: 'order_query',
+          sequence: 4,
+        },
+      ],
+    });
+    refreshAiBusinessResult.mockResolvedValueOnce({
+      citations: [
+        {
+          data: {
+            queried_at: '2026-07-24 12:00:00',
+            result_type: 'business_documents',
+            snapshot_source: 'refresh',
+          },
+          href: null,
+          id: 'RESULT-NEW-1',
+          label: '业务查询结果',
+          type: 'business_result_set',
+        },
+        {
+          data: {},
+          href: '/sales/orders/SO-NEW-1',
+          id: 'SO-NEW-1',
+          label: 'SO-NEW-1',
+          type: 'sales_order',
+        },
+      ],
+      resultSet: {},
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: '刷新 第一条业务回答' }),
+    );
+
+    await waitFor(() => expect(refreshAiBusinessResult).toHaveBeenCalled());
+    expect(
+      await screen.findByText(/来源 ITEM-KEEP,RESULT-NEW-1,SO-NEW-1/),
+    ).toBeTruthy();
+    expect(screen.getByText(/来源 RESULT-OLD-2/)).toBeTruthy();
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
   });
 
   it('fills a common prompt into the composer without sending immediately', async () => {

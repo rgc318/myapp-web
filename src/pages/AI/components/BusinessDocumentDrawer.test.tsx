@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from 'antd';
 import React from 'react';
 import { getAiBusinessDocumentDetail } from '@/services/myapp/ai';
@@ -59,6 +59,8 @@ describe('BusinessDocumentDrawer', () => {
             outstandingAmount: 200,
             paidAmount: 0,
             party: '客户 A',
+            snapshotAt: '2026-07-24 09:30:00',
+            snapshotSource: 'answer',
             transactionDate: '2026-07-18',
             type: 'sales_order',
           },
@@ -68,9 +70,18 @@ describe('BusinessDocumentDrawer', () => {
     );
 
     expect(await screen.findByText('煌星')).toBeTruthy();
-    expect(screen.getByText('客户 A')).toBeTruthy();
+    expect(screen.getByText('回答时数据')).toBeTruthy();
+    expect(screen.getByText('当前数据')).toBeTruthy();
+    expect(screen.getByText('2026-07-24 09:30:00')).toBeTruthy();
+    expect(screen.getAllByText('客户 A')).toHaveLength(2);
     expect(
       screen.getByRole('link', { name: /在业务模块打开/ }).getAttribute('href'),
     ).toBe('/sales/orders/SO-001');
+    const refreshButton = screen.getByRole<HTMLButtonElement>('button', {
+      name: /刷新当前数据/,
+    });
+    await waitFor(() => expect(refreshButton.disabled).toBe(false));
+    fireEvent.click(refreshButton);
+    await waitFor(() => expect(mockedGetDetail).toHaveBeenCalledTimes(2));
   });
 });

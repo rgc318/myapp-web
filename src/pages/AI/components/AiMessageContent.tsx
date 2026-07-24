@@ -12,9 +12,11 @@ import { ProCard } from '@ant-design/pro-components';
 import { Actions } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
 import { Alert, Button, Dropdown, Space, Tag, Typography } from 'antd';
+import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
 import {
   type AiBusinessDocumentResult,
+  type AiBusinessResultSet,
   type AiChatMessage,
   type AiCitation,
   resolveAiBusinessResultSet,
@@ -49,6 +51,7 @@ type Props = {
   onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
   onOpenProduct: (citation: AiCitation) => void;
+  onRefreshBusinessResult?: (resultSet: AiBusinessResultSet) => Promise<void>;
   onRetry?: () => void;
   onViewDiagnostics?: () => void;
   onViewRun?: () => void;
@@ -57,6 +60,12 @@ type Props = {
   runId?: string | null;
   streaming?: boolean;
 };
+
+function formatBusinessTime(value: unknown) {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : value;
+}
 
 function GenerationProgress({
   hasResults,
@@ -149,33 +158,44 @@ function CitationCard({
       }
     >
       {citation.type === 'product' ? (
-        <Space size={[8, 4]} wrap>
-          {citation.id ? <Tag>{citation.id}</Tag> : null}
-          {citation.data.specification ? (
-            <Tag>{String(citation.data.specification)}</Tag>
-          ) : null}
-          {citation.data.match_reason ? (
-            <Tag color="purple">{String(citation.data.match_reason)}</Tag>
-          ) : null}
-          {typeof citation.data.semantic_score === 'number' ? (
-            <Tag color="geekblue">
-              语义相关度{' '}
-              {Math.max(
-                0,
-                Math.min(
-                  100,
-                  Math.round(Number(citation.data.semantic_score) * 100),
-                ),
-              )}
-              %
-            </Tag>
-          ) : null}
-          <Typography.Text>
-            库存 {Number(citation.data.qty ?? 0)}{' '}
-            {String(citation.data.uom_display ?? citation.data.uom ?? '')}
-          </Typography.Text>
-          <Typography.Text>
-            参考价 {Number(citation.data.price ?? 0)}
+        <Space orientation="vertical" size={6} style={{ width: '100%' }}>
+          <Space size={[8, 4]} wrap>
+            <Tag color="blue">回答时数据</Tag>
+            {citation.id ? <Tag>{citation.id}</Tag> : null}
+            {citation.data.specification ? (
+              <Tag>{String(citation.data.specification)}</Tag>
+            ) : null}
+            {citation.data.match_reason ? (
+              <Tag color="purple">{String(citation.data.match_reason)}</Tag>
+            ) : null}
+            {typeof citation.data.semantic_score === 'number' ? (
+              <Tag color="geekblue">
+                语义相关度{' '}
+                {Math.max(
+                  0,
+                  Math.min(
+                    100,
+                    Math.round(Number(citation.data.semantic_score) * 100),
+                  ),
+                )}
+                %
+              </Tag>
+            ) : null}
+            <Typography.Text>
+              库存 {Number(citation.data.qty ?? 0)}{' '}
+              {String(citation.data.uom_display ?? citation.data.uom ?? '')}
+            </Typography.Text>
+            <Typography.Text>
+              参考价 {Number(citation.data.price ?? 0)}
+            </Typography.Text>
+          </Space>
+          <Typography.Text type="secondary">
+            查询时间：
+            {formatBusinessTime(citation.data.queried_at) ??
+              '历史记录未保存查询时间'}
+            {' · '}
+            公司：{String(citation.data.company ?? '未记录')}
+            {' · '}当前账号权限范围
           </Typography.Text>
         </Space>
       ) : citation.type === 'ai_draft' ? (
@@ -210,6 +230,11 @@ function CitationCard({
                   : '草稿已通过后端校验，可由当前用户确认执行。'
                 : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
           </Typography.Text>
+          {draft?.modified ? (
+            <Typography.Text type="secondary">
+              最近校验：{formatBusinessTime(draft.modified)}
+            </Typography.Text>
+          ) : null}
           {validation?.errors.map((error) => (
             <Typography.Text key={error} type="danger">
               {error}
@@ -294,6 +319,7 @@ export function AiMessageContent({
   onOpenBusinessDocument,
   onOpenDraftHistory,
   onOpenProduct,
+  onRefreshBusinessResult,
   onRetry,
   onViewDiagnostics,
   onViewRun,
@@ -321,6 +347,11 @@ export function AiMessageContent({
       {businessResultSet ? (
         <BusinessResultPanel
           onOpenDocument={onOpenBusinessDocument}
+          onRefresh={
+            onRefreshBusinessResult
+              ? () => onRefreshBusinessResult(businessResultSet)
+              : undefined
+          }
           resultSet={businessResultSet}
         />
       ) : null}

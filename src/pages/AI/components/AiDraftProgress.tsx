@@ -1,4 +1,5 @@
 import { Steps } from 'antd';
+import dayjs from 'dayjs';
 import React, { type ComponentProps } from 'react';
 import type { AiDraft } from '@/services/myapp/ai';
 
@@ -16,6 +17,11 @@ export function AiDraftProgress({
   const executed = draft.status === 'executed' && Boolean(draft.execution);
   const discarded = draft.status === 'discarded';
   const handedOff = draft.status === 'handed_off';
+  const modifiedAt = draft.modified
+    ? dayjs(draft.modified).isValid()
+      ? dayjs(draft.modified).format('YYYY-MM-DD HH:mm:ss')
+      : draft.modified
+    : null;
   const items: ComponentProps<typeof Steps>['items'] = [
     {
       content: dirty ? '有未保存修改' : `版本 ${draft.version} 已保存`,
@@ -28,7 +34,7 @@ export function AiDraftProgress({
         : dirty
           ? '保存后重新校验'
           : draft.validation.readyForHandoff
-            ? '后端校验通过'
+            ? `后端校验通过${modifiedAt ? ` · 最近校验 ${modifiedAt}` : ''}`
             : `${draft.validation.errors.length} 项需要处理`,
       status: conflict
         ? 'error'

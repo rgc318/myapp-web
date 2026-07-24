@@ -8,6 +8,7 @@ import {
   listAiConversations,
   listAiDrafts,
   listAiSelectableModels,
+  refreshAiBusinessResult,
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
   resolveAiScenario,
@@ -284,6 +285,9 @@ describe('AI domain service', () => {
         data: {
           schema_version: 'business-result-set-v1',
           result_type: 'business_documents',
+          permission_filtered: true,
+          queried_at: '2026-07-24 11:30:00',
+          snapshot_source: 'answer',
           scope: {
             company: 'rgc (Demo)',
             date_range: 'all',
@@ -293,6 +297,7 @@ describe('AI domain service', () => {
             sort_by: 'latest',
             min_amount: null,
             limit_per_group: 3,
+            exclude_cancelled: true,
           },
           groups: [
             {
@@ -300,7 +305,10 @@ describe('AI domain service', () => {
               label: '销售订单',
               requested_count: 3,
               returned_count: 1,
+              available_count: 5,
+              module_href: '/sales/orders',
               status: 'partial',
+              truncated: true,
             },
             {
               entity: 'sales_invoice',
@@ -331,6 +339,9 @@ describe('AI domain service', () => {
 
     expect(resultSet).toMatchObject({
       schemaVersion: 'business-result-set-v1',
+      permissionFiltered: true,
+      queriedAt: '2026-07-24 11:30:00',
+      snapshotSource: 'answer',
       scope: {
         company: 'rgc (Demo)',
         limitPerGroup: 3,
@@ -343,17 +354,116 @@ describe('AI domain service', () => {
       requestedCount: 3,
       returnedCount: 1,
       status: 'partial',
+      availableCount: 5,
+      moduleHref: '/sales/orders',
+      truncated: true,
     });
     expect(resultSet?.groups[0].items[0]).toMatchObject({
       id: 'SAL-ORD-1',
       documentStatus: 'submitted',
       amount: 2400,
       currency: 'CNY',
+      snapshotAt: '2026-07-24 11:30:00',
+      snapshotSource: 'answer',
     });
     expect(resultSet?.groups[1]).toMatchObject({
       entity: 'sales_invoice',
       returnedCount: 0,
       status: 'empty',
+    });
+  });
+
+  it('refreshes a business result without sending a model request', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        citations: [
+          {
+            type: 'business_result_set',
+            id: 'RESULT-REFRESHED',
+            label: '业务查询结果',
+            href: null,
+            data: {
+              schema_version: 'business-result-set-v1',
+              result_type: 'business_documents',
+              permission_filtered: true,
+              queried_at: '2026-07-24 12:00:00',
+              snapshot_source: 'refresh',
+              scope: {
+                company: 'rgc (Demo)',
+                date_range: 'all',
+                date_from: null,
+                date_to: null,
+                exclude_cancelled: true,
+                status_filter: 'all',
+                sort_by: 'latest',
+                min_amount: null,
+                limit_per_group: 3,
+              },
+              groups: [
+                {
+                  entity: 'sales_order',
+                  label: '销售订单',
+                  requested_count: 3,
+                  returned_count: 0,
+                  available_count: 0,
+                  module_href: '/sales/orders',
+                  status: 'empty',
+                  truncated: false,
+                },
+              ],
+            },
+          },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+    const original = resolveAiBusinessResultSet([
+      {
+        type: 'business_result_set',
+        id: 'RESULT-1',
+        label: '业务查询结果',
+        href: null,
+        data: {
+          schema_version: 'business-result-set-v1',
+          result_type: 'business_documents',
+          scope: {
+            company: 'rgc (Demo)',
+            date_range: 'all',
+            date_from: null,
+            date_to: null,
+            exclude_cancelled: true,
+            status_filter: 'all',
+            sort_by: 'latest',
+            min_amount: null,
+            limit_per_group: 3,
+          },
+          groups: [
+            { entity: 'sales_order', requested_count: 3 },
+          ],
+        },
+      },
+    ]);
+
+    const refreshed = await refreshAiBusinessResult(original!);
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'refresh_ai_business_result_v1',
+      {
+        result_set: expect.objectContaining({
+          groups: [{ entity: 'sales_order', requested_count: 3 }],
+          result_type: 'business_documents',
+          scope: expect.objectContaining({
+            company: 'rgc (Demo)',
+            exclude_cancelled: true,
+            limit_per_group: 3,
+          }),
+        }),
+      },
+    );
+    expect(refreshed.resultSet).toMatchObject({
+      queriedAt: '2026-07-24 12:00:00',
+      snapshotSource: 'refresh',
     });
   });
 

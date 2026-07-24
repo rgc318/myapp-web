@@ -1,7 +1,13 @@
-import { FileSearchOutlined } from '@ant-design/icons';
+import {
+  ExportOutlined,
+  FileSearchOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import type { ProColumns } from '@ant-design/pro-components';
 import { ProCard, ProTable } from '@ant-design/pro-components';
 import { Alert, Button, Space, Tabs, Tag, Typography } from 'antd';
+import dayjs from 'dayjs';
+import React, { useState } from 'react';
 import type {
   AiBusinessDocumentResult,
   AiBusinessResultGroup,
@@ -43,9 +49,39 @@ function groupNotice(group: AiBusinessResultGroup) {
     group.requestedCount !== null &&
     group.returnedCount < group.requestedCount
   ) {
-    return `${group.label}请求 ${group.requestedCount} 条，实际返回 ${group.returnedCount} 条。当前权限和筛选范围内没有更多记录。`;
+    return `${group.label}请求 ${group.requestedCount} 条，实际返回 ${group.returnedCount} 条。`;
   }
   return null;
+}
+
+function formatSnapshotTime(value: string | null) {
+  if (!value) return '历史结果未记录查询时间';
+  const parsed = dayjs(value);
+  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm:ss') : value;
+}
+
+function groupCoverageTags(group: AiBusinessResultGroup) {
+  return [
+    <Tag bordered={false} key="returned">
+      返回 {group.returnedCount} 条
+    </Tag>,
+    <Tag bordered={false} key="available">
+      {group.availableCount === null
+        ? '可见总量未知'
+        : `当前可见 ${group.availableCount} 条`}
+    </Tag>,
+    <Tag
+      bordered={false}
+      color={group.truncated === true ? 'warning' : undefined}
+      key="truncated"
+    >
+      {group.truncated === true
+        ? '结果已截断'
+        : group.truncated === false
+          ? '结果未截断'
+          : '截断状态未知'}
+    </Tag>,
+  ];
 }
 
 function buildColumns(
@@ -113,11 +149,15 @@ function buildColumns(
 
 export function BusinessResultPanel({
   onOpenDocument,
+  onRefresh,
   resultSet,
 }: {
   onOpenDocument?: (document: AiBusinessDocumentResult) => void;
+  onRefresh?: () => Promise<void>;
   resultSet: AiBusinessResultSet;
 }) {
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const columns = buildColumns(onOpenDocument);
   const scopeTags = [
     resultSet.scope.company
@@ -142,19 +182,52 @@ export function BusinessResultPanel({
           label: `每类最多 ${resultSet.scope.limitPerGroup} 条`,
         }
       : null,
+    resultSet.scope.minAmount !== null
+      ? {
+          key: 'amount',
+          label: `最低金额：${formatCurrencyValue(resultSet.scope.minAmount, 'CNY')}`,
+        }
+      : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
+
+  const refresh = async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshError(null);
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } catch (caught) {
+      setRefreshError(
+        caught instanceof Error ? caught.message : '当前业务数据刷新失败。',
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <ProCard
       extra={
-        <Typography.Text type="secondary">
-          共{' '}
-          {resultSet.groups.reduce(
-            (total, group) => total + group.returnedCount,
-            0,
-          )}{' '}
-          条
-        </Typography.Text>
+        <Space wrap>
+          <Typography.Text type="secondary">
+            共{' '}
+            {resultSet.groups.reduce(
+              (total, group) => total + group.returnedCount,
+              0,
+            )}{' '}
+            条
+          </Typography.Text>
+          {onRefresh ? (
+            <Button
+              icon={<ReloadOutlined />}
+              loading={refreshing}
+              onClick={() => void refresh()}
+              size="small"
+            >
+              刷新当前数据
+            </Button>
+          ) : null}
+        </Space>
       }
       size="small"
       title={
@@ -165,6 +238,31 @@ export function BusinessResultPanel({
       }
       variant="outlined"
     >
+      <Space
+        orientation="vertical"
+        size={4}
+        style={{ marginBottom: 12, width: '100%' }}
+      >
+        <Typography.Text strong>
+          {resultSet.snapshotSource === 'refresh'
+            ? '当前刷新数据'
+            : '回答时数据'}
+        </Typography.Text>
+        <Typography.Text type="secondary">
+          {resultSet.snapshotSource === 'refresh' ? '刷新时间' : '查询时间'}：
+          {formatSnapshotTime(resultSet.queriedAt)}
+        </Typography.Text>
+      </Space>
+      {refreshError ? (
+        <Alert
+          closable
+          onClose={() => setRefreshError(null)}
+          showIcon
+          style={{ marginBottom: 12 }}
+          title={refreshError}
+          type="error"
+        />
+      ) : null}
       <Space size={[6, 6]} style={{ marginBottom: 12 }} wrap>
         {scopeTags.map((tag) => (
           <Tag bordered={false} key={tag.key}>
@@ -172,7 +270,9 @@ export function BusinessResultPanel({
           </Tag>
         ))}
         <Tag bordered={false} color="success">
-          已按当前账号权限过滤
+          {resultSet.permissionFiltered
+            ? '已按当前账号权限过滤'
+            : '当前账号可见范围'}
         </Tag>
       </Space>
       <Tabs
@@ -181,6 +281,19 @@ export function BusinessResultPanel({
           return {
             children: (
               <Space orientation="vertical" size={12} style={{ width: '100%' }}>
+                <Space size={[6, 6]} wrap>
+                  {groupCoverageTags(group)}
+                  {group.moduleHref ? (
+                    <Button
+                      href={group.moduleHref}
+                      icon={<ExportOutlined />}
+                      size="small"
+                      type="link"
+                    >
+                      在业务模块查看完整结果
+                    </Button>
+                  ) : null}
+                </Space>
                 {notice ? (
                   <Alert
                     showIcon
