@@ -1181,7 +1181,7 @@ MYAPP_WEB_ENABLE_WATERMARK=
 
 `MYAPP_WEB_API_BASE_URL` 用于生产或非同域部署。默认留空，表示前端请求同域 `/api/method/...`。本地开发仍优先使用 Umi dev proxy 的 `MYAPP_WEB_PROXY_TARGET`。
 
-`MYAPP_WEB_ENABLE_WATERMARK` 控制页面水印。留空时本地 dev 默认关闭、生产构建默认开启；可显式设置 `true` / `false` 覆盖。水印内容为“用户名 / 日期 / 内部资料”。
+`MYAPP_WEB_ENABLE_WATERMARK` 控制页面水印。留空时本地 dev 默认关闭、生产构建默认开启；可显式设置 `true` / `false` 覆盖。水印内容为“用户名 / 日期 / 内部资料”。强度按路由分级：普通 AI 工作区低密度、低不透明度；AI 审计、用户管理、打印预览与打印历史使用更强水印；其他页面使用中等强度。新增高风险页面时应评估是否加入强水印路由，不得在页面局部自行关闭全局水印。
 
 ### 10.2 登录页停在正在加载资源
 
@@ -1547,17 +1547,18 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 AI Web 的信息架构、组件选型、状态与数据流、权限边界、异常恢复和验收门禁统一记录在 `AI_WEB_FRONTEND_DESIGN.zh-CN.md`。本节保留当前实现约定，新增或调整 AI 页面时必须同步核对该设计文档和后端 `AI_TECH_DESIGN.zh-CN.md`。
 
 - `/ai` 使用 Ant Design Pro 官方 `@ant-design/x` 组件体系实现企业 AI 工作台：`Conversations` 管理活跃/归档会话，`Bubble` 展示消息，`Sender` 负责发送和停止生成，`Welcome` / `Prompts` 提供能力入口，`Sources` / `Actions` 展示业务来源和反馈。
-- AI 消息正文使用 `@ant-design/x-markdown`；商品、订单、报表和草稿事实继续由结构化 citation 组件展示，不从 Markdown 或模型文本猜测业务字段。
+- AI 消息正文使用 `@ant-design/x-markdown`；商品、订单、报表和草稿事实继续由结构化 citation 组件展示，不从 Markdown 或模型文本猜测业务字段。Markdown 正文保持适合阅读的最大行宽，长 URL/连续字符允许换行，代码块和宽表格只在自身区域横向滚动，不得撑开消息气泡或工作台。
 - 单据查询使用版本化 `business-result-set-v1`：`src/services/myapp/ai.ts` 把结果集元数据和逐单据 citation 映射为 `AiBusinessResultSet`，页面按类型使用 `Tabs + ProTable` 展示，不再同时重复渲染业务来源列表、逐条卡片和 Markdown 明细清单。
 - 单据 citation 在模型首 Token 前已经到达时，页面必须立即展示表格并提示“业务结果已返回，正在生成摘要”；模型摘要放在结构化结果之后。
 - 页面只调用 `src/services/myapp/ai.ts` 和 Frappe AI Gateway，不得直接访问 AI Orchestrator、LiteLLM 或外部模型接口。官方 Chatbot 示例中的外部 Provider 配置不能复制到本项目运行代码。
 - Web 使用 `fetch + ReadableStream` 消费 POST + JWT SSE，不使用原生 `EventSource`。`Sender` 的停止按钮通过 `AbortController` 中断浏览器读取；中断后保留已接收内容，不自动重试以避免重复模型费用和重复 Run。
-- 普通聊天必须消费 `run_progress` 并在首段文本前展示上下文准备、模型处理阶段和客户端等待计时；首段到达后继续追加 `message_delta`。最终 Run 详情展示后端 `first_token_ms` 以及 `stream.delta_count / streamed_chars`，不能用浏览器总耗时冒充后端指标。
+- 普通聊天必须消费 `run_progress` 并在首段文本前展示上下文准备、模型处理阶段和客户端等待计时；首段到达后继续追加 `message_delta`。只有后端能力位允许高级诊断时，Run 详情才展示 `first_token_ms`、`stream.delta_count / streamed_chars`、模型、Token 和 trace；普通账号只展示状态、总耗时、权限范围和错误恢复，不能用浏览器总耗时冒充后端指标。
 - 工作台默认场景为 `auto`，发送前通过 Frappe `resolve_ai_scenario_v1` 解析实际业务路由，Web 不维护关键词规则；自动模式可以进入只读查询或四类草稿。历史消息保存的实际执行场景只用于审计，重新打开会话必须恢复 `auto`，不得把上一轮 `order_query` 等场景永久锁定到后续问题。
+- 场景与固定模型选择统一放入“高级设置” Drawer。所有用户都可以临时指定本次场景；固定模型选择器只在 Backend 返回 `canSelectFixedModel=true` 时展示，模型优先显示友好名称，alias 只作为治理补充。普通账号不能收到模型库存，也不能通过手工请求绕过 Backend 的 `model_alias` 权限校验。
 - 新会话必须允许通过 `RemoteLinkSelect doctype="Company"` 切换查询公司，默认值来自工作偏好；历史会话公司只读锁定，切换公司需要新建会话。
-- 会话重新打开后，后端会恢复受当前用户隔离的 Run 模型、Token、延迟、trace 和已提交反馈；页面不得只依赖最近一次内存状态。
+- 会话重新打开后，后端会恢复受当前用户隔离的 Run 状态、延迟和已提交反馈；模型、Token、首 Token、流式统计和 trace 只对具备高级诊断权限的账号返回。页面不得只依赖最近一次内存状态，也不得从缺失字段反推或伪造技术诊断。
 - 会话重新打开后还必须恢复其持久公司范围。工作偏好的默认公司只影响新会话；不得把后来修改的默认公司覆盖到已有会话请求中，否则后端会按跨公司上下文风险失败关闭。
-- 工作台默认使用会话侧栏和主对话区双栏布局；运行详情通过右侧 Drawer 展示生成状态、后端总耗时、首 Token、流式分块、Token 分解、Run、trace、工具执行和警告。停止或失败后只提供用户主动触发的重试，不自动重复产生模型费用。
+- 工作台默认使用会话侧栏和主对话区双栏布局；运行详情通过右侧 Drawer 默认展示生成状态、后端总耗时、权限范围、工具执行、警告和恢复动作。首 Token、流式分块、模型、Token 分解、Run 与 trace 只在后端授权的“高级诊断”中展示。停止或失败后只提供用户主动触发的重试，不自动重复产生模型费用。
 - AI 工作区的 PageContainer、ProComponents 自动插入的 `.ant-pro-grid-content` / `.ant-pro-grid-content-children`、children-container、workspace、main、messages 高度必须连续，所有 Flex 层保留 `min-height: 0`；PageContainer 固定为可视区扣除 56px 全局 Header。messages 使用 `overflow: hidden` 约束视口，滚动只归 Ant Design X `Bubble.List` 内部 scroll-box 所有，并显式让 list 根节点及 scroll-box 占满消息区高度。Header、上下文栏和 Sender 不参与压缩。
 - 四类结构化草稿（销售、采购、库存调整、商品建档）不能展示未校验的流式 JSON；等待阶段显示结构化生成和后端校验进度，完成后只展示通过同一业务校验契约的最终草稿或明确校验错误。
 - 面向用户的状态使用“受控业务查询”“等待首个 Token”“实时输出”等准确措辞，不使用“只读试运行”暗示查询功能不可用；正式写操作仍必须在业务页面由用户确认。

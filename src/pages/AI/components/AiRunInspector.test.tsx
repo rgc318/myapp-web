@@ -48,6 +48,7 @@ describe('AiRunInspector', () => {
           createdAt="2026-07-24 09:30:00"
           result={result}
           scenario="product_search"
+          showAdvancedDiagnostics
           status="completed"
           tools={[
             { name: 'search_products', resultCount: 3, status: 'completed' },
@@ -71,6 +72,27 @@ describe('AiRunInspector', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 3 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('hides technical diagnostics from ordinary workspace users', () => {
+    render(
+      <App>
+        <AiRunInspector
+          activeRunId="AI-RUN-1"
+          company="Demo Company"
+          result={result}
+          scenario="general"
+          status="completed"
+          tools={[]}
+          warnings={[]}
+        />
+      </App>,
+    );
+
+    expect(screen.getByText('已完成')).toBeTruthy();
+    expect(screen.queryByText('高级诊断')).toBeNull();
+    expect(screen.queryByText('erp-fast-chat')).toBeNull();
+    expect(screen.queryByText('trace-1')).toBeNull();
   });
 
   it('keeps a failed run visible and requires an explicit retry', () => {

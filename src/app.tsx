@@ -34,6 +34,51 @@ function getWatermarkContent(currentUser?: API.CurrentUser) {
   ].join(' / ');
 }
 
+export function getWatermarkProps(
+  pathname: string,
+  currentUser?: API.CurrentUser,
+) {
+  const content = getWatermarkContent(currentUser);
+  if (!content) return undefined;
+
+  const isAiWorkspace = pathname === '/ai' || pathname.startsWith('/ai/');
+  const isHighRisk =
+    pathname.startsWith('/administration/ai/audit') ||
+    pathname.startsWith('/administration/users') ||
+    pathname.startsWith('/printing/preview') ||
+    pathname.startsWith('/printing/history');
+
+  if (isAiWorkspace) {
+    return {
+      content,
+      fontColor: 'rgba(15, 23, 42, 0.045)',
+      fontSize: 14,
+      gapX: 300,
+      gapY: 220,
+      rotate: -18,
+    };
+  }
+  if (isHighRisk) {
+    return {
+      content,
+      fontColor: 'rgba(15, 23, 42, 0.13)',
+      fontSize: 16,
+      fontWeight: 500,
+      gapX: 160,
+      gapY: 150,
+      rotate: -22,
+    };
+  }
+  return {
+    content,
+    fontColor: 'rgba(15, 23, 42, 0.07)',
+    fontSize: 15,
+    gapX: 240,
+    gapY: 220,
+    rotate: -20,
+  };
+}
+
 /**
  * @see https://umijs.org/docs/api/runtime-config#getinitialstate
  * */
@@ -89,11 +134,10 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
         <AvatarDropdown>{avatarChildren}</AvatarDropdown>
       ),
     },
-    waterMarkProps: __MYAPP_WEB_ENABLE_WATERMARK__
-      ? {
-          content: getWatermarkContent(initialState?.currentUser),
-        }
-      : undefined,
+    waterMarkProps: getWatermarkProps(
+      history.location.pathname,
+      initialState?.currentUser,
+    ),
     footerRender: () =>
       history.location.pathname === '/ai' ? null : <Footer />,
     onPageChange: () => {

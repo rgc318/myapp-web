@@ -130,6 +130,35 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     min-width: 0;
     overflow: hidden;
   `,
+  markdown: css`
+    line-height: 1.75;
+    max-width: 80ch;
+    overflow-wrap: anywhere;
+    width: 100%;
+    word-break: break-word;
+
+    p,
+    li {
+      text-wrap: pretty;
+    }
+
+    a {
+      overflow-wrap: anywhere;
+    }
+
+    pre {
+      max-width: 100%;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    table {
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+  `,
   messageBody: css`
     display: flex;
     flex-direction: column;
@@ -174,6 +203,8 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
 
     .ant-bubble-content {
       border-radius: 18px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
   `,
   messageHistoryBar: css`

@@ -238,16 +238,22 @@ jest.mock('@/services/myapp/ai', () => ({
   listAiConversations: jest
     .fn()
     .mockResolvedValue({ items: [], pendingDraftTotal: 0, total: 0 }),
-  listAiSelectableModels: jest.fn().mockResolvedValue([
-    {
-      capability: 'fast_chat',
-      displayName: 'opencode-glm-5.2',
-      modelAlias: 'opencode-glm-5.2',
-      status: 'active',
-      supportsJsonSchema: false,
-      supportsStreaming: true,
+  listAiSelectableModels: jest.fn().mockResolvedValue({
+    capabilities: {
+      canSelectFixedModel: true,
+      canViewAdvancedDiagnostics: true,
     },
-  ]),
+    models: [
+      {
+        capability: 'fast_chat',
+        displayName: 'GLM 5.2',
+        modelAlias: 'opencode-glm-5.2',
+        status: 'active',
+        supportsJsonSchema: false,
+        supportsStreaming: true,
+      },
+    ],
+  }),
   listAiDraftVersions: jest.fn(),
   prepareAiDraftHandoff: jest.fn(),
   renameAiConversation: jest.fn(),
@@ -263,6 +269,7 @@ const {
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
+  listAiSelectableModels,
   renameAiConversation,
   resolveAiScenario,
   refreshAiBusinessResult,
@@ -277,6 +284,22 @@ describe('AI workspace page', () => {
       items: [],
       pendingDraftTotal: 0,
       total: 0,
+    });
+    listAiSelectableModels.mockResolvedValue({
+      capabilities: {
+        canSelectFixedModel: true,
+        canViewAdvancedDiagnostics: true,
+      },
+      models: [
+        {
+          capability: 'fast_chat',
+          displayName: 'GLM 5.2',
+          modelAlias: 'opencode-glm-5.2',
+          status: 'active',
+          supportsJsonSchema: false,
+          supportsStreaming: true,
+        },
+      ],
     });
     renameAiConversation.mockResolvedValue({
       company: 'Demo Company',
@@ -1220,13 +1243,17 @@ describe('AI workspace page', () => {
   it('allows the user to select an active LiteLLM model', async () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
+    await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 模型' }));
-    const modelOption = (await screen.findAllByText('opencode-glm-5.2'))
+    const modelOption = (
+      await screen.findAllByText('GLM 5.2 · opencode-glm-5.2')
+    )
       .map((node) => node.closest('.ant-select-item-option'))
       .find((node): node is HTMLElement => node instanceof HTMLElement);
     expect(modelOption).toBeTruthy();
     fireEvent.click(modelOption as HTMLElement);
-    await screen.findByText('固定模型：opencode-glm-5.2');
+    await screen.findByText('固定模型：GLM 5.2');
     fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
       target: { value: '你好' },
     });
@@ -1242,6 +1269,23 @@ describe('AI workspace page', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it('keeps fixed model inventory hidden for ordinary workspace users', async () => {
+    listAiSelectableModels.mockResolvedValue({
+      capabilities: {
+        canSelectFixedModel: false,
+        canViewAdvancedDiagnostics: false,
+      },
+      models: [],
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
+    expect(await screen.findByText('模型由策略自动选择')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'AI 模型' })).toBeNull();
+    expect(screen.queryByText('opencode-glm-5.2')).toBeNull();
   });
 
   it('shows the upstream progress phase before the first text delta', async () => {
@@ -1355,6 +1399,7 @@ describe('AI workspace page', () => {
   it('uses an explicit draft scenario once and auto-routes the next message', async () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 场景' }));
     fireEvent.click(await screen.findByText('商品建档草稿'));
     fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {

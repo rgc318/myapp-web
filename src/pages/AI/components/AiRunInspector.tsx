@@ -80,6 +80,7 @@ export function AiRunInspector({
   onRetry,
   result,
   scenario,
+  showAdvancedDiagnostics = false,
   status,
   tools,
   warnings,
@@ -93,6 +94,7 @@ export function AiRunInspector({
   onRetry?: () => void;
   result: AiChatResult | null;
   scenario?: AiScenario | null;
+  showAdvancedDiagnostics?: boolean;
   status: AiRunDisplayStatus;
   tools: AiToolProgress[];
   warnings: string[];
@@ -157,81 +159,83 @@ export function AiRunInspector({
         />
       </ProCard>
 
-      <Collapse
-        items={[
-          {
-            children: (
-              <Descriptions
-                column={1}
-                size="small"
-                items={[
-                  {
-                    key: 'modelAlias',
-                    label: '能力模型',
-                    children: result?.modelAlias || '等待首次调用',
-                  },
-                  {
-                    key: 'model',
-                    label: '实际模型',
-                    children: result?.model || '-',
-                  },
-                  {
-                    key: 'firstToken',
-                    label: '首 Token',
-                    children: durationText(run?.firstTokenMs),
-                  },
-                  {
-                    key: 'stream',
-                    label: '输出方式',
-                    children: result
-                      ? result.stream.deltaCount > 0
-                        ? [
-                            '流式',
-                            result.stream.deltaCount,
-                            '段 ·',
-                            result.stream.streamedChars,
-                            '字符',
-                          ].join(' ')
-                        : '结构化结果完成后展示'
-                      : '-',
-                  },
-                  {
-                    key: 'tokens',
-                    label: 'Token',
-                    children: result
-                      ? `${result.usage.totalTokens}（输入 ${result.usage.promptTokens} / 输出 ${result.usage.completionTokens} / 推理 ${result.usage.reasoningTokens}）`
-                      : '0',
-                  },
-                  {
-                    key: 'run',
-                    label: 'Run',
-                    children: (
-                      <Typography.Text copyable={Boolean(runId)} ellipsis>
-                        {runId || '-'}
-                      </Typography.Text>
-                    ),
-                  },
-                  {
-                    key: 'trace',
-                    label: 'Trace',
-                    children: (
-                      <Typography.Text
-                        copyable={Boolean(result?.traceId)}
-                        ellipsis
-                      >
-                        {result?.traceId || '-'}
-                      </Typography.Text>
-                    ),
-                  },
-                ]}
-              />
-            ),
-            key: 'advanced',
-            label: '高级诊断',
-          },
-        ]}
-        size="small"
-      />
+      {showAdvancedDiagnostics ? (
+        <Collapse
+          items={[
+            {
+              children: (
+                <Descriptions
+                  column={1}
+                  size="small"
+                  items={[
+                    {
+                      key: 'modelAlias',
+                      label: '能力模型',
+                      children: result?.modelAlias || '等待首次调用',
+                    },
+                    {
+                      key: 'model',
+                      label: '实际模型',
+                      children: result?.model || '-',
+                    },
+                    {
+                      key: 'firstToken',
+                      label: '首 Token',
+                      children: durationText(run?.firstTokenMs),
+                    },
+                    {
+                      key: 'stream',
+                      label: '输出方式',
+                      children: result
+                        ? result.stream.deltaCount > 0
+                          ? [
+                              '流式',
+                              result.stream.deltaCount,
+                              '段 ·',
+                              result.stream.streamedChars,
+                              '字符',
+                            ].join(' ')
+                          : '结构化结果完成后展示'
+                        : '-',
+                    },
+                    {
+                      key: 'tokens',
+                      label: 'Token',
+                      children: result
+                        ? `${result.usage.totalTokens}（输入 ${result.usage.promptTokens} / 输出 ${result.usage.completionTokens} / 推理 ${result.usage.reasoningTokens}）`
+                        : '0',
+                    },
+                    {
+                      key: 'run',
+                      label: 'Run',
+                      children: (
+                        <Typography.Text copyable={Boolean(runId)} ellipsis>
+                          {runId || '-'}
+                        </Typography.Text>
+                      ),
+                    },
+                    {
+                      key: 'trace',
+                      label: 'Trace',
+                      children: (
+                        <Typography.Text
+                          copyable={Boolean(result?.traceId)}
+                          ellipsis
+                        >
+                          {result?.traceId || '-'}
+                        </Typography.Text>
+                      ),
+                    },
+                  ]}
+                />
+              ),
+              key: 'advanced',
+              label: '高级诊断',
+            },
+          ]}
+          size="small"
+        />
+      ) : null}
 
       {tools.length ? (
         <ProCard size="small" title="业务工具" variant="outlined">

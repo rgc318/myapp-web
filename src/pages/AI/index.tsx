@@ -10,6 +10,7 @@ import {
   RobotOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
+  SettingOutlined,
   ShoppingCartOutlined,
   ThunderboltOutlined,
   UserOutlined,
@@ -57,6 +58,8 @@ import {
   type AiDraft,
   type AiRunSummary,
   type AiScenario,
+  type AiSelectableModel,
+  type AiWorkspaceCapabilities,
   archiveAiConversation,
   discardAiDraft,
   generateAiInventoryAdjustmentDraft,
@@ -289,9 +292,14 @@ export default function AiPage() {
     modelAlias: string | null;
     scenario: AiScenario;
   } | null>(null);
-  const [selectableModels, setSelectableModels] = useState<
-    Awaited<ReturnType<typeof listAiSelectableModels>>
-  >([]);
+  const [selectableModels, setSelectableModels] = useState<AiSelectableModel[]>(
+    [],
+  );
+  const [workspaceCapabilities, setWorkspaceCapabilities] =
+    useState<AiWorkspaceCapabilities>({
+      canSelectFixedModel: false,
+      canViewAdvancedDiagnostics: false,
+    });
   const [modelsLoading, setModelsLoading] = useState(false);
   const [selectedModelAlias, setSelectedModelAlias] = useState<string | null>(
     null,
@@ -313,6 +321,7 @@ export default function AiPage() {
     null,
   );
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
+  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<AiConversation | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const [renaming, setRenaming] = useState(false);
@@ -333,6 +342,9 @@ export default function AiPage() {
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
     : selectedCompany || defaultCompany;
+  const selectedModel = selectedModelAlias
+    ? selectableModels.find((model) => model.modelAlias === selectedModelAlias)
+    : null;
 
   const setComposerDraft = useCallback(
     (value: string, targetConversationId?: string | null) => {
@@ -381,17 +393,26 @@ export default function AiPage() {
     let active = true;
     setModelsLoading(true);
     void listAiSelectableModels()
-      .then((models) => {
+      .then(({ capabilities, models }) => {
         if (!active) return;
+        setWorkspaceCapabilities(capabilities);
         setSelectableModels(models);
         setSelectedModelAlias((current) =>
-          current && models.some((model) => model.modelAlias === current)
+          capabilities.canSelectFixedModel &&
+          current &&
+          models.some((model) => model.modelAlias === current)
             ? current
             : null,
         );
       })
       .catch(() => {
-        if (active) setSelectableModels([]);
+        if (active) {
+          setSelectableModels([]);
+          setWorkspaceCapabilities({
+            canSelectFixedModel: false,
+            canViewAdvancedDiagnostics: false,
+          });
+        }
       })
       .finally(() => {
         if (active) setModelsLoading(false);
@@ -1596,37 +1617,23 @@ export default function AiPage() {
             </div>
             <div className={styles.contextBar}>
               <Space wrap>
-                <Select
-                  aria-label="AI 场景"
-                  disabled={loading}
-                  onChange={setScenario}
-                  options={SCENARIO_OPTIONS}
-                  value={scenario}
-                />
-                <Select
-                  aria-label="AI 模型"
-                  loading={modelsLoading}
-                  onChange={(value) =>
-                    setSelectedModelAlias(value === 'auto' ? null : value)
-                  }
-                  optionFilterProp="label"
-                  options={[
-                    { label: '自动选择（策略）', value: 'auto' },
-                    ...selectableModels.map((model) => ({
-                      label: model.modelAlias,
-                      value: model.modelAlias,
-                    })),
-                  ]}
-                  showSearch
-                  style={{ minWidth: 240 }}
-                  value={selectedModelAlias ?? 'auto'}
-                />
+                <Tag color={scenario === 'auto' ? 'processing' : 'blue'}>
+                  {SCENARIO_OPTIONS.find((option) => option.value === scenario)
+                    ?.label ?? '智能模式'}
+                  {scenario !== 'auto' ? ' · 仅本次发送' : ''}
+                </Tag>
                 {selectedModelAlias ? (
-                  <Tag color="purple">固定模型：{selectedModelAlias}</Tag>
+                  <Tag color="purple">
+                    固定模型：{selectedModel?.displayName ?? selectedModelAlias}
+                  </Tag>
                 ) : null}
-                {scenario !== 'auto' ? (
-                  <Tag color="blue">仅本次发送</Tag>
-                ) : null}
+                <Button
+                  icon={<SettingOutlined />}
+                  onClick={() => setAdvancedSettingsOpen(true)}
+                  size="small"
+                >
+                  高级设置
+                </Button>
                 {conversationId && effectiveCompany ? (
                   <Tag
                     color={
@@ -1835,6 +1842,72 @@ export default function AiPage() {
             </Spin>
           </Space>
         </Drawer>
+        <Drawer
+          onClose={() => setAdvancedSettingsOpen(false)}
+          open={advancedSettingsOpen}
+          title="AI 高级设置"
+          size={420}
+        >
+          <Space orientation="vertical" size={20} style={{ width: '100%' }}>
+            <Alert
+              description="默认智能模式会在每次发送前由 Frappe 根据问题识别业务场景。固定场景只影响下一次发送，不会改变会话权限或公司范围。"
+              showIcon
+              title="保持智能模式更适合日常使用"
+              type="info"
+            />
+            <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+              <Typography.Text strong>本次业务场景</Typography.Text>
+              <Select
+                aria-label="AI 场景"
+                disabled={loading}
+                onChange={setScenario}
+                options={SCENARIO_OPTIONS}
+                style={{ width: '100%' }}
+                value={scenario}
+              />
+              <Typography.Text type="secondary">
+                发送开始后自动恢复智能模式，避免固定场景影响后续问题。
+              </Typography.Text>
+            </Space>
+            {workspaceCapabilities.canSelectFixedModel ? (
+              <Space orientation="vertical" size={8} style={{ width: '100%' }}>
+                <Typography.Text strong>运行模型</Typography.Text>
+                <Select
+                  aria-label="AI 模型"
+                  disabled={loading}
+                  loading={modelsLoading}
+                  onChange={(value) =>
+                    setSelectedModelAlias(value === 'auto' ? null : value)
+                  }
+                  optionFilterProp="label"
+                  options={[
+                    { label: '自动选择（已发布策略）', value: 'auto' },
+                    ...selectableModels.map((model) => ({
+                      label:
+                        model.displayName === model.modelAlias
+                          ? model.displayName
+                          : `${model.displayName} · ${model.modelAlias}`,
+                      value: model.modelAlias,
+                    })),
+                  ]}
+                  showSearch
+                  style={{ width: '100%' }}
+                  value={selectedModelAlias ?? 'auto'}
+                />
+                <Typography.Text type="secondary">
+                  友好名称优先显示，技术 alias 仅用于治理人员核对。
+                </Typography.Text>
+              </Space>
+            ) : (
+              <Alert
+                description="当前账号使用已发布模型策略，浏览器不会获得内部模型清单或提交固定模型覆盖。"
+                showIcon
+                title="模型由策略自动选择"
+                type="success"
+              />
+            )}
+          </Space>
+        </Drawer>
         <BusinessDocumentDrawer
           document={businessDocument}
           onClose={() => setBusinessDocument(null)}
@@ -1881,6 +1954,9 @@ export default function AiPage() {
               }
               result={inspectedResult}
               scenario={inspectedMessage?.scenario}
+              showAdvancedDiagnostics={
+                workspaceCapabilities.canViewAdvancedDiagnostics
+              }
               status={inspectedStatus}
               tools={inspectedTools}
               warnings={inspectedWarnings}

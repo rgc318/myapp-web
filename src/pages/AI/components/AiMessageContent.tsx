@@ -366,7 +366,10 @@ export function AiMessageContent({
           {businessResultSet && content ? (
             <Typography.Text strong>AI 摘要</Typography.Text>
           ) : null}
-          <XMarkdown streaming={streaming ? { hasNextChunk: true } : undefined}>
+          <XMarkdown
+            className={styles.markdown}
+            streaming={streaming ? { hasNextChunk: true } : undefined}
+          >
             {content}
           </XMarkdown>
         </div>

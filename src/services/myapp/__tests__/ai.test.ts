@@ -225,6 +225,10 @@ describe('AI domain service', () => {
   it('maps conversation list pagination', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
+        capabilities: {
+          can_select_fixed_model: true,
+          can_view_advanced_diagnostics: true,
+        },
         items: [
           {
             name: 'AI-CONV-1',
@@ -285,6 +289,10 @@ describe('AI domain service', () => {
   it('maps user-selectable active model aliases', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
+        capabilities: {
+          can_select_fixed_model: true,
+          can_view_advanced_diagnostics: true,
+        },
         items: [
           {
             capability: 'fast_chat',
@@ -305,7 +313,11 @@ describe('AI domain service', () => {
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'list_ai_selectable_models_v1',
     );
-    expect(result[0]).toMatchObject({
+    expect(result.capabilities).toEqual({
+      canSelectFixedModel: true,
+      canViewAdvancedDiagnostics: true,
+    });
+    expect(result.models[0]).toMatchObject({
       displayName: 'GLM 5.2',
       modelAlias: 'opencode-glm-5.2',
       supportsStreaming: true,

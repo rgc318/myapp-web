@@ -31,6 +31,16 @@ export type AiSelectableModel = {
   supportsStreaming: boolean;
 };
 
+export type AiWorkspaceCapabilities = {
+  canSelectFixedModel: boolean;
+  canViewAdvancedDiagnostics: boolean;
+};
+
+export type AiWorkspaceOptions = {
+  capabilities: AiWorkspaceCapabilities;
+  models: AiSelectableModel[];
+};
+
 export type AiDraft = {
   company: string | null;
   conversationId: string | null;
@@ -808,13 +818,21 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
   };
 }
 
-export async function listAiSelectableModels(): Promise<AiSelectableModel[]> {
+export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'list_ai_selectable_models_v1',
   );
   const data = readObject(result.data);
-  return Array.isArray(data.items)
-    ? data.items.map((value) => {
+  const capabilities = readObject(data.capabilities);
+  return {
+    capabilities: {
+      canSelectFixedModel: Boolean(capabilities.can_select_fixed_model),
+      canViewAdvancedDiagnostics: Boolean(
+        capabilities.can_view_advanced_diagnostics,
+      ),
+    },
+    models: Array.isArray(data.items)
+      ? data.items.map((value) => {
         const row = readObject(value);
         return {
           capability: String(row.capability ?? ''),
@@ -825,7 +843,8 @@ export async function listAiSelectableModels(): Promise<AiSelectableModel[]> {
           supportsStreaming: Boolean(row.supports_streaming),
         };
       })
-    : [];
+      : [],
+  };
 }
 
 export async function listAiConversations(params?: {
