@@ -553,7 +553,7 @@ export async function getAiBusinessDocumentDetail(
   };
 }
 
-function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
+export function mapAiDraft(value: unknown): AiDraft {
   const row = readObject(value);
   const validation = readObject(row.validation);
   const execution = readObject(row.execution);
@@ -610,12 +610,22 @@ function mapSalesOrderDraft(value: unknown): AiSalesOrderDraft {
   };
 }
 
+export function resolveAiDraftCitation(citation: AiCitation): AiDraft | null {
+  if (citation.type !== 'ai_draft') return null;
+  const draft = mapAiDraft({
+    ...citation.data,
+    name: citation.data.name ?? citation.id,
+    title: citation.data.title ?? citation.label,
+  });
+  return draft.name ? draft : null;
+}
+
 export async function getAiDraft(draftId: string): Promise<AiDraft> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'get_ai_draft_v1',
     { draft_id: draftId },
   );
-  return mapSalesOrderDraft(result.data);
+  return mapAiDraft(result.data);
 }
 
 export async function listAiDrafts(params: {
@@ -638,7 +648,7 @@ export async function listAiDrafts(params: {
   const data = readObject(result.data);
   return {
     items: Array.isArray(data.items)
-      ? data.items.map(mapSalesOrderDraft)
+      ? data.items.map(mapAiDraft)
       : [],
     total: toNumber(readObject(data.pagination).total),
   };
@@ -858,7 +868,7 @@ export async function generateAiSalesOrderDraft(payload: {
     },
   );
   const data = readObject(result.data);
-  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+  return { ...mapChatResult(data), draft: mapAiDraft(data.draft) };
 }
 
 export async function generateAiPurchaseOrderDraft(payload: {
@@ -877,7 +887,7 @@ export async function generateAiPurchaseOrderDraft(payload: {
     },
   );
   const data = readObject(result.data);
-  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+  return { ...mapChatResult(data), draft: mapAiDraft(data.draft) };
 }
 
 export async function generateAiInventoryAdjustmentDraft(payload: {
@@ -898,7 +908,7 @@ export async function generateAiInventoryAdjustmentDraft(payload: {
     },
   );
   const data = readObject(result.data);
-  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+  return { ...mapChatResult(data), draft: mapAiDraft(data.draft) };
 }
 
 export async function resolveAiScenario(content: string): Promise<AiScenario> {
@@ -928,7 +938,7 @@ export async function generateAiProductSetupDraft(payload: {
     },
   );
   const data = readObject(result.data);
-  return { ...mapChatResult(data), draft: mapSalesOrderDraft(data.draft) };
+  return { ...mapChatResult(data), draft: mapAiDraft(data.draft) };
 }
 
 export async function prepareAiDraftHandoff(
@@ -966,7 +976,7 @@ export async function executeAiDraft(
   const data = readObject(result.data);
   const execution = readObject(data.execution);
   return {
-    draft: mapSalesOrderDraft(data.draft),
+    draft: mapAiDraft(data.draft),
     execution: {
       executedAt:
         typeof execution.executed_at === 'string'
@@ -1010,7 +1020,7 @@ export async function updateAiDraft(
         },
       },
     ).catch(translateAiDraftMutationError);
-  return mapSalesOrderDraft(result.data);
+  return mapAiDraft(result.data);
 }
 
 export async function listAiDraftVersions(

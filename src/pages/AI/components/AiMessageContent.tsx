@@ -17,8 +17,10 @@ import {
   type AiChatMessage,
   type AiCitation,
   resolveAiBusinessResultSet,
+  resolveAiDraftCitation,
 } from '@/services/myapp/ai';
 import { useAiWorkspaceStyles } from '../styles';
+import { AiDraftCompactSummary } from './AiDraftCompactSummary';
 import { resolveAiFailureRecovery } from './ai-failure';
 import { BusinessResultPanel } from './BusinessResultPanel';
 
@@ -53,10 +55,6 @@ type Props = {
   runId?: string | null;
   streaming?: boolean;
 };
-
-function draftValidation(citation: AiCitation) {
-  return citation.data.validation as Record<string, unknown> | undefined;
-}
 
 function GenerationProgress({
   hasResults,
@@ -114,12 +112,10 @@ function CitationCard({
   | 'onOpenDraftHistory'
   | 'onOpenProduct'
 > & { citation: AiCitation }) {
-  const validation = draftValidation(citation);
-  const execution = citation.data.execution as
-    | Record<string, unknown>
-    | undefined;
-  const targetName = String(execution?.target_name ?? '');
-  const targetDoctype = String(execution?.target_doctype ?? '');
+  const draft = resolveAiDraftCitation(citation);
+  const validation = draft?.validation;
+  const targetName = draft?.execution?.targetName ?? '';
+  const targetDoctype = draft?.execution?.targetDoctype ?? '';
   const targetHref =
     targetDoctype === 'Sales Order'
       ? `/sales/orders/${encodeURIComponent(targetName)}`
@@ -183,45 +179,44 @@ function CitationCard({
       ) : citation.type === 'ai_draft' ? (
         <Space orientation="vertical" size={8}>
           <Space wrap>
-            <Tag>版本 {Number(citation.data.version ?? 1)}</Tag>
+            <Tag>版本 {draft?.version ?? 1}</Tag>
             <Tag
               color={
-                citation.data.status === 'executed'
+                draft?.status === 'executed'
                   ? 'success'
-                  : citation.data.status === 'draft'
+                  : draft?.status === 'draft'
                     ? 'blue'
                     : 'default'
               }
             >
-              {citation.data.status === 'executed'
+              {draft?.status === 'executed'
                 ? '已执行'
-                : citation.data.status === 'discarded'
+                : draft?.status === 'discarded'
                   ? '已放弃'
-                  : citation.data.status === 'handed_off'
+                  : draft?.status === 'handed_off'
                     ? '已进入业务编辑器'
                     : '待复核'}
             </Tag>
           </Space>
+          {draft ? <AiDraftCompactSummary draft={draft} /> : null}
           <Typography.Text>
-            {citation.data.status === 'executed'
+            {draft?.status === 'executed'
               ? `已创建正式业务对象 ${targetName || '-'}。`
-              : validation?.ready_for_handoff
-                ? citation.data.draft_type === 'inventory_adjustment'
+              : validation?.readyForHandoff
+                ? draft?.draftType === 'inventory_adjustment'
                   ? '草稿已通过实时库存校验，可由当前用户确认执行。'
                   : '草稿已通过后端校验，可由当前用户确认执行。'
                 : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
           </Typography.Text>
-          {Array.isArray(validation?.errors)
-            ? validation.errors.map((error) => (
-                <Typography.Text key={String(error)} type="danger">
-                  {String(error)}
-                </Typography.Text>
-              ))
-            : null}
+          {validation?.errors.map((error) => (
+            <Typography.Text key={error} type="danger">
+              {error}
+            </Typography.Text>
+          ))}
           <Space wrap>
-            {citation.data.status === 'draft' ? (
+            {draft?.status === 'draft' ? (
               <Button onClick={() => onEditDraft(citation)} type="primary">
-                {validation?.ready_for_handoff ? '复核并执行' : '完善草稿'}
+                {validation?.readyForHandoff ? '复核并执行' : '完善草稿'}
               </Button>
             ) : null}
             {targetHref && targetName ? (
@@ -231,11 +226,10 @@ function CitationCard({
               menu={{
                 items: [
                   { key: 'history', label: '版本历史' },
-                  ...(citation.data.status === 'draft' &&
-                  validation?.ready_for_handoff
+                  ...(draft?.status === 'draft' && validation?.readyForHandoff
                     ? [{ key: 'handoff', label: '在业务编辑器继续' }]
                     : []),
-                  ...(citation.data.status === 'draft'
+                  ...(draft?.status === 'draft'
                     ? [{ danger: true, key: 'discard', label: '放弃草稿' }]
                     : []),
                 ],

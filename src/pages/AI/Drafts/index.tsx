@@ -34,6 +34,7 @@ import {
   restoreAiDraftVersion,
 } from '@/services/myapp/ai';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import { AiDraftCompactSummary } from '../components/AiDraftCompactSummary';
 import { AiDraftEditorModal } from '../components/AiDraftEditorModal';
 import {
   AiDraftBusinessReview,
@@ -167,6 +168,12 @@ export default function AiDraftsPage() {
       renderText: (value) => DRAFT_TYPE[value as AiDraft['draftType']] ?? value,
     },
     {
+      title: '业务摘要',
+      search: false,
+      width: 440,
+      render: (_, row) => <AiDraftCompactSummary draft={row} />,
+    },
+    {
       dataIndex: 'status',
       title: '状态',
       valueType: 'select',
@@ -275,7 +282,7 @@ export default function AiDraftsPage() {
           return { data: result.items, success: true, total: result.total };
         }}
         rowKey="name"
-        scroll={{ x: 1350 }}
+        scroll={{ x: 1800 }}
         search={{ labelWidth: 'auto' }}
       />
 

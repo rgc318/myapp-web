@@ -9,6 +9,7 @@ import {
   listAiDrafts,
   listAiSelectableModels,
   resolveAiBusinessResultSet,
+  resolveAiDraftCitation,
   resolveAiScenario,
   restoreAiDraftVersion,
   sendAiChatMessage,
@@ -486,6 +487,44 @@ describe('AI domain service', () => {
       draftType: 'purchase_order',
       version: 3,
       validation: { readyForHandoff: false, errors: ['缺少商品'] },
+    });
+  });
+
+  it('normalizes a full ai_draft citation into the shared draft domain model', () => {
+    const draft = resolveAiDraftCitation({
+      data: {
+        draft_type: 'inventory_adjustment',
+        payload: {
+          items: [{ item_code: 'SKU-001', qty_delta: 5 }],
+          warehouse: 'Stores - RD',
+        },
+        status: 'draft',
+        validation: {
+          errors: [],
+          ready_for_handoff: true,
+          warnings: ['请复核估值'],
+        },
+        version: 2,
+      },
+      href: null,
+      id: 'AI-DRAFT-2',
+      label: '库存调整草稿',
+      type: 'ai_draft',
+    });
+
+    expect(draft).toMatchObject({
+      draftType: 'inventory_adjustment',
+      name: 'AI-DRAFT-2',
+      payload: {
+        items: [{ item_code: 'SKU-001', qty_delta: 5 }],
+        warehouse: 'Stores - RD',
+      },
+      title: '库存调整草稿',
+      validation: {
+        readyForHandoff: true,
+        warnings: ['请复核估值'],
+      },
+      version: 2,
     });
   });
 

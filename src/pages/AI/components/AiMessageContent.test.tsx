@@ -91,6 +91,12 @@ describe('AiMessageContent', () => {
           {
             data: {
               draft_type: 'product_setup',
+              payload: {
+                item_name: '迪莫',
+                stock_uom: 'Nos',
+                stock_uom_display: '件',
+                standard_selling_rate: 5,
+              },
               status: 'draft',
               validation: { errors: [], ready_for_handoff: true, warnings: [] },
               version: 2,
@@ -110,6 +116,8 @@ describe('AiMessageContent', () => {
     expect(onEditDraft).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'AI-DRAFT-1' }),
     );
+    expect(screen.getByText('迪莫')).toBeTruthy();
+    expect(screen.getByText('标准 5.00 元')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认执行' })).toBeNull();
   });
 
