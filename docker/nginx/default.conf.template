@@ -6,6 +6,11 @@ server {
   root /usr/share/nginx/html;
   index index.html;
 
+  # Docker service IPs change when the upstream container is recreated. Resolve
+  # the service name through Docker DNS instead of pinning the startup address.
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  set $myapp_web_upstream ${MYAPP_WEB_UPSTREAM};
+
   charset utf-8;
   client_max_body_size 50m;
 
@@ -25,7 +30,7 @@ server {
   }
 
   location /api/method/ {
-    proxy_pass ${MYAPP_WEB_UPSTREAM};
+    proxy_pass $myapp_web_upstream;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header Host $host;
@@ -42,7 +47,7 @@ server {
   }
 
   location ~ ^/(?:private/)?files/ {
-    proxy_pass ${MYAPP_WEB_UPSTREAM};
+    proxy_pass $myapp_web_upstream;
     proxy_http_version 1.1;
     proxy_set_header Connection "";
     proxy_set_header Host $host;
