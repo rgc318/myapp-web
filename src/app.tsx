@@ -34,10 +34,7 @@ function getWatermarkContent(currentUser?: API.CurrentUser) {
   ].join(' / ');
 }
 
-export function getWatermarkProps(
-  pathname: string,
-  currentUser?: API.CurrentUser,
-) {
+function getWatermarkProps(pathname: string, currentUser?: API.CurrentUser) {
   const content = getWatermarkContent(currentUser);
   if (!content) return undefined;
 
