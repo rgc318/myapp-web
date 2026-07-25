@@ -68,9 +68,8 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   emptyState: css`
     align-items: center;
     display: flex;
-    flex: 1 1 0;
+    flex: 1;
     flex-direction: column;
-    height: 0;
     justify-content: center;
     margin: 0 auto;
     max-width: 820px;
@@ -173,10 +172,9 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
       ${token.colorBgLayout};
     box-sizing: border-box;
     display: flex;
-    flex: 1 1 0;
+    flex: 1;
     flex-direction: column;
     align-items: center;
-    height: 0;
     justify-content: center;
     min-height: 0;
     overflow: hidden;
@@ -314,7 +312,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     display: flex;
     flex: 1;
     height: 100%;
-    min-height: 0;
+    min-height: calc(100dvh - 88px);
     overflow: hidden;
   `,
   workspaceHeader: css`
