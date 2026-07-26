@@ -113,6 +113,7 @@ AI Orchestrator → LiteLLM / Qdrant / Langfuse
 - Run 详情在所有桌面宽度都通过 Drawer 按需打开，不挤压消息正文。
 - 顶部入口只在生成过程中显示为“当前运行”；生成完成后由各回答自己的入口承接，历史消息不得回退到全局最近一次 Run。
 - 小于 MD 时会话侧栏进入左侧 Drawer，避免压缩消息正文和输入区，同时保留历史会话入口。
+- 会话侧栏本身是独立的纵向滚动区域；会话项使用自适应高度承载标题、元数据和待复核草稿标记。标题与元数据在单行超长时省略，不能用固定高度让多条会话互相覆盖或把内容挤在一起。
 - 工作区使用视口高度和最小高度约束，消息区独立滚动，Sender 固定在工作区底部。
 - AI 工作区的 PageContainer、ProComponents 自动生成的 GridContent 两层包装、children-container、workspace、main 和 messages 必须形成连续的可收缩高度链；Flex 祖先使用 `min-height: 0`。PageContainer 高度固定为可视区域扣除 56px 全局 Header，messages 负责约束可用高度并使用 `overflow: hidden`，实际纵向滚动只归 `Bubble.List` 内部 `.ant-bubble-list-scroll-box` 所有。`Bubble.List` 根节点和 scroll-box 都必须占满消息区高度，避免嵌套滚动、整页滚动或长会话撑开工作台。
 
