@@ -242,6 +242,11 @@ export default function UserDetailPage() {
         <ProCard
           headerBordered
           tabs={{
+            cardProps: {
+              bodyStyle: {
+                padding: 'clamp(16px, 2vw, 24px)',
+              },
+            },
             items: [
               {
                 key: 'overview',
