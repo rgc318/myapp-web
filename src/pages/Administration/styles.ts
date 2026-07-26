@@ -16,6 +16,11 @@ export const useAdministrationStyles = createStyles(({ css, token }) => ({
     flex-direction: column;
     gap: 24px;
   `,
+  detailTabContent: css`
+    box-sizing: border-box;
+    width: 100%;
+    padding: clamp(16px, 2vw, 24px);
+  `,
   roleName: css`
     display: flex;
     gap: 10px;

@@ -242,14 +242,10 @@ export default function UserDetailPage() {
         <ProCard
           headerBordered
           tabs={{
-            cardProps: {
-              bodyStyle: {
-                padding: 'clamp(16px, 2vw, 24px)',
-              },
-            },
             items: [
               {
                 key: 'overview',
+                className: styles.detailTabContent,
                 label: '账号概览',
                 children: (
                   <Space
@@ -337,6 +333,7 @@ export default function UserDetailPage() {
               },
               {
                 key: 'roles',
+                className: styles.detailTabContent,
                 label: `角色 (${profile.roles.length})`,
                 children: (
                   <Form
@@ -377,6 +374,7 @@ export default function UserDetailPage() {
               },
               {
                 key: 'permissions',
+                className: styles.detailTabContent,
                 label: `数据权限 (${profile.userPermissions.length})`,
                 children: (
                   <>
@@ -401,6 +399,7 @@ export default function UserDetailPage() {
               },
               {
                 key: 'audit',
+                className: styles.detailTabContent,
                 label: '变更记录',
                 children: profile.auditLog.length ? (
                   <Timeline
@@ -437,6 +436,7 @@ export default function UserDetailPage() {
               },
               {
                 key: 'snapshot',
+                className: styles.detailTabContent,
                 label: '权限快照',
                 children: (
                   <ProTable<UserPermissionSnapshotRow>
@@ -453,6 +453,7 @@ export default function UserDetailPage() {
               },
               {
                 key: 'security',
+                className: styles.detailTabContent,
                 label: '安全与会话',
                 children: security ? (
                   <Space
