@@ -50,6 +50,50 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
       box-shadow: 0 14px 42px color-mix(in srgb, ${token.colorPrimary} 18%, transparent);
     }
   `,
+  conversationItem: css`
+    && {
+      height: auto;
+      min-height: ${token.controlHeightLG}px;
+      padding-block: ${token.paddingXS}px;
+    }
+
+    && .ant-conversations-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: clip;
+      white-space: normal;
+    }
+  `,
+  conversationLabel: css`
+    display: flex;
+    min-width: 0;
+    width: 100%;
+
+    .ant-space-item {
+      max-width: 100%;
+      min-width: 0;
+    }
+  `,
+  conversationTitle: css`
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  conversationMeta: css`
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+  conversationDraftTag: css`
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
   contextBar: css`
     align-items: center;
     border-bottom: 1px solid ${token.colorBorderSecondary};
@@ -277,8 +321,10 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   sidebarBody: css`
     flex: 1;
     min-height: 0;
+    overscroll-behavior: contain;
     overflow-y: auto;
     padding: ${token.paddingSM}px;
+    scrollbar-gutter: stable;
   `,
   sidebarHeader: css`
     border-bottom: 1px solid ${token.colorBorderSecondary};

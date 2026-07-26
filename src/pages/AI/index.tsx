@@ -1381,16 +1381,27 @@ export default function AiPage() {
       : '暂无消息';
     return {
       key: item.name,
+      className: styles.conversationItem,
       group,
       label: (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text ellipsis>{item.title}</Typography.Text>
-          <Typography.Text type="secondary">
+        <Space
+          className={styles.conversationLabel}
+          orientation="vertical"
+          size={0}
+        >
+          <Typography.Text className={styles.conversationTitle} ellipsis>
+            {item.title}
+          </Typography.Text>
+          <Typography.Text className={styles.conversationMeta} type="secondary">
             {item.messageCount} 条消息 · {updatedAt}
             {item.company ? ` · ${item.company}` : ''}
           </Typography.Text>
           {item.pendingDraftCount > 0 ? (
-            <Tag color="orange" variant="filled">
+            <Tag
+              className={styles.conversationDraftTag}
+              color="orange"
+              variant="filled"
+            >
               待复核草稿 {item.pendingDraftCount}
             </Tag>
           ) : null}

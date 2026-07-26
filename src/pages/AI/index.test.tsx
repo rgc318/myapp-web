@@ -40,7 +40,7 @@ jest.mock('@ant-design/x', () => {
           const itemMenu = typeof menu === 'function' ? menu(item) : null;
           return React.createElement(
             'div',
-            { key: item.key },
+            { className: item.className, key: item.key },
             React.createElement(
               'button',
               {
@@ -220,7 +220,7 @@ jest.mock('./components/AiMessageContent', () => {
 
 jest.mock('./styles', () => ({
   useAiWorkspaceStyles: () => ({
-    styles: new Proxy({}, { get: () => '' }),
+    styles: new Proxy({}, { get: (_, key) => String(key) }),
   }),
 }));
 
@@ -966,6 +966,9 @@ describe('AI workspace page', () => {
 
     expect(await screen.findAllByText('采购跟进')).not.toHaveLength(0);
     expect(screen.getAllByText('待复核草稿 2')).not.toHaveLength(0);
+    expect(
+      screen.getAllByText('待复核草稿 2')[0].closest('.conversationItem'),
+    ).toBeTruthy();
     expect(screen.getByText('3')).toBeTruthy();
 
     const search = screen.getByRole<HTMLInputElement>('searchbox', {
