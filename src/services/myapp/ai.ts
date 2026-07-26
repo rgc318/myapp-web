@@ -242,6 +242,16 @@ export type AiConversation = {
   modified: string | null;
 };
 
+export type AiConversationContext = {
+  status: 'active' | 'empty' | 'expired' | 'invalid';
+  resetReason: 'expired' | 'invalid_state' | 'user_reset' | null;
+  stateVersion: number;
+  updatedAt: string | null;
+  expiresAt: string | null;
+  contextStartSequence: number;
+  state: Record<string, unknown>;
+};
+
 export type AiConversationMessage = AiChatMessage & {
   name: string;
   sequence: number;
@@ -758,6 +768,33 @@ function mapConversation(value: unknown): AiConversation {
   };
 }
 
+function mapConversationContext(value: unknown): AiConversationContext {
+  const row = readObject(value);
+  const status = String(row.status ?? 'empty');
+  return {
+    status:
+      status === 'active' ||
+      status === 'expired' ||
+      status === 'invalid'
+        ? status
+        : 'empty',
+    resetReason:
+      row.reset_reason === 'expired' ||
+      row.reset_reason === 'invalid_state' ||
+      row.reset_reason === 'user_reset'
+        ? row.reset_reason
+        : null,
+    stateVersion: toNumber(row.version),
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
+    expiresAt: typeof row.expires_at === 'string' ? row.expires_at : null,
+    contextStartSequence: Math.max(
+      1,
+      toNumber(row.context_start_sequence) || 1,
+    ),
+    state: readObject(row.state),
+  };
+}
+
 function mapConversationMessage(value: unknown): AiConversationMessage {
   const row = readObject(value);
   return {
@@ -908,6 +945,7 @@ export async function getAiConversation(
   params?: { beforeSequence?: number | null; limit?: number },
 ): Promise<{
   conversation: AiConversation;
+  context?: AiConversationContext;
   messages: AiConversationMessage[];
   pagination: AiConversationMessagePagination;
 }> {
@@ -929,6 +967,7 @@ export async function getAiConversation(
     : [];
   return {
     conversation,
+    context: mapConversationContext(data.context),
     messages,
     pagination: {
       hasMore: Boolean(pagination.has_more),
@@ -943,6 +982,16 @@ export async function getAiConversation(
       total: toNumber(pagination.total) || conversation.messageCount,
     },
   };
+}
+
+export async function resetAiConversationContext(
+  conversationId: string,
+): Promise<AiConversationContext> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'reset_ai_conversation_context_v1',
+    { conversation_id: conversationId },
+  );
+  return mapConversationContext(result.data);
 }
 
 export async function archiveAiConversation(

@@ -10,6 +10,7 @@ import {
   listAiSelectableModels,
   renameAiConversation,
   refreshAiBusinessResult,
+  resetAiConversationContext,
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
   resolveAiScenario,
@@ -696,6 +697,14 @@ describe('AI domain service', () => {
           status: 'active',
           message_count: 2,
         },
+        context: {
+          status: 'active',
+          version: 3,
+          updated_at: '2026-07-26 12:00:00',
+          expires_at: '2026-08-02 12:00:00',
+          context_start_sequence: 1,
+          state: { active_scenario: 'product_search' },
+        },
         messages: [
           {
             name: 'AI-MSG-1',
@@ -735,6 +744,8 @@ describe('AI domain service', () => {
     });
 
     expect(result.messages[0].scenario).toBe('product_search');
+    expect(result.context?.status).toBe('active');
+    expect(result.context?.stateVersion).toBe(3);
     expect(result.messages[0].citations?.[0].id).toBe('ITEM-001');
     expect(result.messages[0].run).toMatchObject({
       modelAlias: 'erp-fast-chat',
@@ -757,6 +768,29 @@ describe('AI domain service', () => {
         conversation_id: 'AI-CONV-1',
         limit: 40,
       },
+    );
+  });
+
+  it('clears a conversation working context through the gateway', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        status: 'empty',
+        reset_reason: 'user_reset',
+        version: 4,
+        context_start_sequence: 3,
+        state: { active_scenario: 'general' },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await resetAiConversationContext('AI-CONV-1');
+
+    expect(result.status).toBe('empty');
+    expect(result.resetReason).toBe('user_reset');
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'reset_ai_conversation_context_v1',
+      { conversation_id: 'AI-CONV-1' },
     );
   });
 

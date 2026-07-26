@@ -258,6 +258,7 @@ jest.mock('@/services/myapp/ai', () => ({
   prepareAiDraftHandoff: jest.fn(),
   renameAiConversation: jest.fn(),
   refreshAiBusinessResult: jest.fn(),
+  resetAiConversationContext: jest.fn(),
   resolveAiScenario: jest.fn(),
   restoreAiDraftVersion: jest.fn(),
   streamAiChatMessage: jest.fn(),
@@ -273,6 +274,7 @@ const {
   renameAiConversation,
   resolveAiScenario,
   refreshAiBusinessResult,
+  resetAiConversationContext,
   streamAiChatMessage,
 } = jest.requireMock('@/services/myapp/ai');
 
@@ -311,6 +313,15 @@ describe('AI workspace page', () => {
       pendingDraftCount: 0,
       status: 'active',
       title: '新名称',
+    });
+    resetAiConversationContext.mockResolvedValue({
+      contextStartSequence: 3,
+      expiresAt: null,
+      resetReason: 'user_reset',
+      state: { active_scenario: 'general' },
+      stateVersion: 2,
+      status: 'empty',
+      updatedAt: '2026-07-26 12:00:00',
     });
     resolveAiScenario.mockImplementation(async (content: string) => {
       if (content.includes('销售订单')) return 'order_query';

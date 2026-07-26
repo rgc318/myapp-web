@@ -1,6 +1,7 @@
 import {
   AppstoreOutlined,
   BarChartOutlined,
+  ClearOutlined,
   DashboardOutlined,
   EditOutlined,
   FileTextOutlined,
@@ -53,6 +54,7 @@ import {
   type AiChatResult,
   type AiCitation,
   type AiConversation,
+  type AiConversationContext,
   type AiConversationMessage,
   type AiConversationMessagePagination,
   type AiDraft,
@@ -74,6 +76,7 @@ import {
   prepareAiDraftHandoff,
   refreshAiBusinessResult,
   renameAiConversation,
+  resetAiConversationContext,
   resolveAiScenario,
   restoreAiDraftVersion,
   streamAiChatMessage,
@@ -271,6 +274,8 @@ export default function AiPage() {
   const [conversationCompany, setConversationCompany] = useState<string | null>(
     null,
   );
+  const [conversationContext, setConversationContext] =
+    useState<AiConversationContext | null>(null);
   const [scenario, setScenario] = useState<AiScenario>('auto');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(
     defaultCompany ?? null,
@@ -466,6 +471,7 @@ export default function AiPage() {
         result.conversation.name,
       );
       setConversationCompany(result.conversation.company);
+      setConversationContext(result.context ?? null);
       setConversationStatus(openedConversationStatus);
       setSelectedConversationStatus(openedConversationStatus);
       const restoredMessages = mapConversationMessages(result.messages);
@@ -1207,6 +1213,7 @@ export default function AiPage() {
     activeConversationIdRef.current = null;
     setSelectedConversationStatus(null);
     setConversationCompany(null);
+    setConversationContext(null);
     setMessages([]);
     setMessagePagination(EMPTY_MESSAGE_PAGINATION);
     setOlderMessagesLoading(false);
@@ -1245,6 +1252,26 @@ export default function AiPage() {
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '会话归档失败');
     }
+  };
+
+  const clearCurrentConversationContext = () => {
+    if (!conversationId || loading || selectedConversationStatus !== 'active') {
+      return;
+    }
+    Modal.confirm({
+      title: '清除当前会话上下文？',
+      content:
+        '只清除后续提问会继承的商品、筛选和结果集状态，历史消息仍会保留。',
+      okText: '清除上下文',
+      cancelText: '取消',
+      onOk: async () => {
+        const context = await resetAiConversationContext(conversationId);
+        if (activeConversationIdRef.current === conversationId) {
+          setConversationContext(context);
+        }
+        message.success('会话上下文已清除');
+      },
+    });
   };
 
   const submitFeedback = async (
@@ -1668,14 +1695,40 @@ export default function AiPage() {
                 >
                   按当前账号权限查询 · 写操作需确认
                 </Tag>
-                {conversationId && selectedConversationStatus === 'active' ? (
-                  <Button
-                    icon={<InboxOutlined />}
-                    onClick={() => void archiveCurrentConversation()}
-                    size="small"
+                {conversationId && conversationContext ? (
+                  <Tag
+                    color={
+                      conversationContext.status === 'active'
+                        ? 'cyan'
+                        : conversationContext.status === 'expired'
+                          ? 'gold'
+                          : undefined
+                    }
                   >
-                    归档
-                  </Button>
+                    {conversationContext.status === 'active'
+                      ? '会话上下文有效'
+                      : conversationContext.status === 'expired'
+                        ? '会话上下文已过期'
+                        : '会话上下文已清除'}
+                  </Tag>
+                ) : null}
+                {conversationId && selectedConversationStatus === 'active' ? (
+                  <Space size={6}>
+                    <Button
+                      icon={<ClearOutlined />}
+                      onClick={clearCurrentConversationContext}
+                      size="small"
+                    >
+                      清除上下文
+                    </Button>
+                    <Button
+                      icon={<InboxOutlined />}
+                      onClick={() => void archiveCurrentConversation()}
+                      size="small"
+                    >
+                      归档
+                    </Button>
+                  </Space>
                 ) : null}
               </Space>
             </div>
