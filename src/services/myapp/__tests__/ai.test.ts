@@ -6,6 +6,7 @@ import {
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
+  listAiAgentApprovals,
   listAiDrafts,
   listAiSelectableModels,
   renameAiConversation,
@@ -15,6 +16,7 @@ import {
   resolveAiDraftCitation,
   resolveAiScenario,
   restoreAiDraftVersion,
+  reviewAiAgentApproval,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
@@ -836,10 +838,85 @@ describe('AI domain service', () => {
     expect(result.stream).toEqual({ deltaCount: 2, streamedChars: 4 });
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
       content: '你好',
-		model_alias: 'opencode-glm-5.2',
+      model_alias: 'opencode-glm-5.2',
       scenario: 'auto',
     });
     fetchMock.mockRestore();
+  });
+
+  it('returns a durable waiting approval result when the SSE run pauses', async () => {
+    const chunk = new Uint8Array(
+      Buffer.from(
+        'data: {"type":"waiting_approval","conversation":"AI-CONV-1","run_id":"AI-RUN-1","latency_ms":230,"approval":{"approval_id":"AI-APPROVAL-1","conversation_id":"AI-CONV-1","run_id":"AI-RUN-1","call_id":"call-1","tool":"sensitive_tool","risk_level":"L3_SENSITIVE","arguments_summary":{"target":"SO-1"},"status":"pending","version":1}}\n\n',
+      ),
+    );
+    let read = false;
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () =>
+            read
+              ? { done: true, value: undefined }
+              : ((read = true), { done: false, value: chunk }),
+        }),
+      },
+    } as Response);
+
+    const result = await streamAiChatMessage(
+      { content: '执行敏感操作' },
+      jest.fn(),
+    );
+
+    expect(result.run.status).toBe('waiting_approval');
+    expect(result.approval).toMatchObject({
+      approvalId: 'AI-APPROVAL-1',
+      argumentsSummary: { target: 'SO-1' },
+      conversationId: 'AI-CONV-1',
+    });
+    fetchMock.mockRestore();
+  });
+
+  it('lists and reviews owner-scoped agent approvals', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        items: [
+          {
+            approval_id: 'AI-APPROVAL-1',
+            conversation_id: 'AI-CONV-1',
+            run_id: 'AI-RUN-1',
+            call_id: 'call-1',
+            tool: 'sensitive_tool',
+            risk_level: 'L3_SENSITIVE',
+            arguments_summary: { target: 'SO-1' },
+            status: 'pending',
+            version: 1,
+          },
+        ],
+        has_more: false,
+      },
+      meta: {},
+      raw: {},
+    });
+    const approvals = await listAiAgentApprovals({ status: 'pending' });
+    expect(approvals.items[0].approvalId).toBe('AI-APPROVAL-1');
+
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {},
+      idempotencyKey: 'REQ-APPROVAL-1',
+    });
+    await reviewAiAgentApproval(approvals.items[0], 'approved');
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'review_ai_agent_approval_v1',
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          approval_id: 'AI-APPROVAL-1',
+          decision: 'approved',
+          expected_version: 1,
+        }),
+      }),
+    );
   });
 
   it('preserves a stable SSE failure code for recovery decisions', async () => {

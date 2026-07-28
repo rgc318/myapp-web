@@ -24,6 +24,7 @@ import { resolveAiFailureRecovery } from './ai-failure';
 export type AiRunDisplayStatus =
   | 'idle'
   | 'running'
+  | 'waiting_approval'
   | 'completed'
   | 'stopped'
   | 'failed';
@@ -51,6 +52,11 @@ const STATUS_META: Record<
     text: '生成中',
   },
   stopped: { color: 'warning', icon: <StopOutlined />, text: '已停止' },
+  waiting_approval: {
+    color: 'warning',
+    icon: <ClockCircleOutlined />,
+    text: '等待审批',
+  },
 };
 
 const SCENARIO_LABELS: Record<AiScenario, string> = {

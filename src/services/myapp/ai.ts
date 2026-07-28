@@ -230,6 +230,22 @@ export type AiChatMessage = {
   citations?: AiCitation[];
 };
 
+export type AiAgentApproval = {
+  approvalId: string;
+  argumentsSummary: Record<string, unknown>;
+  callId: string;
+  conversationId: string | null;
+  decisionReason: string | null;
+  expiresAt: string | null;
+  requestedAt: string | null;
+  riskLevel: string;
+  runId: string;
+  runStatus: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  tool: string;
+  version: number;
+};
+
 export type AiConversation = {
   name: string;
   title: string;
@@ -302,6 +318,7 @@ export type AiEvent = {
 };
 
 export type AiChatResult = {
+  approval?: AiAgentApproval | null;
   conversationId: string;
   runId: string | null;
   message: AiChatMessage;
@@ -318,6 +335,34 @@ export type AiChatResult = {
   events: AiEvent[];
 };
 
+function mapAiAgentApproval(value: unknown): AiAgentApproval | null {
+  const row = readObject(value);
+  const approvalId = typeof row.approval_id === 'string' ? row.approval_id : '';
+  if (!approvalId) return null;
+  const rawStatus = String(row.status ?? 'pending');
+  const status: AiAgentApproval['status'] =
+    rawStatus === 'approved' || rawStatus === 'rejected' || rawStatus === 'expired'
+      ? rawStatus
+      : 'pending';
+  return {
+    approvalId,
+    argumentsSummary: readObject(row.arguments_summary),
+    callId: String(row.call_id ?? ''),
+    conversationId:
+      typeof row.conversation_id === 'string' ? row.conversation_id : null,
+    decisionReason:
+      typeof row.decision_reason === 'string' ? row.decision_reason : null,
+    expiresAt: typeof row.expires_at === 'string' ? row.expires_at : null,
+    requestedAt: typeof row.requested_at === 'string' ? row.requested_at : null,
+    riskLevel: String(row.risk_level ?? ''),
+    runId: String(row.run_id ?? ''),
+    runStatus: typeof row.run_status === 'string' ? row.run_status : null,
+    status,
+    tool: String(row.tool ?? ''),
+    version: toNumber(row.version),
+  };
+}
+
 function mapChatResult(value: unknown): AiChatResult {
   const data = readObject(value);
   const responseMessage = readObject(data.message);
@@ -325,6 +370,7 @@ function mapChatResult(value: unknown): AiChatResult {
   const run = readObject(data.run);
   const stream = readObject(data.stream);
   return {
+    approval: mapAiAgentApproval(data.approval),
     conversationId: String(data.conversation ?? ''),
     runId: typeof data.run_id === 'string' ? data.run_id : null,
     message: {
@@ -375,6 +421,52 @@ function mapChatResult(value: unknown): AiChatResult {
       ? data.events.map((event) => readObject(event) as AiEvent)
       : [],
   };
+}
+
+export async function listAiAgentApprovals(payload: {
+  runId?: string | null;
+  status?: AiAgentApproval['status'] | null;
+  start?: number;
+  limit?: number;
+} = {}): Promise<{ items: AiAgentApproval[]; hasMore: boolean }> {
+  const result = await callGatewayMethod<Record<string, unknown>>(
+    'list_ai_agent_approvals_v1',
+    {
+      ...(payload.runId ? { run_id: payload.runId } : {}),
+      ...(payload.status ? { status: payload.status } : {}),
+      start: payload.start ?? 0,
+      limit: payload.limit ?? 20,
+    },
+  );
+  const data = readObject(result.data);
+  return {
+    items: Array.isArray(data.items)
+      ? data.items.map(mapAiAgentApproval).filter(Boolean) as AiAgentApproval[]
+      : [],
+    hasMore: Boolean(data.has_more),
+  };
+}
+
+export async function reviewAiAgentApproval(
+  approval: AiAgentApproval,
+  decision: 'approved' | 'rejected',
+  reason?: string,
+): Promise<Record<string, unknown>> {
+  const result = await runGatewayMutation<Record<string, unknown>>(
+    'review_ai_agent_approval_v1',
+    {
+      notifyError: false,
+      payload: {
+        approval_id: approval.approvalId,
+        decision,
+        expected_version: approval.version,
+        ...(reason ? { reason } : {}),
+      },
+      successMessage:
+        decision === 'approved' ? '已批准并恢复 AI Run' : '已拒绝并恢复 AI Run',
+    },
+  );
+  return readObject(result.data);
 }
 
 function mapCitation(value: unknown): AiCitation {
@@ -1324,6 +1416,7 @@ export async function streamAiChatMessage(
   const decoder = new TextDecoder();
   let buffer = '';
   let completed: AiEvent | null = null;
+  let waitingApproval: AiEvent | null = null;
 
   const consumeBlock = (block: string) => {
     const data = block
@@ -1359,6 +1452,9 @@ export async function streamAiChatMessage(
     if (event.type === 'completed') {
       completed = event;
     }
+    if (event.type === 'waiting_approval') {
+      waitingApproval = event;
+    }
   };
 
   while (true) {
@@ -1373,6 +1469,51 @@ export async function streamAiChatMessage(
   }
   if (buffer.trim()) {
     consumeBlock(buffer);
+  }
+  const waitingEvent = waitingApproval as AiEvent | null;
+  if (!completed && waitingEvent) {
+    const approval = mapAiAgentApproval(waitingEvent.approval);
+    return {
+      approval,
+      conversationId: String(waitingEvent.conversation ?? ''),
+      runId:
+        typeof waitingEvent.run_id === 'string'
+          ? waitingEvent.run_id
+          : approval?.runId ?? null,
+      message: {
+        role: 'assistant',
+        content: '该工具调用需要人工审批后才能继续。',
+        citations: [],
+      },
+      model: null,
+      modelAlias: null,
+      traceId: null,
+      run: {
+        error: null,
+        errorCode: null,
+        firstTokenMs: null,
+        latencyMs: toNumber(waitingEvent.latency_ms),
+        model: null,
+        modelAlias: null,
+        status: 'waiting_approval',
+        traceId: null,
+        usage: {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          reasoningTokens: 0,
+        },
+      },
+      stream: { deltaCount: 0, streamedChars: 0 },
+      usage: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+        reasoningTokens: 0,
+      },
+      warnings: [],
+      events: [],
+    };
   }
   if (!completed) {
     throw new AiStreamError('AI 流式响应未正常完成。', {

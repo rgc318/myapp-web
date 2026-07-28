@@ -1552,6 +1552,7 @@ AI Web 的信息架构、组件选型、状态与数据流、权限边界、异�
 - 单据 citation 在模型首 Token 前已经到达时，页面必须立即展示表格并提示“业务结果已返回，正在生成摘要”；模型摘要放在结构化结果之后。
 - 页面只调用 `src/services/myapp/ai.ts` 和 Frappe AI Gateway，不得直接访问 AI Orchestrator、LiteLLM 或外部模型接口。官方 Chatbot 示例中的外部 Provider 配置不能复制到本项目运行代码。
 - Web 使用 `fetch + ReadableStream` 消费 POST + JWT SSE，不使用原生 `EventSource`。`Sender` 的停止按钮通过 `AbortController` 中断浏览器读取；中断后保留已接收内容，不自动重试以避免重复模型费用和重复 Run。
+- SSE 的 `waiting_approval` 是持久暂停终态，不得按 `AI_STREAM_INCOMPLETE` 处理。工作台必须展示 Frappe 返回的工具名、风险等级和裁剪参数摘要，禁用 Sender，并通过 `review_ai_agent_approval_v1` 批准原调用或填写原因拒绝；前端不能修改待审批参数。决定后重读待办和来源会话，恢复的是同一 Run。待办列表请求必须防止旧响应覆盖刚收到或刚处理的审批。当前正式 Agent 工具仍全部只读，所以该交互不改变普通对话和四类草稿链路。
 - 普通聊天必须消费 `run_progress` 并在首段文本前展示上下文准备、模型处理阶段和客户端等待计时；首段到达后继续追加 `message_delta`。只有后端能力位允许高级诊断时，Run 详情才展示 `first_token_ms`、`stream.delta_count / streamed_chars`、模型、Token 和 trace；普通账号只展示状态、总耗时、权限范围和错误恢复，不能用浏览器总耗时冒充后端指标。
 - 工作台默认场景为 `auto`，发送前通过 Frappe `resolve_ai_scenario_v1` 解析实际业务路由，Web 不维护关键词规则；自动模式可以进入只读查询或四类草稿。历史消息保存的实际执行场景只用于审计，重新打开会话必须恢复 `auto`，不得把上一轮 `order_query` 等场景永久锁定到后续问题。
 - 场景与固定模型选择统一放入“高级设置” Drawer。所有用户都可以临时指定本次场景；固定模型选择器只在 Backend 返回 `canSelectFixedModel=true` 时展示，模型优先显示友好名称，alias 只作为治理补充。普通账号不能收到模型库存，也不能通过手工请求绕过 Backend 的 `model_alias` 权限校验。

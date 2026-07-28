@@ -48,6 +48,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
+  type AiAgentApproval,
   type AiBusinessDocumentResult,
   type AiBusinessResultSet,
   type AiChatMessage,
@@ -70,6 +71,7 @@ import {
   generateAiSalesOrderDraft,
   getAiConversation,
   getAiErrorCode,
+  listAiAgentApprovals,
   listAiConversations,
   listAiDraftVersions,
   listAiSelectableModels,
@@ -79,6 +81,7 @@ import {
   resetAiConversationContext,
   resolveAiScenario,
   restoreAiDraftVersion,
+  reviewAiAgentApproval,
   streamAiChatMessage,
   submitAiFeedback,
 } from '@/services/myapp/ai';
@@ -98,6 +101,7 @@ import { ProductDetailDrawer } from './components/ProductDetailDrawer';
 import { useAiWorkspaceStyles } from './styles';
 
 type ChatRow = AiMessageRow & {
+  approval?: AiAgentApproval | null;
   creation?: string | null;
   run?: AiRunSummary | null;
   runResult?: AiChatResult | null;
@@ -132,6 +136,7 @@ function resolveRunDisplayStatus(
   status: string | null | undefined,
 ): AiRunDisplayStatus {
   if (status === 'running') return 'running';
+  if (status === 'waiting_approval') return 'waiting_approval';
   if (status === 'failed') return 'failed';
   if (status === 'stopped') return 'stopped';
   if (status === 'completed') return 'completed';
@@ -292,6 +297,10 @@ export default function AiPage() {
   const [runErrorCode, setRunErrorCode] = useState<string | null>(null);
   const [runWarnings, setRunWarnings] = useState<string[]>([]);
   const [toolProgress, setToolProgress] = useState<AiToolProgress[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<AiAgentApproval[]>(
+    [],
+  );
+  const [approvalActionId, setApprovalActionId] = useState<string | null>(null);
   const [retryRequest, setRetryRequest] = useState<{
     content: string;
     modelAlias: string | null;
@@ -336,6 +345,7 @@ export default function AiPage() {
     null,
   );
   const streamAbortRef = useRef<AbortController | null>(null);
+  const approvalRefreshSequenceRef = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
   const draftByConversationRef = useRef<Record<string, string>>({});
   const messagesViewportRef = useRef<HTMLDivElement | null>(null);
@@ -444,12 +454,30 @@ export default function AiPage() {
     }
   }, [conversationSearch, conversationStatus]);
 
+  const refreshPendingApprovals = useCallback(async () => {
+    const refreshSequence = approvalRefreshSequenceRef.current + 1;
+    approvalRefreshSequenceRef.current = refreshSequence;
+    try {
+      const result = await listAiAgentApprovals({
+        status: 'pending',
+        limit: 100,
+      });
+      if (approvalRefreshSequenceRef.current === refreshSequence) {
+        setPendingApprovals(result.items);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     void refreshConversations();
   }, [refreshConversations]);
 
-  const openConversation = async (targetId: string) => {
-    if (loading || conversationLoading) {
+  useEffect(() => {
+    void refreshPendingApprovals();
+  }, [refreshPendingApprovals]);
+
+  const openConversation = async (targetId: string, force = false) => {
+    if (!force && (loading || conversationLoading)) {
       return;
     }
     setConversationLoading(true);
@@ -550,6 +578,7 @@ export default function AiPage() {
             }
           : null,
       );
+      await refreshPendingApprovals();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '会话加载失败');
     } finally {
@@ -942,6 +971,43 @@ export default function AiPage() {
         },
         abortController.signal,
       );
+      if (result.run.status === 'waiting_approval' && result.approval) {
+        setConversationId(result.conversationId);
+        activeConversationIdRef.current = result.conversationId;
+        setConversationCompany((current) => current || effectiveCompany);
+        setLastResult(result);
+        setActiveRunId(result.runId);
+        setRunWarnings([]);
+        setRunError(null);
+        setRunErrorCode(null);
+        setRetryRequest(null);
+        setRunStatus('waiting_approval');
+        setRunProgress(null);
+        approvalRefreshSequenceRef.current += 1;
+        setPendingApprovals((current) => [
+          result.approval as AiAgentApproval,
+          ...current.filter(
+            (item) => item.approvalId !== result.approval?.approvalId,
+          ),
+        ]);
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? {
+                  ...item,
+                  approval: result.approval,
+                  content: result.message.content,
+                  run: result.run,
+                  runId: result.runId,
+                  runResult: result,
+                  runStatus: 'waiting_approval',
+                }
+              : item,
+          ),
+        );
+        await refreshConversations();
+        return;
+      }
       setConversationId(result.conversationId);
       activeConversationIdRef.current = result.conversationId;
       if (!conversationId) {
@@ -1040,6 +1106,68 @@ export default function AiPage() {
 
   const stopGeneration = () => {
     streamAbortRef.current?.abort();
+  };
+
+  const applyApprovalDecision = async (
+    approval: AiAgentApproval,
+    decision: 'approved' | 'rejected',
+    reason?: string,
+  ) => {
+    setApprovalActionId(approval.approvalId);
+    try {
+      await reviewAiAgentApproval(approval, decision, reason);
+      approvalRefreshSequenceRef.current += 1;
+      setPendingApprovals((current) =>
+        current.filter((item) => item.approvalId !== approval.approvalId),
+      );
+      await refreshPendingApprovals();
+      if (approval.conversationId) {
+        await openConversation(approval.conversationId, true);
+      }
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : 'Agent 审批处理失败',
+      );
+    } finally {
+      setApprovalActionId(null);
+    }
+  };
+
+  const approveAgentCall = (approval: AiAgentApproval) => {
+    Modal.confirm({
+      title: '批准并继续此工具调用？',
+      content: '系统只会恢复原 Run，并执行审批时绑定的原始工具参数。',
+      okText: '批准并继续',
+      cancelText: '取消',
+      onOk: () => applyApprovalDecision(approval, 'approved'),
+    });
+  };
+
+  const rejectAgentCall = (approval: AiAgentApproval) => {
+    let reason = '';
+    Modal.confirm({
+      title: '拒绝此工具调用？',
+      content: (
+        <Input.TextArea
+          aria-label="拒绝 Agent 工具调用的原因"
+          onChange={(event) => {
+            reason = event.target.value;
+          }}
+          placeholder="请填写拒绝原因"
+          rows={3}
+        />
+      ),
+      okButtonProps: { danger: true },
+      okText: '拒绝并继续',
+      cancelText: '取消',
+      onOk: () => {
+        if (!reason.trim()) {
+          message.warning('拒绝工具调用时必须填写原因。');
+          return Promise.reject();
+        }
+        return applyApprovalDecision(approval, 'rejected', reason.trim());
+      },
+    });
   };
 
   const editFailedRequest = () => {
@@ -1476,6 +1604,12 @@ export default function AiPage() {
       selectedConversationStatus !== 'archived' &&
       retryRequest,
   );
+  const activeApproval = pendingApprovals.find(
+    (approval) =>
+      approval.status === 'pending' &&
+      ((conversationId && approval.conversationId === conversationId) ||
+        (!conversationId && approval.runId === activeRunId)),
+  );
 
   const bubbleItems: BubbleItemType[] = messages.map((item, index) => ({
     key: item.id,
@@ -1810,6 +1944,51 @@ export default function AiPage() {
 
             <div className={styles.composer}>
               <div className={styles.composerInner}>
+                {activeApproval ? (
+                  <Alert
+                    action={
+                      <Space wrap>
+                        <Button
+                          danger
+                          disabled={Boolean(approvalActionId)}
+                          onClick={() => rejectAgentCall(activeApproval)}
+                          size="small"
+                        >
+                          拒绝
+                        </Button>
+                        <Button
+                          loading={
+                            approvalActionId === activeApproval.approvalId
+                          }
+                          onClick={() => approveAgentCall(activeApproval)}
+                          size="small"
+                          type="primary"
+                        >
+                          批准并继续
+                        </Button>
+                      </Space>
+                    }
+                    description={
+                      <Space orientation="vertical" size={4}>
+                        <Typography.Text>
+                          工具：{activeApproval.tool} · 风险等级：
+                          {activeApproval.riskLevel || '未标记'}
+                        </Typography.Text>
+                        <Typography.Text code ellipsis>
+                          {JSON.stringify(activeApproval.argumentsSummary)}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          审批绑定原 Run、call_id
+                          和参数哈希，批准后不能替换参数。
+                        </Typography.Text>
+                      </Space>
+                    }
+                    showIcon
+                    style={{ marginBottom: 8 }}
+                    title="AI Run 正在等待人工审批"
+                    type="warning"
+                  />
+                ) : null}
                 {selectedConversationStatus === 'archived' && conversationId ? (
                   <Alert
                     action={
@@ -1834,8 +2013,9 @@ export default function AiPage() {
                 <Sender
                   autoSize={{ minRows: 2, maxRows: 7 }}
                   disabled={
-                    selectedConversationStatus === 'archived' &&
-                    Boolean(conversationId)
+                    (selectedConversationStatus === 'archived' &&
+                      Boolean(conversationId)) ||
+                    Boolean(activeApproval)
                   }
                   loading={loading}
                   onCancel={stopGeneration}
@@ -1844,7 +2024,9 @@ export default function AiPage() {
                   placeholder={
                     selectedConversationStatus === 'archived' && conversationId
                       ? '归档会话为只读状态'
-                      : '输入业务问题；Enter 发送，Shift+Enter 换行'
+                      : activeApproval
+                        ? '请先处理当前 Run 的工具审批'
+                        : '输入业务问题；Enter 发送，Shift+Enter 换行'
                   }
                   value={draft}
                 />

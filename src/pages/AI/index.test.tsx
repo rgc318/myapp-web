@@ -1,5 +1,11 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { App } from 'antd';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import { App, Modal } from 'antd';
 import React from 'react';
 import AiPage from './index';
 
@@ -238,6 +244,9 @@ jest.mock('@/services/myapp/ai', () => ({
   listAiConversations: jest
     .fn()
     .mockResolvedValue({ items: [], pendingDraftTotal: 0, total: 0 }),
+  listAiAgentApprovals: jest
+    .fn()
+    .mockResolvedValue({ items: [], hasMore: false }),
   listAiSelectableModels: jest.fn().mockResolvedValue({
     capabilities: {
       canSelectFixedModel: true,
@@ -259,6 +268,7 @@ jest.mock('@/services/myapp/ai', () => ({
   renameAiConversation: jest.fn(),
   refreshAiBusinessResult: jest.fn(),
   resetAiConversationContext: jest.fn(),
+  reviewAiAgentApproval: jest.fn(),
   resolveAiScenario: jest.fn(),
   restoreAiDraftVersion: jest.fn(),
   streamAiChatMessage: jest.fn(),
@@ -270,13 +280,82 @@ const {
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
+  listAiAgentApprovals,
   listAiSelectableModels,
   renameAiConversation,
   resolveAiScenario,
   refreshAiBusinessResult,
   resetAiConversationContext,
+  reviewAiAgentApproval,
   streamAiChatMessage,
 } = jest.requireMock('@/services/myapp/ai');
+
+const buildWaitingApprovalResult = () => ({
+  approval: {
+    approvalId: 'AI-APPROVAL-1',
+    argumentsSummary: { target: 'SO-001' },
+    callId: 'call-1',
+    conversationId: 'AI-CONV-APPROVAL',
+    decisionReason: null,
+    expiresAt: '2026-07-27 13:00:00',
+    requestedAt: '2026-07-27 12:00:00',
+    riskLevel: 'L3_SENSITIVE',
+    runId: 'AI-RUN-APPROVAL',
+    runStatus: 'waiting_approval',
+    status: 'pending',
+    tool: 'submit_sales_order',
+    version: 1,
+  },
+  conversationId: 'AI-CONV-APPROVAL',
+  events: [],
+  message: {
+    citations: [],
+    content: '该工具调用需要人工审批后才能继续。',
+    role: 'assistant',
+  },
+  model: null,
+  modelAlias: null,
+  run: {
+    error: null,
+    errorCode: null,
+    firstTokenMs: null,
+    latencyMs: 230,
+    model: null,
+    modelAlias: null,
+    status: 'waiting_approval',
+    traceId: null,
+    usage: {
+      completionTokens: 0,
+      promptTokens: 0,
+      reasoningTokens: 0,
+      totalTokens: 0,
+    },
+  },
+  runId: 'AI-RUN-APPROVAL',
+  stream: { deltaCount: 0, streamedChars: 0 },
+  traceId: null,
+  usage: {
+    completionTokens: 0,
+    promptTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+  },
+  warnings: [],
+});
+
+const buildApprovalConversationResult = () => ({
+  conversation: {
+    company: 'Demo Company',
+    creation: '2026-07-27 12:00:00',
+    lastMessageAt: '2026-07-27 12:01:00',
+    messageCount: 2,
+    modified: '2026-07-27 12:01:00',
+    name: 'AI-CONV-APPROVAL',
+    status: 'active',
+    title: '审批恢复会话',
+  },
+  messages: [],
+});
 
 describe('AI workspace page', () => {
   beforeEach(() => {
@@ -287,6 +366,8 @@ describe('AI workspace page', () => {
       pendingDraftTotal: 0,
       total: 0,
     });
+    listAiAgentApprovals.mockResolvedValue({ items: [], hasMore: false });
+    reviewAiAgentApproval.mockResolvedValue({ run_status: 'completed' });
     listAiSelectableModels.mockResolvedValue({
       capabilities: {
         canSelectFixedModel: true,
@@ -462,6 +543,111 @@ describe('AI workspace page', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('pauses the composer and resumes the original Run after approval', async () => {
+    let modalConfig: any;
+    let resolveInitialApprovals:
+      | ((value: { items: never[]; hasMore: boolean }) => void)
+      | undefined;
+    const confirmSpy = jest
+      .spyOn(Modal, 'confirm')
+      .mockImplementation((config: any) => {
+        modalConfig = config;
+        return { destroy: jest.fn(), update: jest.fn() } as any;
+      });
+    streamAiChatMessage.mockResolvedValueOnce(buildWaitingApprovalResult());
+    getAiConversation.mockResolvedValueOnce(buildApprovalConversationResult());
+    listAiAgentApprovals.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveInitialApprovals = resolve;
+        }),
+    );
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '提交销售订单' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    expect(await screen.findByText('AI Run 正在等待人工审批')).toBeTruthy();
+    expect(screen.getByText(/工具：submit_sales_order/)).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' })
+        .disabled,
+    ).toBe(true);
+    await act(async () => {
+      resolveInitialApprovals?.({ items: [], hasMore: false });
+    });
+    expect(screen.getByText('AI Run 正在等待人工审批')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '批准并继续' }));
+    expect(modalConfig.title).toBe('批准并继续此工具调用？');
+    await act(async () => {
+      await modalConfig.onOk();
+    });
+
+    await waitFor(() =>
+      expect(reviewAiAgentApproval).toHaveBeenCalledWith(
+        expect.objectContaining({ approvalId: 'AI-APPROVAL-1' }),
+        'approved',
+        undefined,
+      ),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' })
+          .disabled,
+      ).toBe(false),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it('requires a reason before rejecting a paused tool call', async () => {
+    let modalConfig: any;
+    const confirmSpy = jest
+      .spyOn(Modal, 'confirm')
+      .mockImplementation((config: any) => {
+        modalConfig = config;
+        return { destroy: jest.fn(), update: jest.fn() } as any;
+      });
+    streamAiChatMessage.mockResolvedValueOnce(buildWaitingApprovalResult());
+    getAiConversation.mockResolvedValueOnce(buildApprovalConversationResult());
+    listAiAgentApprovals.mockResolvedValue({
+      items: [buildWaitingApprovalResult().approval],
+      hasMore: false,
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    await waitFor(() => expect(listAiAgentApprovals).toHaveBeenCalled());
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '提交销售订单' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(streamAiChatMessage).toHaveBeenCalled());
+    expect(await screen.findByText('AI Run 正在等待人工审批')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: /拒\s*绝/ }));
+
+    expect(modalConfig.title).toBe('拒绝此工具调用？');
+    await expect(modalConfig.onOk()).rejects.toBeUndefined();
+    expect(reviewAiAgentApproval).not.toHaveBeenCalled();
+
+    modalConfig.content.props.onChange({
+      target: { value: '业务条件尚未确认' },
+    });
+    await act(async () => {
+      await modalConfig.onOk();
+    });
+
+    await waitFor(() =>
+      expect(reviewAiAgentApproval).toHaveBeenCalledWith(
+        expect.objectContaining({ approvalId: 'AI-APPROVAL-1' }),
+        'rejected',
+        '业务条件尚未确认',
+      ),
+    );
+    confirmSpy.mockRestore();
   });
 
   it('opens the persisted Run attached to each historical answer', async () => {

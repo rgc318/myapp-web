@@ -1,6 +1,6 @@
 # AI Web 前端企业级设计
 
-更新时间：2026-07-24
+更新时间：2026-07-28
 
 本文是 `myapp-web` AI 模块的前端设计事实来源，集中记录信息架构、组件选型、状态与数据流、权限边界、异常恢复、测试门禁和后续演进。后端业务安全、数据模型和完整 API 契约仍分别以 `apps/myapp/AI_TECH_DESIGN.zh-CN.md` 与 `apps/myapp/API_GATEWAY.zh-CN.md` 为准。分阶段交互优化、当前完成状态和治理后台重构顺序见 `AI_WEB_FRONTEND_OPTIMIZATION_ROADMAP.zh-CN.md`。
 
@@ -15,6 +15,7 @@
 - 草稿编辑器已形成“保存→最新版本校验→业务复核→确认执行→正式回执”的原地闭环，会话卡片和草稿中心共用同一入口。
 - 会话草稿卡片和草稿中心列表已共用紧凑业务摘要，用户无需先打开工作台即可核对商品、价格、单位、订单数量与金额、仓库或库存变化。
 - 常用 Prompt 只回填输入框供用户检查，归档会话为明确只读，AI 失败会在原消息位置保留诊断与人工重试入口。
+- `waiting_approval` 已接入持久审批交互：敏感工具暂停后展示工具、风险等级和裁剪参数摘要，锁定 Sender，并允许当前用户批准原调用或填写原因拒绝；决定后恢复同一 Run 并重读持久会话。
 - 生产依赖审计使用精确 `overrides` 处理 `lodash`、`lodash-es`、`path-to-regexp 8.x` 和 `yaml 1.x` 的已知问题，`npm audit --omit=dev` 为 0。
 
 本轮实现不代表正式生产部署已经完成。角色验收、浏览器端端到端回归、真实 staging、SSO、TLS、Secret Manager、HA 和告警平台仍按部署计划验收。
@@ -69,16 +70,16 @@ AI Orchestrator → LiteLLM / Qdrant / Langfuse
 
 ## 4. 信息架构与路由
 
-| 路由 | 用户目标 | 主要结构 | 路由权限 |
-| --- | --- | --- | --- |
-| `/ai` | 对话、查询、解释、生成业务草稿 | 会话侧栏、消息区、浮动输入区、Run 详情 Drawer | `canUseAI` |
-| `/ai/drafts` | 集中处理当前用户草稿 | 筛选、草稿卡片、校验、来源会话、交接 | `canUseAI` |
-| `/administration/ai/models` | 模型注册和运行概览 | KPI、模型表、详情抽屉、治理操作 | `canViewAiGovernance` |
-| `/administration/ai/policies` | 策略起草、验证、审批、发布与回滚 | 策略表、版本历史、表单和确认操作 | `canViewAiGovernance` |
-| `/administration/ai/usage` | 请求、成功率、Token、成本和延迟分析 | 30 日 KPI、趋势图和明细 | `canViewAiGovernance` |
-| `/administration/ai/vectors` | 在线索引和 Embedding 发布治理 | 索引状态、失败项、补建、清理、发布版本 | `canViewAiGovernance` |
-| `/administration/ai/audit` | 查询治理和高风险操作证据 | 服务端分页、组合筛选、审计表 | `canViewAiGovernance` |
-| `/administration/ai/data-tasks` | 商品数据治理任务 | ProTable、详情抽屉、审批、执行和回滚 | `canViewAiDataGovernance` |
+| 路由                            | 用户目标                            | 主要结构                                      | 路由权限                  |
+| ------------------------------- | ----------------------------------- | --------------------------------------------- | ------------------------- |
+| `/ai`                           | 对话、查询、解释、生成业务草稿      | 会话侧栏、消息区、浮动输入区、Run 详情 Drawer | `canUseAI`                |
+| `/ai/drafts`                    | 集中处理当前用户草稿                | 筛选、草稿卡片、校验、来源会话、交接          | `canUseAI`                |
+| `/administration/ai/models`     | 模型注册和运行概览                  | KPI、模型表、详情抽屉、治理操作               | `canViewAiGovernance`     |
+| `/administration/ai/policies`   | 策略起草、验证、审批、发布与回滚    | 策略表、版本历史、表单和确认操作              | `canViewAiGovernance`     |
+| `/administration/ai/usage`      | 请求、成功率、Token、成本和延迟分析 | 30 日 KPI、趋势图和明细                       | `canViewAiGovernance`     |
+| `/administration/ai/vectors`    | 在线索引和 Embedding 发布治理       | 索引状态、失败项、补建、清理、发布版本        | `canViewAiGovernance`     |
+| `/administration/ai/audit`      | 查询治理和高风险操作证据            | 服务端分页、组合筛选、审计表                  | `canViewAiGovernance`     |
+| `/administration/ai/data-tasks` | 商品数据治理任务                    | ProTable、详情抽屉、审批、执行和回滚          | `canViewAiDataGovernance` |
 
 治理页面使用独立 URL，而不是只依赖单页 Tab 状态，原因是：
 
@@ -123,6 +124,8 @@ AI Orchestrator → LiteLLM / Qdrant / Langfuse
 - `XMarkdown` 渲染解释性文本，并在流式阶段显示未完成状态。
 - Markdown 正文限制为适合阅读的行宽并允许长 URL/连续字符换行；代码块和宽表格保留语义并在自身区域横向滚动，不能撑开消息气泡或整个工作台。
 - 首段文本到达前，助手占位必须显示当前运行阶段和客户端等待计时；不得只显示空白气泡或让用户误以为请求未发出。
+- 普通回答使用端到端 SSE 增量传输：AI Orchestrator 从 LiteLLM 读取 `stream=true` 的 `message_delta`，Frappe Gateway 和 Web Nginx 均关闭代理缓冲，浏览器通过 `fetch + ReadableStream` 逐事件消费。这里的“流式”表示按模型 delta 到达，不承诺逐字或逐字符动画。
+- 模型的隐藏推理 Token 不通过 SSE 暴露；首个可见 Token 之前只展示等待状态。推理模型可能在首 Token 前耗时较长，而可见摘要本身很短，首 Token 后会在很短时间内连续完成，因此视觉上可能像“加载框后一次性输出”，不等于接口没有流式传输，也不等于在折叠展示隐藏思考。
 - 结构化业务来源通过结果表格或 citation 卡片中的受控详情链接进入，不再额外展开一份重复的 `Sources` 清单。
 - 商品、订单、经营报表和 AI 草稿使用独立 citation 卡片展示业务字段。
 - AI 草稿 citation 先由领域 Service 规范化为 `AiDraft`，再由共享紧凑摘要组件展示；商品建档展示库存单位、四档价格和初始库存，销售/采购按单位分别汇总数量并展示完整行金额合计，库存调整展示当前、目标、差异、估值参考和原因。不得把不同 UOM 的数量直接相加。
@@ -210,8 +213,12 @@ src/services/myapp/
 5. `message_delta` 追加助手文本，首 Token 到达后继续逐块渲染。
 6. `citation` 增量追加结构化来源。
 7. `warning` 追加非阻断警告。
-8. `completed` 返回最终内容、Run、用量和 `stream.delta_count / streamed_chars`。
-9. `error` 转换为用户可理解的错误提示。
+8. `approval_required` 表示 Orchestrator 已在执行敏感工具前请求持久审批；Frappe 在确认检查点、审批记录和 Run 状态已原子落库后，把 `paused` 转为浏览器终态 `waiting_approval`。
+9. `waiting_approval` 不是流式失败或不完整响应。领域 Service 返回带 `approval` 的 `AiChatResult`，页面保存暂停中的助手消息与 Run 状态并停止等待 `completed`。
+10. `completed` 返回最终内容、Run、用量和 `stream.delta_count / streamed_chars`。
+11. `error` 转换为用户可理解的错误提示。
+
+流式验收不能只看浏览器肉眼是否逐字跳动，应同时检查 `first_token_ms`、最终 `stream.delta_count / streamed_chars`、代理 `X-Accel-Buffering: no` 和上游 `stream=true`。如果首 Token 到完成的时间很短，短回答即使经过多个 delta 也可能被浏览器/React 批处理成近似一次渲染；不要为了制造“打字机效果”而在前端人为延迟或拆分完整文本。
 
 `order_query` 支持一次查询销售订单、销售发票、采购订单和采购发票中的一个或多个类型；每种类型分别应用当前用户记录权限、公司范围、日期、状态、金额、排序和数量限制，并以结构化 citation 返回，不要求用户手工拆成多个问题。
 
@@ -227,7 +234,18 @@ src/services/myapp/
 
 销售、采购、库存调整和商品建档草稿使用严格结构化模型结果，并在 Frappe 侧重新做权限、主数据、UOM、价格或库存校验，因此不能把未闭合 JSON 当作业务草稿逐字展示。商品建档同时展示主数据、标准售价（默认单价）、批发价、零售价、成本价（默认采购价）和初始库存候选；批发价、零售价分别对应 Wholesale、Retail 价格表，初始库存使用库存基准单位，成本价作为首次入库成本，任何售价都不得用于库存计价。页面在等待期间显示“结构化生成与后端校验”阶段，只有最终验证通过或带明确校验错误的草稿才整体呈现。
 
-### 7.3 停止与失败策略
+### 7.3 Agent 工具审批与恢复
+
+- Web 只读取 Frappe Gateway 返回的 owner-scoped 审批，不接触 Orchestrator Service Token、Agent 能力令牌、完整敏感参数或参数哈希原文。
+- 审批卡展示工具名、风险等级和后端裁剪后的 `arguments_summary`，并明确说明决定绑定原 `run_id + call_id + tool + arguments_hash`；前端不能编辑、替换或重新生成待执行参数。
+- 当前会话存在 `pending` 审批时，Sender 必须禁用并提示先处理当前 Run，避免用户把暂停中的运行误当成已结束后继续追加消息。
+- 批准前显示二次确认；拒绝必须填写原因。页面调用 `review_ai_agent_approval_v1` 并提交审批乐观版本，后端仍负责所有权、状态、版本、过期、参数一致性和恢复权限校验。
+- 审批决定成功后先从本地待办移除旧审批，再重新读取待审批列表和来源会话。审批恢复允许绕过普通会话切换的短暂 loading 锁，以免用户在暂停提示刚出现时立即操作导致持久结果未刷新；普通会话切换仍保持原并发保护。
+- 待审批列表请求使用顺序保护，旧请求不得覆盖刚由 SSE 收到的审批或刚完成的审批决定；列表接口短暂失败时不得把已知审批静默清空并错误解锁 Sender。
+- 后端可能在恢复原 Run 后遇到下一项敏感工具并再次返回 `waiting_approval`，Web 必须继续展示新的审批，而不是假定一次 Run 最多只有一个审批点。
+- 当前三个正式 Agent 工具全部为只读且不需要审批，因此这套 UI 不改变现有普通对话和四类草稿体验；首个敏感工具正式启用前仍需完成角色、业务幂等和 staging 故障注入验收。
+
+### 7.4 停止与失败策略
 
 - `Sender` 停止按钮通过 `AbortController` 中断浏览器读取。
 - 用户停止后保留已经接收的内容。
@@ -352,15 +370,15 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 
 ## 11. 权限模型
 
-| 角色 | Web 能力摘要 |
-| --- | --- |
-| 已登录用户 | 使用 AI 助手和管理自己的会话、反馈及草稿；场景可在高级设置中临时选择，模型由已发布策略自动决定 |
-| AI Model Manager | 查看模型管理，维护模型元数据和策略草稿；可固定工作台模型并查看高级运行诊断 |
-| AI Model Approver | 查看并审批模型策略；可查看高级运行诊断但不能固定模型 |
-| AI Auditor | 只读查看治理、审计和高级运行诊断，但不能固定模型 |
-| AI Data Steward | 扫描、创建和执行允许的数据任务 |
-| AI Data Approver | 审批或驳回数据任务 |
-| System Manager | 管理、发布和回滚等系统级能力；可固定工作台模型并查看高级运行诊断 |
+| 角色              | Web 能力摘要                                                                                   |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| 已登录用户        | 使用 AI 助手和管理自己的会话、反馈及草稿；场景可在高级设置中临时选择，模型由已发布策略自动决定 |
+| AI Model Manager  | 查看模型管理，维护模型元数据和策略草稿；可固定工作台模型并查看高级运行诊断                     |
+| AI Model Approver | 查看并审批模型策略；可查看高级运行诊断但不能固定模型                                           |
+| AI Auditor        | 只读查看治理、审计和高级运行诊断，但不能固定模型                                               |
+| AI Data Steward   | 扫描、创建和执行允许的数据任务                                                                 |
+| AI Data Approver  | 审批或驳回数据任务                                                                             |
+| System Manager    | 管理、发布和回滚等系统级能力；可固定工作台模型并查看高级运行诊断                               |
 
 `src/access.ts` 只负责路由、菜单和按钮体验。所有动作都必须预期后端可能拒绝，并展示后端返回的原因。
 
@@ -371,6 +389,7 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 页面至少区分：
 
 - 首次加载、局部刷新和写操作 loading。
+- Run 正在生成、等待人工审批、已完成、已停止、失败、取消和过期。
 - 空会话、无草稿、无用量、无审计和无失败向量。
 - 权限不足、状态不允许、输入校验失败和后端业务拒绝。
 - Gateway 不可用、Orchestrator 不可达、模型失败和流式中断。
@@ -438,11 +457,13 @@ git diff --check
 - Governance Service 的模型、策略、用量、向量、审计和 Data Task 映射。
 - 页面所依赖的权限点和业务 Service 契约。
 - AI 工作台流式交互、运行诊断、显式失败重试，以及草稿业务复核和版本差异组件。
+- SSE `waiting_approval` 终态、审批字段映射、Sender 锁定、批准同 Run 恢复、拒绝原因必填和乱序审批列表保护。
 
 人工验收重点：
 
 - 普通用户只能查看自己的会话、反馈和草稿。
 - 归档会话只读，停止生成保留已接收内容。
+- 待审批 Run 锁定输入，批准或拒绝后恢复同一 Run；刷新页面后仍能从持久审批列表恢复操作入口。
 - 四类草稿必须经过后端校验并进入既有编辑器复核。
 - Model Manager、Approver、Auditor、Data Steward、Data Approver 和 System Manager 的菜单及操作与后端一致。
 - 策略发布、向量清理、任务执行和回滚的禁用原因、确认内容与审计记录一致。
