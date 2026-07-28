@@ -198,7 +198,7 @@ src/services/myapp/
 - 工作上下文过期时间完全以后端返回为准；页面只显示 `active / empty / expired / invalid` 状态，不在浏览器自行计算或延长 TTL。状态过期或损坏后，下一次发送由后端建立新上下文边界并记录审计原因。
 - 归档会话打开后必须同步后端 `archived` 状态，输入区禁用并展示“新建会话”恢复路径；不允许在前端临时将归档会话改回可写。
 - 常用 Prompt 是可编辑模板：点击后只填入 Sender 并选中对应场景，用户可补充公司、时间、单据类型和范围后再显式发送，避免误点立即产生模型费用或业务 Run。
-- 自动识别在发送前调用 Frappe `resolve_ai_scenario_v1`，可路由到只读查询或四类草稿；Web 不复制关键词规则。历史消息中的 `scenario` 是审计事实而不是持久 UI 偏好，重新打开会话后场景选择器恢复 `auto`，防止上一轮订单查询污染后续商品建档等不同意图。
+- 自动识别在发送前调用 Frappe `resolve_ai_scenario_v1`，但 Web 只采用四类写草稿结果进入专用校验链路；识别为 `general / product_search / order_query / report_summary` 时，普通 Chat 请求仍发送 `scenario=auto`，由 Backend 的结构化意图模型决定只读工具和参数。Web 不把粗粒度规则结果锁成最终只读场景，也不复制或扩展关键词规则。历史消息中的 `scenario` 是审计事实而不是持久 UI 偏好，重新打开会话后场景选择器恢复 `auto`，防止上一轮订单查询污染后续商品建档等不同意图。
 - 用户显式选择的固定场景只对当前一次发送生效；请求开始后场景选择器立即恢复 `auto`。这既保留人工纠偏能力，也避免同一打开会话中的订单查询或商品建档模式继续污染后续问题，并防止普通查询被错误生成新的空草稿。
 - 高级设置通过 Frappe `list_ai_selectable_models_v1` 同时加载能力位和授权模型清单。所有用户都可临时选择本次场景；只有后端返回 `canSelectFixedModel=true` 时才展示固定模型选择器和模型清单。模型优先显示 `provider_model_display` 友好名称，技术 alias 只作为治理补充。普通业务账号只显示“由已发布策略自动选择”，不能从浏览器获得模型库存或提交固定覆盖。固定模型被授权并选中后，同步 Chat、SSE、四类草稿及人工重试携带同一 `modelAlias`。
 
@@ -207,7 +207,7 @@ src/services/myapp/
 普通对话、商品查询、订单查询和经营报表解释通过 POST + JWT SSE：
 
 1. 创建用户消息和空助手消息占位。
-2. 默认 `auto` 场景由 Frappe 根据当前问题确定 `general / product_search / order_query / report_summary`，页面不自行复制业务路由规则；用户仍可显式选择固定场景。
+2. 默认 `auto` 原样发送到 Frappe；除四类写草稿安全分流外，Backend 通过结构化意图模型确定 `general / product_search / order_query / report_summary` 以及商品词、单据过滤和报表口径。Runtime Policy 尚未就绪时，兼容查询路径仍先调用结构化意图模型，关键词规则只在模型不可用、低置信度或输出非法时降级。用户仍可显式选择固定场景，Backend 不允许模型把该场景改写成另一类工具。
 3. `run_started` 绑定 `conversationId` 和 `runId`。
 4. `run_progress` 更新权限/公司确认、工具、模型首 Token 等待和实时输出阶段；页面从请求开始持续显示已等待时间，不能把等待阶段称为“思考内容”。
 5. `message_delta` 追加助手文本，首 Token 到达后继续逐块渲染。

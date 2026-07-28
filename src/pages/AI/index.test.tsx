@@ -542,7 +542,7 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           company: 'Demo Company',
           content: '查找蓝色包装商品',
-          scenario: 'product_search',
+          scenario: 'auto',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -1478,7 +1478,7 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           company: 'Second Company',
           content: '查询最新销售订单',
-          scenario: 'order_query',
+          scenario: 'auto',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -1510,6 +1510,30 @@ describe('AI workspace page', () => {
         expect.objectContaining({
           content: '你好',
           modelAlias: 'opencode-glm-5.2',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
+  it('keeps an explicitly selected read-only scenario locked for one request', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 场景' }));
+    fireEvent.click(await screen.findByText('商品搜索'));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '仓里还有迪莫吗' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(resolveAiScenario).not.toHaveBeenCalled();
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: '仓里还有迪莫吗',
+          scenario: 'product_search',
         }),
         expect.any(Function),
         expect.any(AbortSignal),
@@ -1669,7 +1693,7 @@ describe('AI workspace page', () => {
       expect(streamAiChatMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           content: '查询一下煌星是否已经正常入库',
-          scenario: 'product_search',
+          scenario: 'auto',
         }),
         expect.any(Function),
         expect.any(AbortSignal),

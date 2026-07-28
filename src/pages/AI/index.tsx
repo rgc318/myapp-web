@@ -673,9 +673,18 @@ export default function AiPage() {
       return;
     }
     let resolvedScenario = requestedScenario;
+    let requestScenario = requestedScenario;
     if (requestedScenario === 'auto') {
       try {
         resolvedScenario = await resolveAiScenario(content);
+        requestScenario = [
+          'sales_order_draft',
+          'purchase_order_draft',
+          'inventory_adjustment_draft',
+          'product_setup_draft',
+        ].includes(resolvedScenario)
+          ? resolvedScenario
+          : 'auto';
       } catch (caught) {
         message.error(
           caught instanceof Error ? caught.message : 'AI 场景识别失败',
@@ -801,7 +810,7 @@ export default function AiPage() {
           content,
           conversationId,
           modelAlias: requestedModelAlias,
-          scenario: resolvedScenario,
+          scenario: requestScenario,
         },
         (event) => {
           if (event.type === 'run_started') {
