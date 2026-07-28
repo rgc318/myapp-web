@@ -469,6 +469,19 @@ export async function reviewAiAgentApproval(
   return readObject(result.data);
 }
 
+export async function cancelAiRun(
+  runId: string,
+): Promise<Record<string, unknown>> {
+  const result = await runGatewayMutation<Record<string, unknown>>(
+    'cancel_ai_run_v1',
+    {
+      notifyError: false,
+      payload: { run_id: runId },
+    },
+  );
+  return readObject(result.data);
+}
+
 function mapCitation(value: unknown): AiCitation {
   const row = readObject(value);
   return {

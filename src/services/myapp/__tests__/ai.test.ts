@@ -1,6 +1,7 @@
 import { callGatewayMethod } from '../api-client';
 import {
   AiDraftVersionConflictError,
+  cancelAiRun,
   executeAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
@@ -122,6 +123,24 @@ describe('AI domain service', () => {
       },
     );
     expect(result.version).toBe(3);
+  });
+
+  it('cancels a durable AI run through the mutation layer', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: { run_id: 'AI-RUN-1', status: 'cancelled' },
+      idempotencyKey: 'REQ-CANCEL-1',
+    });
+
+    const result = await cancelAiRun('AI-RUN-1');
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'cancel_ai_run_v1',
+      {
+        notifyError: false,
+        payload: { run_id: 'AI-RUN-1' },
+      },
+    );
+    expect(result).toEqual({ run_id: 'AI-RUN-1', status: 'cancelled' });
   });
 
   it('maps the stable draft conflict code to a recoverable domain error', async () => {

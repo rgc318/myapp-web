@@ -64,6 +64,7 @@ import {
   type AiSelectableModel,
   type AiWorkspaceCapabilities,
   archiveAiConversation,
+  cancelAiRun,
   discardAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
@@ -1105,6 +1106,12 @@ export default function AiPage() {
   };
 
   const stopGeneration = () => {
+    const runId = activeRunId;
+    if (runId) {
+      void cancelAiRun(runId).catch(() => {
+        message.warning('生成已停止，但运行状态确认失败，请稍后刷新。');
+      });
+    }
     streamAbortRef.current?.abort();
   };
 

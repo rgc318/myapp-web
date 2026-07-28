@@ -87,7 +87,7 @@ jest.mock('@ant-design/x', () => {
           ),
         ),
       ),
-    Sender: ({ disabled, onChange, onSubmit, value }: any) =>
+    Sender: ({ disabled, loading, onCancel, onChange, onSubmit, value }: any) =>
       React.createElement(
         'div',
         null,
@@ -102,6 +102,13 @@ jest.mock('@ant-design/x', () => {
           { disabled, onClick: () => onSubmit(value), type: 'button' },
           '发送',
         ),
+        loading
+          ? React.createElement(
+              'button',
+              { onClick: onCancel, type: 'button' },
+              '停止生成',
+            )
+          : null,
       ),
     Welcome: () => React.createElement('div', null, 'AI 欢迎'),
     XProvider: ({ children }: any) =>
@@ -232,6 +239,7 @@ jest.mock('./styles', () => ({
 
 jest.mock('@/services/myapp/ai', () => ({
   archiveAiConversation: jest.fn(),
+  cancelAiRun: jest.fn(),
   discardAiDraft: jest.fn(),
   executeAiDraft: jest.fn(),
   generateAiInventoryAdjustmentDraft: jest.fn(),
@@ -277,6 +285,7 @@ jest.mock('@/services/myapp/ai', () => ({
 }));
 
 const {
+  cancelAiRun,
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
@@ -361,6 +370,10 @@ describe('AI workspace page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLocationSearch = '';
+    cancelAiRun.mockResolvedValue({
+      run_id: 'AI-RUN-STOP',
+      status: 'cancelled',
+    });
     listAiConversations.mockResolvedValue({
       items: [],
       pendingDraftTotal: 0,
@@ -543,6 +556,39 @@ describe('AI workspace page', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('cancels the durable run before aborting the local stream', async () => {
+    let observedSignal: AbortSignal | undefined;
+    streamAiChatMessage.mockImplementationOnce(
+      async (_payload: unknown, onEvent: any, signal?: AbortSignal) => {
+        observedSignal = signal;
+        onEvent({
+          conversation: 'AI-CONV-STOP',
+          run_id: 'AI-RUN-STOP',
+          type: 'run_started',
+        });
+        return await new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      },
+    );
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '停止这个回答' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await screen.findByRole('button', { name: '运行详情' });
+    fireEvent.click(await screen.findByRole('button', { name: '停止生成' }));
+
+    await waitFor(() => {
+      expect(cancelAiRun).toHaveBeenCalledWith('AI-RUN-STOP');
+      expect(observedSignal?.aborted).toBe(true);
+    });
   });
 
   it('pauses the composer and resumes the original Run after approval', async () => {
