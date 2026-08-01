@@ -286,6 +286,7 @@ jest.mock('@/services/myapp/ai', () => ({
 
 const {
   cancelAiRun,
+  generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
   getAiConversation,
   listAiConversations,
@@ -464,6 +465,50 @@ describe('AI workspace page', () => {
       runId: 'AI-RUN-DRAFT',
       stream: { deltaCount: 0, streamedChars: 0 },
       traceId: 'trace-draft',
+      usage: {
+        completionTokens: 20,
+        promptTokens: 80,
+        reasoningTokens: 0,
+        totalTokens: 100,
+      },
+      warnings: [],
+    });
+    generateAiInventoryAdjustmentDraft.mockResolvedValue({
+      conversationId: 'AI-CONV-INVENTORY-DRAFT',
+      draft: {
+        company: 'Demo Company',
+        conversationId: 'AI-CONV-INVENTORY-DRAFT',
+        draftType: 'inventory_adjustment',
+        name: 'AI-DRAFT-INVENTORY-1',
+        payload: { itemCode: 'DIMO', quantity: 10 },
+        status: 'draft',
+        title: '给迪莫添加10个库存',
+        validation: { errors: [], readyForHandoff: true, warnings: [] },
+        version: 1,
+      },
+      events: [],
+      message: { content: '已生成库存调整草稿', role: 'assistant' },
+      model: 'provider-model',
+      modelAlias: 'opencode-glm-5.2',
+      run: {
+        error: null,
+        errorCode: null,
+        firstTokenMs: null,
+        latencyMs: 760,
+        model: 'provider-model',
+        modelAlias: 'opencode-glm-5.2',
+        status: 'completed',
+        traceId: 'trace-inventory-draft',
+        usage: {
+          completionTokens: 20,
+          promptTokens: 80,
+          reasoningTokens: 0,
+          totalTokens: 100,
+        },
+      },
+      runId: 'AI-RUN-INVENTORY-DRAFT',
+      stream: { deltaCount: 0, streamedChars: 0 },
+      traceId: 'trace-inventory-draft',
       usage: {
         completionTokens: 20,
         promptTokens: 80,
@@ -1515,6 +1560,66 @@ describe('AI workspace page', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it('auto-routes an inventory addition request to the validated draft endpoint', async () => {
+    resolveAiScenario.mockResolvedValueOnce('inventory_adjustment_draft');
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 模型' }));
+    const modelOption = (
+      await screen.findAllByText('GLM 5.2 · opencode-glm-5.2')
+    )
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+    fireEvent.click(modelOption as HTMLElement);
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '给迪莫添加10个库存' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(resolveAiScenario).toHaveBeenCalledWith('给迪莫添加10个库存');
+      expect(generateAiInventoryAdjustmentDraft).toHaveBeenCalledWith({
+        company: 'Demo Company',
+        content: '给迪莫添加10个库存',
+        conversationId: null,
+        modelAlias: 'opencode-glm-5.2',
+      });
+    });
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('auto-routes a product completion request to the validated draft endpoint', async () => {
+    resolveAiScenario.mockResolvedValueOnce('product_setup_draft');
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 模型' }));
+    const modelOption = (
+      await screen.findAllByText('GLM 5.2 · opencode-glm-5.2')
+    )
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+    fireEvent.click(modelOption as HTMLElement);
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '完善迪莫商品资料' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(resolveAiScenario).toHaveBeenCalledWith('完善迪莫商品资料');
+      expect(generateAiProductSetupDraft).toHaveBeenCalledWith({
+        company: 'Demo Company',
+        content: '完善迪莫商品资料',
+        conversationId: null,
+        modelAlias: 'opencode-glm-5.2',
+      });
+    });
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
   });
 
   it('keeps an explicitly selected read-only scenario locked for one request', async () => {

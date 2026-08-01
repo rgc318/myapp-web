@@ -561,6 +561,7 @@ describe('AI domain service', () => {
       company: 'rgc (Demo)',
       content: '把 SKU010 库存调整到 8 个',
       conversationId: 'AI-CONV-INV',
+      modelAlias: 'gpt-5.5',
     });
 
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
@@ -569,6 +570,7 @@ describe('AI domain service', () => {
         company: 'rgc (Demo)',
         content: '把 SKU010 库存调整到 8 个',
         conversation_id: 'AI-CONV-INV',
+        model_alias: 'gpt-5.5',
       },
     );
     expect(result.draft.name).toBe('AI-DRAFT-INV');
@@ -607,6 +609,7 @@ describe('AI domain service', () => {
       company: 'rgc (Demo)',
       content: '新增商品传承结晶',
       conversationId: 'AI-CONV-PRODUCT',
+      modelAlias: 'gpt-5.5',
     });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
@@ -616,6 +619,7 @@ describe('AI domain service', () => {
         company: 'rgc (Demo)',
         content: '新增商品传承结晶',
         conversation_id: 'AI-CONV-PRODUCT',
+        model_alias: 'gpt-5.5',
       },
     );
     expect(result.draft.draftType).toBe('product_setup');
