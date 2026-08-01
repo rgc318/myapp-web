@@ -112,8 +112,21 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
       optionalText(payload.stock_uom_display),
   );
   const warehouse = optionalText(payload.warehouse);
+  const state = asObject(payload._state);
+  const stateContext = asObject(state.context);
+  const isUpdate = payload.operation === 'update';
+  const currentStockQty = finiteNumber(stateContext.company_total_qty);
+  const currentStockUom = displayUom(
+    stateContext.stock_uom,
+    stateContext.stock_uom_display,
+  );
 
   return [
+    {
+      key: 'operation',
+      label: '操作',
+      value: isUpdate ? '完善现有商品' : '创建新商品',
+    },
     {
       key: 'product',
       label: '商品',
@@ -161,9 +174,10 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
     },
     {
       key: 'opening-stock',
-      label: '初始库存',
-      value:
-        openingQty === null
+      label: isUpdate ? '当前库存（只读）' : '初始库存',
+      value: isUpdate
+        ? [formatQty(currentStockQty), currentStockUom].join(' ')
+        : openingQty === null
           ? '-'
           : `${formatConvertedQty(openingQty)} ${openingUom}${warehouse ? ` · ${warehouse}` : openingQty > 0 ? ' · 未选择仓库' : ''}`,
     },

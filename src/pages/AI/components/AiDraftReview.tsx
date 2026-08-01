@@ -111,6 +111,20 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
     payload.posting_date ?? payload.transaction_date ?? payload.schedule_date;
 
   if (draft.draftType === 'product_setup') {
+    const productState = asObject(payload._state);
+    const productContext = asObject(productState.context);
+    const isProductUpdate = payload.operation === 'update';
+    const currentStockDisplay = [
+      formatNumber(productContext.company_total_qty),
+      resolveDisplayUom(
+        typeof productContext.stock_uom === 'string'
+          ? productContext.stock_uom
+          : null,
+        typeof productContext.stock_uom_display === 'string'
+          ? productContext.stock_uom_display
+          : null,
+      ),
+    ].join(' ');
     return (
       <Space orientation="vertical" size={16} style={{ width: '100%' }}>
         <AiDraftExecutionReceipt draft={draft} />
@@ -122,7 +136,9 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             {
               key: 'type',
               label: '草稿类型',
-              children: DRAFT_TYPE_LABELS[draft.draftType],
+              children: isProductUpdate
+                ? '完善现有商品'
+                : DRAFT_TYPE_LABELS[draft.draftType],
             },
             {
               key: 'company',
@@ -187,15 +203,17 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'openingStock',
-              label: '初始库存',
-              children: `${formatNumber(payload.opening_qty)} ${resolveDisplayUom(
-                typeof payload.opening_uom === 'string'
-                  ? payload.opening_uom
-                  : null,
-                typeof payload.opening_uom_display === 'string'
-                  ? payload.opening_uom_display
-                  : null,
-              )}`,
+              label: isProductUpdate ? '当前库存（只读）' : '初始库存',
+              children: isProductUpdate
+                ? currentStockDisplay
+                : `${formatNumber(payload.opening_qty)} ${resolveDisplayUom(
+                    typeof payload.opening_uom === 'string'
+                      ? payload.opening_uom
+                      : null,
+                    typeof payload.opening_uom_display === 'string'
+                      ? payload.opening_uom_display
+                      : null,
+                  )}`,
             },
             {
               key: 'warehouse',

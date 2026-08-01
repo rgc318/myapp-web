@@ -62,6 +62,34 @@ describe('AiDraftCompactSummary', () => {
     expect(screen.getByText('1000 件 · 成品仓 - RD')).toBeTruthy();
   });
 
+  it('shows hydrated prices and read-only current stock for product update', () => {
+    renderSummary(
+      buildDraft('product_setup', {
+        _state: {
+          context: {
+            company_total_qty: 1000,
+            stock_uom: 'Nos',
+            stock_uom_display: '件',
+          },
+        },
+        currency: 'CNY',
+        item_code: 'SKU-DIMO',
+        item_name: '迪莫',
+        operation: 'update',
+        standard_selling_rate: 5,
+        stock_uom: 'Nos',
+        stock_uom_display: '件',
+        wholesale_rate: 3,
+      }),
+    );
+
+    expect(screen.getByText('完善现有商品')).toBeTruthy();
+    expect(screen.getByText('标准 5.00 元')).toBeTruthy();
+    expect(screen.getByText('批发 3.00 元')).toBeTruthy();
+    expect(screen.getByText('1000 件')).toBeTruthy();
+    expect(screen.queryByText('初始库存')).toBeNull();
+  });
+
   it('summarizes sales lines by UOM without adding incompatible units', () => {
     renderSummary(
       buildDraft('sales_order', {

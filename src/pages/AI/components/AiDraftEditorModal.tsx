@@ -45,6 +45,107 @@ type DraftVersionConflict = {
   localValues: AiDraftFormValues;
 };
 
+const PRODUCT_STATE_LABELS: Record<string, string> = {
+  brand: '品牌',
+  currency: '币种',
+  description: '商品描述',
+  item_group: '商品分类',
+  item_name: '商品名称',
+  retail_rate: '零售价',
+  standard_buying_rate: '成本价',
+  standard_selling_rate: '标准售价',
+  stock_uom: '库存基准单位',
+  wholesale_rate: '批发价',
+};
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function productStateValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '未设置';
+  return String(value);
+}
+
+function ProductUpdateState({ draft }: { draft: AiDraft }) {
+  const state = objectValue(draft.payload._state);
+  if (state.operation !== 'update') return null;
+  const baseline = objectValue(state.baseline);
+  const patch = objectValue(state.patch);
+  const context = objectValue(state.context);
+  const changedFields = Object.keys(patch);
+  const stockQty = context.company_total_qty;
+  const stockUom =
+    String(context.stock_uom_display ?? context.stock_uom ?? '').trim() || '-';
+  return (
+    <Alert
+      description={
+        <Space orientation="vertical" size={4}>
+          <Typography.Text>
+            当前库存：{productStateValue(stockQty)} {stockUom}
+            （只读，不会作为初始库存写入）
+          </Typography.Text>
+          {changedFields.length ? (
+            changedFields.map((field) => (
+              <Typography.Text key={field}>
+                {PRODUCT_STATE_LABELS[field] ?? field}：
+                {productStateValue(baseline[field])} →{' '}
+                {productStateValue(patch[field])}
+              </Typography.Text>
+            ))
+          ) : (
+            <Typography.Text>尚未产生字段修改。</Typography.Text>
+          )}
+          <Typography.Text type="secondary">
+            如需改变库存，请单独创建库存调整草稿。
+          </Typography.Text>
+        </Space>
+      }
+      showIcon
+      style={{ marginBottom: 16 }}
+      title="正在完善现有商品"
+      type="info"
+    />
+  );
+}
+
+function OrderLinePriceHint({
+  draft,
+  itemCode,
+  price,
+}: {
+  draft: AiDraft;
+  itemCode?: string;
+  price?: number;
+}) {
+  const rows = Array.isArray(draft.payload.items)
+    ? draft.payload.items.map(objectValue)
+    : [];
+  const sourceRow = rows.find((row) => row.item_code === itemCode);
+  const state = objectValue(sourceRow?._state);
+  if (!state.schema_version) return null;
+  const patch = objectValue(state.patch);
+  const effective = objectValue(state.effective);
+  const referencePrice = state.reference_price;
+  const referenceSource = String(
+    state.reference_price_source ?? '后端价格规则',
+  );
+  const locallyOverridden = price !== effective.price;
+  const userOverridden = locallyOverridden || Object.hasOwn(patch, 'price');
+  const referenceText =
+    referencePrice === null || referencePrice === undefined
+      ? '系统未配置参考价'
+      : ['系统参考', productStateValue(referencePrice)].join(' ');
+  return (
+    <Typography.Text type="secondary">
+      {userOverridden ? '人工覆盖价' : '系统取价'} · {referenceText}（
+      {referenceSource}）
+    </Typography.Text>
+  );
+}
+
 export function AiDraftEditorModal({
   draftId,
   onClose,
@@ -74,7 +175,11 @@ export function AiDraftEditorModal({
   const adjustmentType = Form.useWatch('adjustmentType', form);
   const openingQty = Form.useWatch('openingQty', form);
   const stockUom = Form.useWatch('stockUom', form);
+  const orderItems = Form.useWatch('items', form);
   const hasOpeningStock = Number(openingQty ?? 0) > 0;
+  const isProductUpdate =
+    draft?.draftType === 'product_setup' &&
+    draft.payload.operation === 'update';
   const busy = saving || executing;
 
   const applyDraft = (nextDraft: AiDraft) => {
@@ -342,7 +447,9 @@ export function AiDraftEditorModal({
         draft
           ? `${draft.validation.readyForHandoff ? '编辑' : '完善'}${
               draft.draftType === 'product_setup'
-                ? '商品建档'
+                ? isProductUpdate
+                  ? '现有商品'
+                  : '商品建档'
                 : draft.draftType === 'inventory_adjustment'
                   ? '库存调整'
                   : draft.draftType === 'purchase_order'
@@ -411,6 +518,9 @@ export function AiDraftEditorModal({
                   type={draft.validation.errors.length ? 'warning' : 'info'}
                 />
               ) : null)}
+            {draft.draftType === 'product_setup' ? (
+              <ProductUpdateState draft={draft} />
+            ) : null}
             <Form.Item label="公司" name="company" rules={[{ required: true }]}>
               <Input disabled />
             </Form.Item>
@@ -431,7 +541,7 @@ export function AiDraftEditorModal({
                     <Input />
                   </Form.Item>
                   <Form.Item label="商品编码" name="itemCode">
-                    <Input />
+                    <Input disabled={isProductUpdate} />
                   </Form.Item>
                   <Form.Item label="商品分类" name="itemGroup">
                     <RemoteLinkSelect
@@ -445,7 +555,11 @@ export function AiDraftEditorModal({
                   <Form.Item
                     label="库存基准单位"
                     name="stockUom"
-                    extra="初始库存统一按该单位写入，不需要另外选择入库单位。"
+                    extra={
+                      isProductUpdate
+                        ? '这是商品主数据单位；库存数量变化必须使用库存调整。'
+                        : '初始库存统一按该单位写入，不需要另外选择入库单位。'
+                    }
                     rules={[{ message: '请选择库存基准单位', required: true }]}
                   >
                     <UomSelect />
@@ -522,40 +636,47 @@ export function AiDraftEditorModal({
                       style={{ width: '100%' }}
                     />
                   </Form.Item>
-                  <Form.Item label="初始库存数量" name="openingQty">
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="入库仓库"
-                    name="warehouse"
-                    extra={
-                      hasOpeningStock
-                        ? `将按库存基准单位${stockUom ? `（${stockUom}）` : ''}入库。`
-                        : undefined
-                    }
-                    required={hasOpeningStock}
-                    rules={[
-                      {
-                        validator: async (_, value) => {
-                          if (
-                            Number(form.getFieldValue('openingQty') ?? 0) > 0 &&
-                            !value
-                          ) {
-                            throw new Error('填写初始库存时，请选择入库仓库');
-                          }
-                        },
-                      },
-                    ]}
-                  >
-                    <RemoteLinkSelect
-                      doctype="Warehouse"
-                      filters={{ company, disabled: 0, is_group: 0 }}
-                    />
-                  </Form.Item>
+                  {!isProductUpdate ? (
+                    <>
+                      <Form.Item label="初始库存数量" name="openingQty">
+                        <InputNumber
+                          min={0}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label="入库仓库"
+                        name="warehouse"
+                        extra={
+                          hasOpeningStock
+                            ? `将按库存基准单位${stockUom ? `（${stockUom}）` : ''}入库。`
+                            : undefined
+                        }
+                        required={hasOpeningStock}
+                        rules={[
+                          {
+                            validator: async (_, value) => {
+                              if (
+                                Number(form.getFieldValue('openingQty') ?? 0) >
+                                  0 &&
+                                !value
+                              ) {
+                                throw new Error(
+                                  '填写初始库存时，请选择入库仓库',
+                                );
+                              }
+                            },
+                          },
+                        ]}
+                      >
+                        <RemoteLinkSelect
+                          doctype="Warehouse"
+                          filters={{ company, disabled: 0, is_group: 0 }}
+                        />
+                      </Form.Item>
+                    </>
+                  ) : null}
                 </div>
                 <Form.Item label="商品描述" name="description">
                   <Input.TextArea maxLength={2000} rows={3} />
@@ -772,7 +893,16 @@ export function AiDraftEditorModal({
                             <Form.Item name={[field.name, 'uom']}>
                               <UomSelect placeholder="单位" />
                             </Form.Item>
-                            <Form.Item name={[field.name, 'price']}>
+                            <Form.Item
+                              extra={
+                                <OrderLinePriceHint
+                                  draft={draft}
+                                  itemCode={orderItems?.[field.name]?.itemCode}
+                                  price={orderItems?.[field.name]?.price}
+                                />
+                              }
+                              name={[field.name, 'price']}
+                            >
                               <InputNumber
                                 min={0}
                                 placeholder="价格"

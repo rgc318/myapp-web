@@ -138,6 +138,52 @@ describe('AiDraftEditorModal', () => {
     expect(screen.getByDisplayValue('煌星升级版')).toBeTruthy();
   });
 
+  it('renders existing-product mode with hydrated baseline and read-only stock context', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      payload: {
+        _state: {
+          baseline: { standard_selling_rate: 5 },
+          context: {
+            company_total_qty: 1000,
+            stock_uom: 'Unit',
+            stock_uom_display: '件',
+          },
+          operation: 'update',
+          patch: { description: '补充说明' },
+        },
+        company: 'Demo Company',
+        currency: 'CNY',
+        description: '补充说明',
+        item_code: 'ITEM-DIMO',
+        item_name: '迪莫',
+        operation: 'update',
+        standard_selling_rate: 5,
+        stock_uom: 'Unit',
+      },
+    });
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('正在完善现有商品')).toBeTruthy();
+    expect(screen.getByText(/当前库存：1000 件/)).toBeTruthy();
+    expect(screen.getByText(/商品描述：未设置 → 补充说明/)).toBeTruthy();
+    expect(screen.queryByText('初始库存数量')).toBeNull();
+    expect(
+      (screen.getByDisplayValue('ITEM-DIMO') as HTMLInputElement).disabled,
+    ).toBe(true);
+  });
+
   it('saves the latest form version and executes it without closing the editor', async () => {
     const updated = {
       ...draft,

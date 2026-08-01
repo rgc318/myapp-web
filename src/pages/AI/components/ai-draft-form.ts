@@ -321,7 +321,10 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
 
 export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
   if (draft.draftType === 'product_setup') {
+    const operation =
+      draft.payload.operation === 'update' ? 'update' : 'create';
     return {
+      _state: draft.payload._state,
       brand: values.brand,
       company: values.company,
       currency: values.currency,
@@ -329,13 +332,14 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       item_code: values.itemCode,
       item_group: values.itemGroup,
       item_name: values.itemName,
-      opening_qty: values.openingQty,
-      opening_uom: values.stockUom,
+      operation,
+      opening_qty: operation === 'create' ? values.openingQty : undefined,
+      opening_uom: operation === 'create' ? values.stockUom : undefined,
       retail_rate: values.retailRate,
       standard_buying_rate: values.standardBuyingRate,
       standard_selling_rate: values.standardSellingRate,
       stock_uom: values.stockUom,
-      warehouse: values.warehouse,
+      warehouse: operation === 'create' ? values.warehouse : undefined,
       wholesale_rate: values.wholesaleRate,
     };
   }
@@ -351,6 +355,9 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       warehouse: values.warehouse,
     };
   }
+  const originalItems = Array.isArray(draft.payload.items)
+    ? draft.payload.items.map(readPayloadRow)
+    : [];
   return {
     ...(draft.draftType === 'purchase_order'
       ? { supplier: values.party }
@@ -367,13 +374,19 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
           default_sales_mode: values.defaultMode,
           delivery_date: values.targetDate?.format('YYYY-MM-DD'),
         }),
-    items: (values.items ?? []).map((row) => ({
-      item_code: row.itemCode,
-      price: row.price,
-      qty: row.qty,
-      uom: row.uom,
-      warehouse: row.warehouse,
-    })),
+    items: (values.items ?? []).map((row) => {
+      const original = originalItems.find(
+        (item) => item.item_code === row.itemCode,
+      );
+      return {
+        _state: readPayloadRow(original?._state),
+        item_code: row.itemCode,
+        price: row.price,
+        qty: row.qty,
+        uom: row.uom,
+        warehouse: row.warehouse,
+      };
+    }),
     remarks: values.remarks,
     transaction_date: values.transactionDate?.format('YYYY-MM-DD'),
     warehouse: values.warehouse,
