@@ -72,6 +72,7 @@ import {
   generateAiSalesOrderDraft,
   getAiConversation,
   getAiErrorCode,
+  getAiErrorModelDetails,
   listAiAgentApprovals,
   listAiConversations,
   listAiDraftVersions,
@@ -112,6 +113,7 @@ type ChatRow = AiMessageRow & {
   runWarnings?: string[];
   scenario?: AiScenario | null;
   sequence?: number | null;
+  modelAlias?: string | null;
 };
 
 const AI_MESSAGE_PAGE_SIZE = 40;
@@ -159,6 +161,7 @@ function buildMessageRunResult(
     },
     model: messageRow.run.model,
     modelAlias: messageRow.run.modelAlias,
+    modelDisplay: messageRow.run.modelDisplay,
     run: messageRow.run,
     runId: messageRow.runId,
     stream: messageRow.runStream ?? { deltaCount: 0, streamedChars: 0 },
@@ -235,6 +238,8 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
         ? (item.run.error ?? 'AI 服务调用失败')
         : null,
     errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
+    modelAlias: item.run?.modelAlias ?? null,
+    modelDisplay: item.run?.modelDisplay ?? null,
     creation: item.creation,
     run: item.run,
     runId: item.runId,
@@ -570,6 +575,7 @@ export default function AiPage() {
               },
               model: latestRunMessage.run.model,
               modelAlias: latestRunMessage.run.modelAlias,
+              modelDisplay: latestRunMessage.run.modelDisplay,
               runId: latestRunMessage.runId,
               run: latestRunMessage.run,
               stream: { deltaCount: 0, streamedChars: 0 },
@@ -718,6 +724,11 @@ export default function AiPage() {
       runTools: [],
       runWarnings: [],
       scenario: resolvedScenario,
+      modelAlias: requestedModelAlias,
+      modelDisplay:
+        selectableModels.find(
+          (model) => model.modelAlias === requestedModelAlias,
+        )?.displayName ?? null,
     };
     setMessages((current) => [...current, userMessage, assistantMessage]);
     setInspectorOpen(false);
@@ -793,6 +804,8 @@ export default function AiPage() {
                   runId: result.runId,
                   runResult: result,
                   runStatus: 'completed',
+                  modelAlias: result.modelAlias,
+                  modelDisplay: result.modelDisplay,
                   runStream: result.stream,
                   runWarnings: result.warnings,
                 }
@@ -849,6 +862,24 @@ export default function AiPage() {
               phase: String(event.phase ?? current?.phase ?? 'running'),
               startedAt: current?.startedAt ?? Date.now(),
             }));
+            const eventModelDisplay = String(event.model_display ?? '').trim();
+            const eventModelAlias = String(event.model_alias ?? '').trim();
+            if (eventModelDisplay || eventModelAlias) {
+              setMessages((current) =>
+                current.map((item) =>
+                  item.id === assistantMessage.id
+                    ? {
+                        ...item,
+                        modelAlias: eventModelAlias || item.modelAlias,
+                        modelDisplay:
+                          eventModelDisplay ||
+                          eventModelAlias ||
+                          item.modelDisplay,
+                      }
+                    : item,
+                ),
+              );
+            }
           }
           if (event.type === 'tool_started') {
             const toolName = String(event.tool ?? '业务工具');
@@ -1011,6 +1042,8 @@ export default function AiPage() {
                   runId: result.runId,
                   runResult: result,
                   runStatus: 'waiting_approval',
+                  modelAlias: result.modelAlias,
+                  modelDisplay: result.modelDisplay,
                 }
               : item,
           ),
@@ -1047,6 +1080,8 @@ export default function AiPage() {
                 runId: result.runId,
                 runResult: result,
                 runStatus: 'completed',
+                modelAlias: result.modelAlias,
+                modelDisplay: result.modelDisplay,
                 runStream: result.stream,
                 runWarnings: Array.from(
                   new Set([...(item.runWarnings ?? []), ...result.warnings]),
@@ -1079,6 +1114,7 @@ export default function AiPage() {
         const errorMessage =
           caught instanceof Error ? caught.message : 'AI 服务调用失败';
         const errorCode = getAiErrorCode(caught);
+        const errorModel = getAiErrorModelDetails(caught);
         const failedRunId =
           caught &&
           typeof caught === 'object' &&
@@ -1100,6 +1136,11 @@ export default function AiPage() {
                   ...item,
                   error: errorMessage,
                   errorCode,
+                  modelAlias: errorModel.modelAlias ?? item.modelAlias,
+                  modelDisplay:
+                    errorModel.modelDisplay ??
+                    errorModel.modelAlias ??
+                    item.modelDisplay,
                   runId: failedRunId ?? item.runId,
                   runStatus: 'failed',
                 }
@@ -1687,6 +1728,7 @@ export default function AiPage() {
             item.error ? () => openMessageRun(item.id) : undefined
           }
           onViewRun={item.runId ? () => openMessageRun(item.id) : undefined}
+          modelDisplay={item.modelDisplay}
           progressMessage={
             loading && index === messages.length - 1
               ? runProgress?.message
@@ -2201,6 +2243,8 @@ export default function AiPage() {
               createdAt={inspectedMessage?.creation}
               error={inspectedError}
               errorCode={inspectedErrorCode}
+              modelAlias={inspectedMessage?.modelAlias ?? null}
+              modelDisplay={inspectedMessage?.modelDisplay ?? null}
               onEditRequest={
                 canRecoverInspectedRun ? editFailedRequest : undefined
               }

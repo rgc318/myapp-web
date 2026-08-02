@@ -10,9 +10,13 @@ export type AiFailureRecovery = {
 
 const INPUT_CODES = new Set([
   'AI_REQUEST_INVALID',
-  'MODEL_PROVIDER_REJECTED',
   'VALIDATION_ERROR',
   'ValidationError',
+]);
+
+const MODEL_CODES = new Set([
+  'AI_MODEL_CIRCUIT_OPEN',
+  'MODEL_PROVIDER_REJECTED',
 ]);
 
 const PERMISSION_CODES = new Set([
@@ -36,6 +40,16 @@ export function resolveAiFailureRecovery(
   errorCode?: string | null,
 ): AiFailureRecovery {
   const code = errorCode?.trim() || null;
+  if (code && MODEL_CODES.has(code)) {
+    return {
+      action: 'retry',
+      alertType: 'warning',
+      description:
+        '本次实际使用的模型暂时不可用。可在高级设置中选择其他已验证模型，或稍后手动重试；系统不会自动重复调用。',
+      kind: 'retryable',
+      title: '本次模型不可用',
+    };
+  }
   if (code && INPUT_CODES.has(code)) {
     return {
       action: 'edit',

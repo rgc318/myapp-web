@@ -25,6 +25,14 @@ export type AiAuditEvent = {
 
 export type AiGovernanceOverview = {
   dataTaskCounts: Record<string, number>;
+  modelHealthSchedule: {
+    cron: string;
+    enabled: boolean;
+    lastHealthAt: string | null;
+    modelAliases: string[];
+    scope: string;
+    timezone: string;
+  };
   policyCounts: Record<string, number>;
   recentAudits: AiAuditEvent[];
   registryCounts: Record<string, number>;
@@ -98,7 +106,9 @@ export type AiModelAvailabilityResult = {
   availableCount: number;
   checkedCount: number;
   items: AiModelAvailabilityItem[];
+  requestedCount: number;
   source: string;
+  trigger: string;
   unavailableCount: number;
 };
 
@@ -566,9 +576,18 @@ export async function getAiGovernanceOverview() {
   );
   const row = readObject(result.data);
   const runtime = readObject(row.runtime);
+  const modelHealthSchedule = readObject(row.model_health_schedule);
   const usage = readObject(row.usage_7d);
   return {
     dataTaskCounts: mapCounts(row.data_task_counts),
+    modelHealthSchedule: {
+      cron: text(modelHealthSchedule.cron) ?? '',
+      enabled: Boolean(modelHealthSchedule.enabled),
+      lastHealthAt: text(modelHealthSchedule.last_health_at),
+      modelAliases: toStringList(modelHealthSchedule.model_aliases),
+      scope: text(modelHealthSchedule.scope) ?? '',
+      timezone: text(modelHealthSchedule.timezone) ?? '',
+    },
     policyCounts: mapCounts(row.policy_counts),
     recentAudits: Array.isArray(row.recent_audits)
       ? row.recent_audits.map(mapAudit)
@@ -678,10 +697,13 @@ export async function syncAiModels() {
   });
 }
 
-export async function checkAiModelAvailability() {
+export async function checkAiModelAvailability(modelAliases?: string[]) {
   return runGatewayMutation<AiModelAvailabilityResult>(
     'check_ai_model_availability_v1',
     {
+      payload: modelAliases?.length
+        ? { model_aliases: modelAliases }
+        : undefined,
       transform: (data) => {
         const payload = readObject(data);
         return {
@@ -700,7 +722,9 @@ export async function checkAiModelAvailability() {
                 };
               })
             : [],
+          requestedCount: toNumber(payload.requested_count),
           source: toOptionalText(payload.source) ?? 'litellm',
+          trigger: toOptionalText(payload.trigger) ?? 'manual_all',
           unavailableCount: toNumber(payload.unavailable_count),
         };
       },

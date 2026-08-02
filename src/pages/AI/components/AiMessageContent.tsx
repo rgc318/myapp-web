@@ -43,6 +43,7 @@ type Props = {
   error?: string | null;
   errorCode?: string | null;
   feedback?: 'positive' | 'negative';
+  modelDisplay?: string | null;
   onDiscardDraft: (draftId: string) => void;
   onEditDraft: (citation: AiCitation) => void;
   onEditRequest?: () => void;
@@ -311,6 +312,7 @@ export function AiMessageContent({
   error,
   errorCode,
   feedback,
+  modelDisplay,
   onDiscardDraft,
   onEditDraft,
   onEditRequest,
@@ -426,6 +428,11 @@ export function AiMessageContent({
           type={failureRecovery?.alertType}
         />
       ) : null}
+      {modelDisplay ? (
+        <Tag bordered={false} color={error ? 'error' : 'default'}>
+          本次模型：{modelDisplay}
+        </Tag>
+      ) : null}
       {detailCitations.length ? (
         <div className={styles.sourceCards}>
           {detailCitations.map((citation, index) => (
@@ -490,5 +497,6 @@ export type AiMessageRow = AiChatMessage & {
   error?: string | null;
   errorCode?: string | null;
   id: string;
+  modelDisplay?: string | null;
   runId?: string | null;
 };

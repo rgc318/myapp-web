@@ -383,7 +383,7 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 
 `src/access.ts` 只负责路由、菜单和按钮体验。所有动作都必须预期后端可能拒绝，并展示后端返回的原因。
 
-工作台固定模型和高级诊断不能只依赖 `src/access.ts`。页面只消费 `list_ai_selectable_models_v1` 返回的 `canSelectFixedModel` / `canViewAdvancedDiagnostics`；Backend 仍负责拒绝未授权 `model_alias`，并在同步 Chat、SSE、历史会话和四类草稿响应中服务端脱敏模型、Provider、trace、Token 和首 Token 数据。
+工作台固定模型和高级诊断不能只依赖 `src/access.ts`。页面只消费 `list_ai_selectable_models_v1` 返回的 `canSelectFixedModel` / `canViewAdvancedDiagnostics`；Backend 仍负责拒绝未授权 `model_alias`，并在同步 Chat、SSE、历史会话和四类草稿响应中服务端脱敏模型、Provider、trace、Token 和首 Token 数据。每条助手回答和失败卡都显示本次实际模型的友好名称；自动模式不能只显示“自动选择”。治理角色的 Run 诊断同时显示技术 alias 和稳定 Provider 错误码，普通业务账号只显示后端脱敏后的友好名称。
 
 ## 12. 状态、异常与恢复
 
@@ -402,7 +402,9 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 - 写操作依赖幂等键，不在页面自动重复提交。
 - Run、反馈、草稿和版本以持久化数据恢复，不依赖浏览器内存。
 - 向量清理、策略发布、任务执行和回滚必须有确认、原因和后端审计。
-- AI 流式失败使用 SSE `error.code` 和持久 Run `error_code` 作为恢复事实，不依赖中文错误文案。临时网络、服务、限流、并发和模型熔断提供人工“稍后重试”；请求校验和模型拒绝恢复原问题供修改；权限拒绝不提供无意义重试；预算、Prompt 版本、运行治理和内部认证归入系统/治理故障并引导查看诊断。任何类别都不得自动重复模型调用。
+- AI 流式失败使用 SSE `error.code` 和持久 Run `error_code` 作为恢复事实，不依赖中文错误文案。临时网络、服务、限流、并发、模型熔断和 `MODEL_PROVIDER_REJECTED` 提供人工“稍后重试”，其中模型拒绝明确提示可在高级设置中更换模型；请求校验恢复原问题供修改；权限拒绝不提供无意义重试；预算、Prompt 版本、运行治理和内部认证归入系统/治理故障并引导查看诊断。任何类别都不得自动重复模型调用。
+
+模型注册表使用 ProTable 行选择：每行提供“检测”，选中多行后提供“检测已选（N）”，同时保留全量检测。页面展示最近检测时间、`available / unavailable` 和稳定错误码；治理总览同时展示每日定时检测是否启用、检测范围和最近检测时间。每次检测后刷新列表，但不自动改变人工治理状态。
 
 ## 13. 安全与隐私
 

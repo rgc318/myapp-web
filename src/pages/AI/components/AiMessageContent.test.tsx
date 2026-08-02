@@ -275,6 +275,23 @@ describe('AiMessageContent', () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  it('shows the actual model on provider rejection failures', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [],
+        content: '',
+        error: '模型 DeepSeek V4 Flash 暂时不可用',
+        errorCode: 'MODEL_PROVIDER_REJECTED',
+        modelDisplay: 'DeepSeek V4 Flash',
+        onRetry: jest.fn(),
+      }),
+    );
+
+    expect(screen.getByText('本次模型：DeepSeek V4 Flash')).toBeTruthy();
+    expect(screen.getByText('本次模型不可用')).toBeTruthy();
+  });
+
   it('asks the user to edit validation failures instead of resending unchanged input', () => {
     const onEditRequest = jest.fn();
     render(

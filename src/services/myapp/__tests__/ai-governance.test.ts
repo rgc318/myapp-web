@@ -90,6 +90,14 @@ describe('AI governance domain service', () => {
           cost_currency: 'CNY',
           latency_p95_ms: 1800,
         },
+        model_health_schedule: {
+          enabled: true,
+          cron: '15 3 * * *',
+          timezone: 'site',
+          scope: 'all_enabled',
+          model_aliases: [],
+          last_health_at: '2026-08-01 03:15:00',
+        },
         runtime: {
           reachable: true,
           status: 'ok',
@@ -118,6 +126,11 @@ describe('AI governance domain service', () => {
       requestCount: 20,
       estimatedCost: 2.5,
       latencyP95Ms: 1800,
+    });
+    expect(result.modelHealthSchedule).toMatchObject({
+      enabled: true,
+      cron: '15 3 * * *',
+      lastHealthAt: '2026-08-01 03:15:00',
     });
     expect(result.dataTaskCounts.review_required).toBe(3);
   });
@@ -349,6 +362,39 @@ describe('AI governance domain service', () => {
       modelAlias: 'erp-embedding',
       available: false,
       errorCode: 'PROVIDER_HTTP_429',
+    });
+  });
+
+  it('forwards selected aliases for targeted model availability checks', async () => {
+    mockedRunGatewayMutation.mockImplementation(async (_method, options) => ({
+      data: options?.transform?.({
+        source: 'litellm',
+        trigger: 'manual_selected',
+        requested_count: 2,
+        checked_count: 2,
+        available_count: 2,
+        unavailable_count: 0,
+        items: [],
+      }),
+      idempotencyKey: 'availability-selected-1',
+    }));
+
+    const result = await checkAiModelAvailability([
+      'gpt-5.5',
+      'opencode-glm-5.2',
+    ]);
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'check_ai_model_availability_v1',
+      expect.objectContaining({
+        payload: {
+          model_aliases: ['gpt-5.5', 'opencode-glm-5.2'],
+        },
+      }),
+    );
+    expect(result.data).toMatchObject({
+      requestedCount: 2,
+      trigger: 'manual_selected',
     });
   });
 

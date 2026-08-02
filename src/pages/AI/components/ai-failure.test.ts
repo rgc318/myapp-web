@@ -4,6 +4,7 @@ describe('AI failure recovery', () => {
   it.each([
     ['AI_REQUEST_RATE_LIMITED', 'retryable', 'retry'],
     ['AI_REQUEST_INVALID', 'input', 'edit'],
+    ['MODEL_PROVIDER_REJECTED', 'retryable', 'retry'],
     ['PERMISSION_DENIED', 'permission', 'none'],
     ['AI_DAILY_BUDGET_EXCEEDED', 'system', 'none'],
   ] as const)('maps %s to %s recovery', (code, kind, action) => {

@@ -247,6 +247,19 @@ jest.mock('@/services/myapp/ai', () => ({
   generateAiPurchaseOrderDraft: jest.fn(),
   generateAiSalesOrderDraft: jest.fn(),
   getAiErrorCode: (error: { code?: string } | null) => error?.code ?? null,
+  getAiErrorModelDetails: (
+    error: {
+      data?: {
+        model_alias?: string;
+        model_display?: string;
+        provider_error_code?: string;
+      };
+    } | null,
+  ) => ({
+    modelAlias: error?.data?.model_alias ?? null,
+    modelDisplay: error?.data?.model_display ?? null,
+    providerErrorCode: error?.data?.provider_error_code ?? null,
+  }),
   getAiConversation: jest.fn(),
   getAiDraft: jest.fn(),
   listAiConversations: jest
@@ -849,13 +862,13 @@ describe('AI workspace page', () => {
     expect(screen.getByText('商品查询')).toBeTruthy();
     expect(screen.getByText('410 ms')).toBeTruthy();
     fireEvent.click(screen.getByText('高级诊断'));
-    expect(screen.getByText('erp-history-old')).toBeTruthy();
+    expect(screen.getAllByText('erp-history-old').length).toBeGreaterThan(0);
     expect(screen.getByText('AI-RUN-HISTORY-1')).toBeTruthy();
 
     fireEvent.click(runButtons[1]);
     expect(screen.getByText('订单查询')).toBeTruthy();
     expect(screen.getByText('1.20 秒')).toBeTruthy();
-    expect(screen.getByText('erp-history-new')).toBeTruthy();
+    expect(screen.getAllByText('erp-history-new').length).toBeGreaterThan(0);
     expect(screen.getByText('AI-RUN-HISTORY-2')).toBeTruthy();
   });
 

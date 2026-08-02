@@ -199,6 +199,12 @@ export default function AiModelGovernancePage({
   const [editingModel, setEditingModel] = useState<AiModel | null>(null);
   const [syncingModels, setSyncingModels] = useState(false);
   const [checkingModels, setCheckingModels] = useState(false);
+  const [checkingModelAliases, setCheckingModelAliases] = useState<string[]>(
+    [],
+  );
+  const [selectedModelAliases, setSelectedModelAliases] = useState<string[]>(
+    [],
+  );
   const [editingPolicy, setEditingPolicy] = useState<AiPolicy | null>(null);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -314,6 +320,28 @@ export default function AiModelGovernancePage({
     }
   };
 
+  const executeModelAvailabilityCheck = async (modelAliases?: string[]) => {
+    const aliases = modelAliases?.filter(Boolean) ?? [];
+    setCheckingModels(true);
+    setCheckingModelAliases(aliases);
+    try {
+      const result = await checkAiModelAvailability(
+        aliases.length ? aliases : undefined,
+      );
+      message.success(
+        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.unavailableCount} 个不可用`,
+      );
+      setSelectedModelAliases([]);
+      reloadGovernance();
+    } catch (error) {
+      notifyMutationError(error);
+      throw error;
+    } finally {
+      setCheckingModels(false);
+      setCheckingModelAliases([]);
+    }
+  };
+
   const modelColumns: ProColumns<AiModel>[] = [
     { title: '模型', dataIndex: 'search', hideInTable: true },
     {
@@ -402,10 +430,28 @@ export default function AiModelGovernancePage({
     {
       title: '操作',
       valueType: 'option',
-      width: 90,
+      width: 150,
       render: (_, row) =>
         access.canManageAiGovernance
           ? [
+              <Button
+                key="check"
+                loading={checkingModelAliases.includes(row.modelAlias)}
+                onClick={() => {
+                  Modal.confirm({
+                    title: `检测模型 ${row.modelAlias}？`,
+                    content:
+                      '系统会通过 LiteLLM 发起一次最小真实请求，可能产生少量 Provider 费用。',
+                    okText: '开始检测',
+                    cancelText: '取消',
+                    onOk: () => executeModelAvailabilityCheck([row.modelAlias]),
+                  });
+                }}
+                size="small"
+                type="link"
+              >
+                检测
+              </Button>,
               <a
                 key="edit"
                 onClick={() => {
@@ -807,86 +853,133 @@ export default function AiModelGovernancePage({
                 key: 'models',
                 label: '模型注册表',
                 children: (
-                  <ProTable<AiModel>
-                    actionRef={modelActionRef}
-                    rowKey="modelAlias"
-                    columns={modelColumns}
-                    cardBordered={false}
-                    scroll={{ x: 1500 }}
-                    request={async (params) => {
-                      const result = await listAiModels({
-                        capability: params.capability,
-                        current: params.current,
-                        pageSize: params.pageSize,
-                        search: params.search,
-                        status: params.status,
-                      });
-                      return {
-                        data: result.items,
-                        success: true,
-                        total: result.total,
-                      };
-                    }}
-                    toolBarRender={() =>
-                      access.canManageAiGovernance
-                        ? [
-                            <Button
-                              key="sync"
-                              icon={<CloudSyncOutlined />}
-                              loading={syncingModels}
-                              onClick={async () => {
-                                setSyncingModels(true);
-                                try {
-                                  const result = await syncAiModels();
-                                  message.success(
-                                    `已从 LiteLLM 同步 ${result.data.visibleCount} 个当前 Key 可见模型`,
-                                  );
-                                  reloadGovernance();
-                                } catch (error) {
-                                  notifyMutationError(error);
-                                } finally {
-                                  setSyncingModels(false);
+                  <Space
+                    orientation="vertical"
+                    size={12}
+                    style={{ width: '100%' }}
+                  >
+                    <Alert
+                      showIcon
+                      type={
+                        overview?.modelHealthSchedule.enabled
+                          ? 'success'
+                          : 'warning'
+                      }
+                      title={
+                        overview?.modelHealthSchedule.enabled
+                          ? '定时健康检查已启用'
+                          : '定时健康检查未启用'
+                      }
+                      description={
+                        overview?.modelHealthSchedule.enabled
+                          ? `每天 03:15（站点时区）检测${overview.modelHealthSchedule.modelAliases.length ? `指定的 ${overview.modelHealthSchedule.modelAliases.length} 个模型` : '全部未停用模型'}；最近检测：${overview.modelHealthSchedule.lastHealthAt || '尚无记录'}`
+                          : '可在站点配置中启用 myapp_ai_model_healthcheck_enabled；手动单项、批量和全量检测仍可使用。'
+                      }
+                    />
+                    <ProTable<AiModel>
+                      actionRef={modelActionRef}
+                      rowKey="modelAlias"
+                      columns={modelColumns}
+                      cardBordered={false}
+                      scroll={{ x: 1580 }}
+                      rowSelection={
+                        access.canManageAiGovernance
+                          ? {
+                              preserveSelectedRowKeys: true,
+                              selectedRowKeys: selectedModelAliases,
+                              onChange: (keys) =>
+                                setSelectedModelAliases(keys.map(String)),
+                            }
+                          : undefined
+                      }
+                      tableAlertOptionRender={false}
+                      request={async (params) => {
+                        const result = await listAiModels({
+                          capability: params.capability,
+                          current: params.current,
+                          pageSize: params.pageSize,
+                          search: params.search,
+                          status: params.status,
+                        });
+                        return {
+                          data: result.items,
+                          success: true,
+                          total: result.total,
+                        };
+                      }}
+                      toolBarRender={() =>
+                        access.canManageAiGovernance
+                          ? [
+                              <Button
+                                key="sync"
+                                icon={<CloudSyncOutlined />}
+                                loading={syncingModels}
+                                onClick={async () => {
+                                  setSyncingModels(true);
+                                  try {
+                                    const result = await syncAiModels();
+                                    message.success(
+                                      `已从 LiteLLM 同步 ${result.data.visibleCount} 个当前 Key 可见模型`,
+                                    );
+                                    reloadGovernance();
+                                  } catch (error) {
+                                    notifyMutationError(error);
+                                  } finally {
+                                    setSyncingModels(false);
+                                  }
+                                }}
+                              >
+                                同步 LiteLLM
+                              </Button>,
+                              <Button
+                                key="availability-selected"
+                                disabled={!selectedModelAliases.length}
+                                icon={<ApiOutlined />}
+                                loading={
+                                  checkingModels &&
+                                  checkingModelAliases.length > 0
                                 }
-                              }}
-                            >
-                              同步 LiteLLM
-                            </Button>,
-                            <Button
-                              key="availability"
-                              icon={<ApiOutlined />}
-                              loading={checkingModels}
-                              onClick={() => {
-                                Modal.confirm({
-                                  title: '检查全部模型可用性？',
-                                  content:
-                                    '系统会通过 LiteLLM 对每个未停用模型发起一次最小真实请求，可能产生少量 Provider 费用。',
-                                  okText: '开始检查',
-                                  cancelText: '取消',
-                                  onOk: async () => {
-                                    setCheckingModels(true);
-                                    try {
-                                      const result =
-                                        await checkAiModelAvailability();
-                                      message.success(
-                                        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.unavailableCount} 个不可用`,
-                                      );
-                                      reloadGovernance();
-                                    } catch (error) {
-                                      notifyMutationError(error);
-                                      throw error;
-                                    } finally {
-                                      setCheckingModels(false);
-                                    }
-                                  },
-                                });
-                              }}
-                            >
-                              一键检查可用性
-                            </Button>,
-                          ]
-                        : []
-                    }
-                  />
+                                onClick={() => {
+                                  Modal.confirm({
+                                    title: `检测已选 ${selectedModelAliases.length} 个模型？`,
+                                    content:
+                                      '系统会对每个已选模型发起一次最小真实请求，可能产生少量 Provider 费用。',
+                                    okText: '开始检测',
+                                    cancelText: '取消',
+                                    onOk: () =>
+                                      executeModelAvailabilityCheck(
+                                        selectedModelAliases,
+                                      ),
+                                  });
+                                }}
+                              >
+                                检测已选（{selectedModelAliases.length}）
+                              </Button>,
+                              <Button
+                                key="availability"
+                                icon={<ApiOutlined />}
+                                loading={
+                                  checkingModels &&
+                                  checkingModelAliases.length === 0
+                                }
+                                onClick={() => {
+                                  Modal.confirm({
+                                    title: '检查全部模型可用性？',
+                                    content:
+                                      '系统会通过 LiteLLM 对每个未停用模型发起一次最小真实请求，可能产生少量 Provider 费用。',
+                                    okText: '开始检查',
+                                    cancelText: '取消',
+                                    onOk: () => executeModelAvailabilityCheck(),
+                                  });
+                                }}
+                              >
+                                一键检查可用性
+                              </Button>,
+                            ]
+                          : []
+                      }
+                    />
+                  </Space>
                 ),
               },
               {

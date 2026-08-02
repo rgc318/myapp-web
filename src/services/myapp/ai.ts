@@ -82,6 +82,9 @@ export class AiDraftVersionConflictError extends Error {
 export class AiStreamError extends Error {
   code: string;
   conversationId: string | null;
+  modelAlias: string | null;
+  modelDisplay: string | null;
+  providerErrorCode: string | null;
   runId: string | null;
 
   constructor(
@@ -89,6 +92,9 @@ export class AiStreamError extends Error {
     options: {
       code: string;
       conversationId?: string | null;
+      modelAlias?: string | null;
+      modelDisplay?: string | null;
+      providerErrorCode?: string | null;
       runId?: string | null;
     },
   ) {
@@ -96,6 +102,9 @@ export class AiStreamError extends Error {
     this.name = 'AiStreamError';
     this.code = options.code;
     this.conversationId = options.conversationId ?? null;
+    this.modelAlias = options.modelAlias ?? null;
+    this.modelDisplay = options.modelDisplay ?? null;
+    this.providerErrorCode = options.providerErrorCode ?? null;
     this.runId = options.runId ?? null;
   }
 }
@@ -104,6 +113,34 @@ export function getAiErrorCode(error: unknown): string | null {
   if (!error || typeof error !== 'object') return null;
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' && code.trim() ? code.trim() : null;
+}
+
+export function getAiErrorModelDetails(error: unknown): {
+  modelAlias: string | null;
+  modelDisplay: string | null;
+  providerErrorCode: string | null;
+} {
+  if (!error || typeof error !== 'object') {
+    return { modelAlias: null, modelDisplay: null, providerErrorCode: null };
+  }
+  const candidate = error as {
+    data?: unknown;
+    modelAlias?: unknown;
+    modelDisplay?: unknown;
+    providerErrorCode?: unknown;
+  };
+  const data = readObject(candidate.data);
+  const optionalText = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : null;
+  return {
+    modelAlias:
+      optionalText(candidate.modelAlias) ?? optionalText(data.model_alias),
+    modelDisplay:
+      optionalText(candidate.modelDisplay) ?? optionalText(data.model_display),
+    providerErrorCode:
+      optionalText(candidate.providerErrorCode) ??
+      optionalText(data.provider_error_code),
+  };
 }
 
 export function isAiDraftVersionConflictError(
@@ -301,6 +338,7 @@ export type AiRunSummary = {
   latencyMs: number;
   model: string | null;
   modelAlias: string | null;
+  modelDisplay: string | null;
   status: string;
   traceId: string | null;
   usage: AiTokenUsage;
@@ -324,6 +362,7 @@ export type AiChatResult = {
   message: AiChatMessage;
   model: string | null;
   modelAlias: string | null;
+  modelDisplay: string | null;
   traceId: string | null;
   run: AiRunSummary;
   stream: {
@@ -384,6 +423,8 @@ function mapChatResult(value: unknown): AiChatResult {
     },
     model: typeof data.model === 'string' ? data.model : null,
     modelAlias: typeof data.model_alias === 'string' ? data.model_alias : null,
+    modelDisplay:
+      typeof data.model_display === 'string' ? data.model_display : null,
     traceId: typeof data.trace_id === 'string' ? data.trace_id : null,
     run: {
       error: typeof run.error === 'string' ? run.error : null,
@@ -397,6 +438,8 @@ function mapChatResult(value: unknown): AiChatResult {
       model: typeof data.model === 'string' ? data.model : null,
       modelAlias:
         typeof data.model_alias === 'string' ? data.model_alias : null,
+      modelDisplay:
+        typeof data.model_display === 'string' ? data.model_display : null,
       status: String(run.status ?? 'completed'),
       traceId: typeof data.trace_id === 'string' ? data.trace_id : null,
       usage: {
@@ -931,6 +974,8 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
         model: typeof run.model === 'string' ? run.model : null,
         modelAlias:
           typeof run.model_alias === 'string' ? run.model_alias : null,
+        modelDisplay:
+          typeof run.model_display === 'string' ? run.model_display : null,
         status: String(run.status ?? ''),
         traceId: typeof run.trace_id === 'string' ? run.trace_id : null,
         usage: {
@@ -1416,6 +1461,18 @@ export async function streamAiChatMessage(
           typeof envelope.code === 'string'
             ? envelope.code
             : fallbackCode,
+        modelAlias:
+          typeof readObject(envelope.data).model_alias === 'string'
+            ? String(readObject(envelope.data).model_alias)
+            : null,
+        modelDisplay:
+          typeof readObject(envelope.data).model_display === 'string'
+            ? String(readObject(envelope.data).model_display)
+            : null,
+        providerErrorCode:
+          typeof readObject(envelope.data).provider_error_code === 'string'
+            ? String(readObject(envelope.data).provider_error_code)
+            : null,
       },
     );
   }
@@ -1457,6 +1514,16 @@ export async function streamAiChatMessage(
           conversationId:
             typeof event.conversation === 'string'
               ? event.conversation
+              : null,
+          modelAlias:
+            typeof event.model_alias === 'string' ? event.model_alias : null,
+          modelDisplay:
+            typeof event.model_display === 'string'
+              ? event.model_display
+              : null,
+          providerErrorCode:
+            typeof event.provider_error_code === 'string'
+              ? event.provider_error_code
               : null,
           runId: typeof event.run_id === 'string' ? event.run_id : null,
         },
@@ -1500,6 +1567,7 @@ export async function streamAiChatMessage(
       },
       model: null,
       modelAlias: null,
+      modelDisplay: null,
       traceId: null,
       run: {
         error: null,
@@ -1508,6 +1576,7 @@ export async function streamAiChatMessage(
         latencyMs: toNumber(waitingEvent.latency_ms),
         model: null,
         modelAlias: null,
+        modelDisplay: null,
         status: 'waiting_approval',
         traceId: null,
         usage: {

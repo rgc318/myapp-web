@@ -10,6 +10,7 @@ const result: AiChatResult = {
   message: { content: '完成', role: 'assistant' },
   model: 'provider-model',
   modelAlias: 'erp-fast-chat',
+  modelDisplay: 'ERP Fast Chat',
   run: {
     error: null,
     errorCode: null,
@@ -17,6 +18,7 @@ const result: AiChatResult = {
     latencyMs: 920,
     model: 'provider-model',
     modelAlias: 'erp-fast-chat',
+    modelDisplay: 'ERP Fast Chat',
     status: 'completed',
     traceId: 'trace-1',
     usage: {

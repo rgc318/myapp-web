@@ -82,6 +82,8 @@ export function AiRunInspector({
   createdAt,
   error,
   errorCode,
+  modelAlias,
+  modelDisplay,
   onEditRequest,
   onRetry,
   result,
@@ -96,6 +98,8 @@ export function AiRunInspector({
   createdAt?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  modelAlias?: string | null;
+  modelDisplay?: string | null;
   onEditRequest?: () => void;
   onRetry?: () => void;
   result: AiChatResult | null;
@@ -110,6 +114,9 @@ export function AiRunInspector({
   const runId = result?.runId || activeRunId || null;
   const resolvedError = run?.error || error;
   const resolvedErrorCode = run?.errorCode || errorCode;
+  const resolvedModelAlias = result?.modelAlias || modelAlias || null;
+  const resolvedModelDisplay =
+    result?.modelDisplay || modelDisplay || resolvedModelAlias;
   const failureRecovery = resolvedError
     ? resolveAiFailureRecovery(resolvedErrorCode)
     : null;
@@ -147,6 +154,11 @@ export function AiRunInspector({
               children: durationText(run?.latencyMs),
             },
             {
+              key: 'modelDisplay',
+              label: '本次模型',
+              children: resolvedModelDisplay || '等待模型选择',
+            },
+            {
               key: 'createdAt',
               label: '消息时间',
               children: createdAt || '-',
@@ -177,7 +189,7 @@ export function AiRunInspector({
                     {
                       key: 'modelAlias',
                       label: '能力模型',
-                      children: result?.modelAlias || '等待首次调用',
+                      children: resolvedModelAlias || '等待首次调用',
                     },
                     {
                       key: 'model',
