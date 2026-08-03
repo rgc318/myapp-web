@@ -96,6 +96,19 @@ function summarizeWarehouses(
           ),
     ),
   );
+  if (!warehouses.length) {
+    const unresolvedWarehouses = Array.from(
+      new Set(
+        [
+          ...rows.map((row) => optionalText(row.warehouse_query)),
+          optionalText(payload.warehouse_query),
+        ].filter((value): value is string => Boolean(value)),
+      ),
+    );
+    if (unresolvedWarehouses.length) {
+      return `待匹配：${unresolvedWarehouses.join('、')}`;
+    }
+  }
   if (warehouses.length <= 2) return warehouses.join('、') || '-';
   return `${warehouses.slice(0, 2).join('、')} 等 ${warehouses.length} 个仓库`;
 }
@@ -112,6 +125,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
       optionalText(payload.stock_uom_display),
   );
   const warehouse = optionalText(payload.warehouse);
+  const warehouseQuery = optionalText(payload.warehouse_query);
   const state = asObject(payload._state);
   const stateContext = asObject(state.context);
   const isUpdate = payload.operation === 'update';
@@ -179,7 +193,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
         ? [formatQty(currentStockQty), currentStockUom].join(' ')
         : openingQty === null
           ? '-'
-          : `${formatConvertedQty(openingQty)} ${openingUom}${warehouse ? ` · ${warehouse}` : openingQty > 0 ? ' · 未选择仓库' : ''}`,
+          : `${formatConvertedQty(openingQty)} ${openingUom}${warehouse ? ` · ${warehouse}` : warehouseQuery ? ` · 待匹配：${warehouseQuery}` : openingQty > 0 ? ' · 未选择仓库' : ''}`,
     },
   ];
 }
@@ -193,6 +207,9 @@ function orderSummaryItems(draft: AiDraft): SummaryItem[] {
       optionalText(payload.supplier))
     : (optionalText(payload.customer_display_name) ??
       optionalText(payload.customer));
+  const partyQuery = isPurchase
+    ? optionalText(payload.supplier_query)
+    : optionalText(payload.customer_query);
   const transactionDate = optionalText(payload.transaction_date) ?? '-';
   const targetDate = isPurchase
     ? optionalText(payload.schedule_date)
@@ -205,7 +222,7 @@ function orderSummaryItems(draft: AiDraft): SummaryItem[] {
     {
       key: 'party',
       label: isPurchase ? '供应商' : '客户',
-      value: party ?? '-',
+      value: party ?? (partyQuery ? `待匹配：${partyQuery}` : '-'),
     },
     {
       key: 'dates',
@@ -235,7 +252,9 @@ function orderSummaryItems(draft: AiDraft): SummaryItem[] {
 function inventorySummaryItems(draft: AiDraft): SummaryItem[] {
   const payload = draft.payload;
   const row = itemRows(payload)[0] ?? {};
-  const itemName = optionalText(row.item_name) ?? '-';
+  const itemQuery = optionalText(row.item_query);
+  const itemName =
+    optionalText(row.item_name) ?? (itemQuery ? `待匹配：${itemQuery}` : '-');
   const itemCode = optionalText(row.item_code);
   const stockUom = displayUom(
     optionalText(row.stock_uom) ?? optionalText(row.uom),

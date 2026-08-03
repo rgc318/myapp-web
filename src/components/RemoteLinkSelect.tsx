@@ -17,6 +17,7 @@ export function RemoteLinkSelect({
   doctype,
   extraFields,
   filters,
+  initialQuery,
   limit = 20,
   placeholder,
   style,
@@ -27,6 +28,7 @@ export function RemoteLinkSelect({
   doctype: string;
   extraFields?: string[];
   filters?: LinkOptionFilters;
+  initialQuery?: string;
   limit?: number;
   placeholder?: string;
   style?: React.CSSProperties;
@@ -39,6 +41,8 @@ export function RemoteLinkSelect({
     undefined,
   );
   const requestRef = useRef(0);
+  const filtersKey = JSON.stringify(filters ?? {});
+  const extraFieldsKey = (extraFields ?? []).join('\u0000');
 
   useEffect(
     () => () => {
@@ -48,6 +52,11 @@ export function RemoteLinkSelect({
     },
     [],
   );
+
+  useEffect(() => {
+    requestRef.current += 1;
+    setOptions([]);
+  }, [doctype, extraFieldsKey, filtersKey, initialQuery, limit]);
 
   const loadOptions = async (query = '') => {
     const requestId = requestRef.current + 1;
@@ -82,7 +91,7 @@ export function RemoteLinkSelect({
 
   const loadInitialOptions = () => {
     if (!options.length) {
-      void loadOptions();
+      void loadOptions(initialQuery);
     }
   };
 

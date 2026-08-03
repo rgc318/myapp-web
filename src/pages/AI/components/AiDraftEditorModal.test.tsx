@@ -15,7 +15,9 @@ jest.mock('@/components', () => {
     RemoteLinkSelect: (props: any) =>
       React.createElement('input', {
         'aria-label': props.doctype,
+        'data-initial-query': props.initialQuery ?? '',
         onChange: (event: any) => props.onChange?.(event.target.value),
+        placeholder: props.placeholder,
         value: props.value ?? '',
       }),
   };
@@ -473,6 +475,62 @@ describe('AiDraftEditorModal', () => {
     ).toBe(5000);
   });
 
+  it('renders unresolved product master-data queries as empty actionable selectors', async () => {
+    const productDraft = {
+      ...draft,
+      payload: {
+        ...draft.payload,
+        brand: null,
+        brand_query: '幻兽品牌',
+        item_group: null,
+        item_group_query: '宝石分类',
+        opening_qty: 10,
+        warehouse: null,
+        warehouse_query: '成品仓',
+      },
+      validation: {
+        errors: [
+          '商品分类无法唯一匹配，请人工选择。',
+          '品牌无法唯一匹配，请人工选择。',
+          '填写初始库存时必须选择当前公司的叶子仓库。',
+        ],
+        readyForHandoff: false,
+        warnings: [],
+      },
+    };
+    mockedGet.mockResolvedValue(productDraft);
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: productDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    const itemGroup = await screen.findByLabelText('Item Group');
+    const brand = screen.getByLabelText('Brand');
+    const warehouse = screen.getByLabelText('Warehouse');
+    expect((itemGroup as HTMLInputElement).value).toBe('');
+    expect((brand as HTMLInputElement).value).toBe('');
+    expect((warehouse as HTMLInputElement).value).toBe('');
+    expect(itemGroup.getAttribute('data-initial-query')).toBe('宝石分类');
+    expect(brand.getAttribute('data-initial-query')).toBe('幻兽品牌');
+    expect(warehouse.getAttribute('data-initial-query')).toBe('成品仓');
+    expect(
+      screen.getByText(
+        'AI 只识别到分类搜索词“宝石分类”，请搜索并选择具体分类。',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText('“幻兽品牌”尚未匹配到唯一品牌，请从下拉结果中选择。'),
+    ).toBeTruthy();
+    expect(screen.getByText('当前有 3 项必须处理')).toBeTruthy();
+  });
+
   it('reloads the latest saved sales order version every time the editor opens', async () => {
     const salesDraft = {
       ...draft,
@@ -682,6 +740,149 @@ describe('AiDraftEditorModal', () => {
         .getAllByRole<HTMLInputElement>('spinbutton')
         .map((input) => Number(input.value)),
     ).toContain(7);
+  });
+
+  it('shows unresolved inventory validation on the actionable fields', async () => {
+    const inventoryDraft = {
+      ...draft,
+      draftType: 'inventory_adjustment' as const,
+      payload: {
+        adjustment_type: 'increase',
+        company: 'Demo Company',
+        items: [
+          {
+            item_code: null,
+            item_query: '圣晶石',
+            qty: 10,
+            uom: 'Unit',
+          },
+        ],
+        posting_date: '2026-08-03',
+        reason: null,
+        warehouse: 'Stores - RD',
+      },
+      title: '库存调整草稿',
+      validation: {
+        errors: [
+          '商品无法唯一匹配，请人工选择。',
+          '库存调整必须填写盘点差异或业务原因。',
+        ],
+        readyForHandoff: false,
+        warnings: ['商品“圣晶石”无法唯一匹配，请人工选择。'],
+      },
+    };
+    mockedGet.mockResolvedValue(inventoryDraft);
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: inventoryDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    const itemInput = await screen.findByLabelText('Item');
+    expect((itemInput as HTMLInputElement).value).toBe('');
+    expect(
+      screen.getByText(
+        'AI 只识别到搜索词“圣晶石”，尚未匹配商品编码。请搜索并选择具体商品。',
+      ),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(
+        '“圣晶石”尚未匹配到唯一商品，请从下拉结果中选择具体商品。',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText('库存调整必须填写盘点差异或业务原因。').length,
+    ).toBeGreaterThan(1);
+
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
+
+    expect(
+      await screen.findByText(
+        '无法执行：商品无法唯一匹配，请人工选择；库存调整必须填写盘点差异或业务原因。',
+      ),
+    ).toBeTruthy();
+    expect(mockedExecute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['sales_order', 'Customer', '老客户', '客户', '明细'],
+    ['purchase_order', 'Supplier', '老供应商', '供应商', '收货'],
+  ] as const)('renders unresolved %s selections as empty fields with original search hints', async (draftType, partyDoctype, partyQuery, partyLabel, warehouseLabel) => {
+    const orderDraft = {
+      ...draft,
+      draftType,
+      payload: {
+        company: 'Demo Company',
+        [draftType === 'purchase_order' ? 'supplier' : 'customer']: null,
+        [draftType === 'purchase_order' ? 'supplier_query' : 'customer_query']:
+          partyQuery,
+        default_purchase_mode: 'wholesale',
+        default_sales_mode: 'wholesale',
+        delivery_date: '2026-08-04',
+        schedule_date: '2026-08-04',
+        items: [
+          {
+            item_code: null,
+            item_query: '圣晶石',
+            qty: 2,
+            warehouse: null,
+            warehouse_query: '临时仓',
+          },
+        ],
+        transaction_date: '2026-08-03',
+        warehouse: null,
+        warehouse_query: '默认仓',
+      },
+      title: `${partyLabel}订单草稿`,
+      validation: {
+        errors: [
+          `${partyLabel}无法唯一匹配，请人工选择。`,
+          `第 1 行需要人工补充商品、数量或${warehouseLabel}仓库。`,
+        ],
+        readyForHandoff: false,
+        warnings: ['商品“圣晶石”无法唯一匹配，请人工选择。'],
+      },
+    };
+    mockedGet.mockResolvedValue(orderDraft);
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: orderDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    const party = await screen.findByLabelText(partyDoctype);
+    const item = screen.getByLabelText('Item');
+    const warehouses = screen.getAllByLabelText('Warehouse');
+    expect((party as HTMLInputElement).value).toBe('');
+    expect((item as HTMLInputElement).value).toBe('');
+    expect(party.getAttribute('data-initial-query')).toBe(partyQuery);
+    expect(item.getAttribute('data-initial-query')).toBe('圣晶石');
+    expect(
+      warehouses.map((input) => input.getAttribute('data-initial-query')),
+    ).toEqual(expect.arrayContaining(['默认仓', '临时仓']));
+    expect(
+      screen.getByText(
+        `AI 只识别到搜索词“${partyQuery}”，请搜索并选择具体${partyLabel}。`,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        '“圣晶石”尚未匹配到唯一商品，请从下拉结果中选择具体商品。',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText('当前有 2 项必须处理')).toBeTruthy();
   });
 
   it('allows order drafts to rely on complete line-level warehouses', async () => {

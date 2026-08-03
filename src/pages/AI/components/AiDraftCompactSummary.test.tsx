@@ -26,7 +26,7 @@ function buildDraft(
 }
 
 function renderSummary(draft: AiDraft) {
-  render(
+  return render(
     <App>
       <AiDraftCompactSummary draft={draft} />
     </App>,
@@ -176,5 +176,38 @@ describe('AiDraftCompactSummary', () => {
     expect(screen.getByText('10 → 15 件（差异 +5 件）')).toBeTruthy();
     expect(screen.getByText('12.50 元')).toBeTruthy();
     expect(screen.getByText('盘点盘盈')).toBeTruthy();
+  });
+
+  it('shows unresolved draft queries as pending matches instead of empty values', () => {
+    const { rerender } = renderSummary(
+      buildDraft('sales_order', {
+        customer: null,
+        customer_query: '老客户',
+        items: [
+          {
+            item_code: null,
+            item_query: '圣晶石',
+            qty: 2,
+            warehouse: null,
+            warehouse_query: '临时仓',
+          },
+        ],
+        transaction_date: '2026-08-03',
+        warehouse: null,
+        warehouse_query: '默认仓',
+      }),
+    );
+
+    expect(screen.getByText('待匹配：老客户')).toBeTruthy();
+    expect(screen.getByText('待匹配：临时仓、默认仓')).toBeTruthy();
+
+    rerender(
+      <AiDraftCompactSummary
+        draft={buildDraft('inventory_adjustment', {
+          items: [{ item_code: null, item_query: '圣晶石' }],
+        })}
+      />,
+    );
+    expect(screen.getByText('待匹配：圣晶石')).toBeTruthy();
   });
 });
