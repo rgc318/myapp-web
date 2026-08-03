@@ -25,6 +25,9 @@ export type AiScenario =
 export type AiSelectableModel = {
   capability: string;
   displayName: string;
+  lastErrorCode: string | null;
+  lastHealthAt: string | null;
+  lastHealthStatus: string | null;
   modelAlias: string;
   status: string;
   supportsJsonSchema: boolean;
@@ -339,6 +342,9 @@ export type AiRunSummary = {
   model: string | null;
   modelAlias: string | null;
   modelDisplay: string | null;
+  modelSelection: 'auto' | 'fixed';
+  requestedModelAlias: string | null;
+  requestedModelDisplay: string | null;
   status: string;
   traceId: string | null;
   usage: AiTokenUsage;
@@ -440,6 +446,15 @@ function mapChatResult(value: unknown): AiChatResult {
         typeof data.model_alias === 'string' ? data.model_alias : null,
       modelDisplay:
         typeof data.model_display === 'string' ? data.model_display : null,
+      modelSelection: run.model_selection === 'fixed' ? 'fixed' : 'auto',
+      requestedModelAlias:
+        typeof run.requested_model_alias === 'string'
+          ? run.requested_model_alias
+          : null,
+      requestedModelDisplay:
+        typeof run.requested_model_display === 'string'
+          ? run.requested_model_display
+          : null,
       status: String(run.status ?? 'completed'),
       traceId: typeof data.trace_id === 'string' ? data.trace_id : null,
       usage: {
@@ -976,6 +991,15 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
           typeof run.model_alias === 'string' ? run.model_alias : null,
         modelDisplay:
           typeof run.model_display === 'string' ? run.model_display : null,
+        modelSelection: run.model_selection === 'fixed' ? 'fixed' : 'auto',
+        requestedModelAlias:
+          typeof run.requested_model_alias === 'string'
+            ? run.requested_model_alias
+            : null,
+        requestedModelDisplay:
+          typeof run.requested_model_display === 'string'
+            ? run.requested_model_display
+            : null,
         status: String(run.status ?? ''),
         traceId: typeof run.trace_id === 'string' ? run.trace_id : null,
         usage: {
@@ -1024,6 +1048,18 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
         return {
           capability: String(row.capability ?? ''),
           displayName: String(row.display_name ?? row.model_alias ?? ''),
+          lastErrorCode:
+            typeof row.last_error_code === 'string'
+              ? row.last_error_code
+              : null,
+          lastHealthAt:
+            typeof row.last_health_at === 'string'
+              ? row.last_health_at
+              : null,
+          lastHealthStatus:
+            typeof row.last_health_status === 'string'
+              ? row.last_health_status
+              : null,
           modelAlias: String(row.model_alias ?? ''),
           status: String(row.status ?? ''),
           supportsJsonSchema: Boolean(row.supports_json_schema),
@@ -1397,6 +1433,7 @@ export async function streamAiChatMessage(
     scenario?: AiScenario;
     company?: string | null;
     modelAlias?: string | null;
+    retryRunId?: string | null;
   },
   onEvent: (event: AiEvent) => void,
   signal?: AbortSignal,
@@ -1422,6 +1459,7 @@ export async function streamAiChatMessage(
             : {}),
           ...(payload.company ? { company: payload.company } : {}),
           ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+          ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
         }),
         signal,
       },
@@ -1577,6 +1615,9 @@ export async function streamAiChatMessage(
         model: null,
         modelAlias: null,
         modelDisplay: null,
+        modelSelection: 'auto',
+        requestedModelAlias: null,
+        requestedModelDisplay: null,
         status: 'waiting_approval',
         traceId: null,
         usage: {

@@ -19,6 +19,9 @@ const result: AiChatResult = {
     model: 'provider-model',
     modelAlias: 'erp-fast-chat',
     modelDisplay: 'ERP Fast Chat',
+    modelSelection: 'auto',
+    requestedModelAlias: null,
+    requestedModelDisplay: null,
     status: 'completed',
     traceId: 'trace-1',
     usage: {
@@ -115,7 +118,7 @@ describe('AiRunInspector', () => {
 
     expect(screen.getByText('失败')).toBeTruthy();
     expect(screen.getByText('模型服务暂时不可用')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /稍后重试/ }));
+    fireEvent.click(screen.getByRole('button', { name: /使用当前模型重试/ }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
@@ -137,6 +140,8 @@ describe('AiRunInspector', () => {
 
     expect(screen.getAllByText('当前权限不允许访问')).toHaveLength(2);
     expect(screen.getByText('PERMISSION_DENIED')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '使用当前模型重试' }),
+    ).toBeNull();
   });
 });

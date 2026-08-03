@@ -271,7 +271,7 @@ describe('AiMessageContent', () => {
     );
 
     expect(screen.getByText('AI 服务暂时不可用')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /稍后重试/ }));
+    fireEvent.click(screen.getByRole('button', { name: /使用当前模型重试/ }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
@@ -288,7 +288,7 @@ describe('AiMessageContent', () => {
       }),
     );
 
-    expect(screen.getByText('本次模型：DeepSeek V4 Flash')).toBeTruthy();
+    expect(screen.getByText('自动模型（DeepSeek V4 Flash）')).toBeTruthy();
     expect(screen.getByText('本次模型不可用')).toBeTruthy();
   });
 
@@ -307,7 +307,9 @@ describe('AiMessageContent', () => {
     );
 
     expect(screen.getByText('需要修改本次问题')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '使用当前模型重试' }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /修改问题/ }));
     expect(onEditRequest).toHaveBeenCalledTimes(1);
   });

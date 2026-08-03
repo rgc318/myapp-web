@@ -319,6 +319,9 @@ describe('AI domain service', () => {
           {
             capability: 'fast_chat',
             display_name: 'GLM 5.2',
+            last_error_code: null,
+            last_health_at: '2026-08-03 09:00:00',
+            last_health_status: 'available',
             model_alias: 'opencode-glm-5.2',
             status: 'active',
             supports_json_schema: 0,
@@ -342,6 +345,7 @@ describe('AI domain service', () => {
     expect(result.models[0]).toMatchObject({
       displayName: 'GLM 5.2',
       modelAlias: 'opencode-glm-5.2',
+      lastHealthStatus: 'available',
       supportsStreaming: true,
     });
   });
@@ -843,7 +847,11 @@ describe('AI domain service', () => {
     const events: string[] = [];
 
     const result = await streamAiChatMessage(
-      { content: '你好', modelAlias: 'opencode-glm-5.2' },
+      {
+        content: '你好',
+        modelAlias: 'opencode-glm-5.2',
+        retryRunId: 'AI-RUN-FAILED',
+      },
       (event) => events.push(event.type),
     );
 
@@ -862,6 +870,7 @@ describe('AI domain service', () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toMatchObject({
       content: '你好',
       model_alias: 'opencode-glm-5.2',
+      retry_run_id: 'AI-RUN-FAILED',
       scenario: 'auto',
     });
     fetchMock.mockRestore();

@@ -44,6 +44,8 @@ type Props = {
   errorCode?: string | null;
   feedback?: 'positive' | 'negative';
   modelDisplay?: string | null;
+  modelSelection?: 'auto' | 'fixed';
+  requestedModelDisplay?: string | null;
   onDiscardDraft: (draftId: string) => void;
   onEditDraft: (citation: AiCitation) => void;
   onEditRequest?: () => void;
@@ -313,6 +315,8 @@ export function AiMessageContent({
   errorCode,
   feedback,
   modelDisplay,
+  modelSelection = 'auto',
+  requestedModelDisplay,
   onDiscardDraft,
   onEditDraft,
   onEditRequest,
@@ -392,7 +396,7 @@ export function AiMessageContent({
                   onClick={onRetry}
                   size="small"
                 >
-                  稍后重试
+                  使用当前模型重试
                 </Button>
               ) : null}
               {failureRecovery?.action === 'edit' && onEditRequest ? (
@@ -430,7 +434,9 @@ export function AiMessageContent({
       ) : null}
       {modelDisplay ? (
         <Tag bordered={false} color={error ? 'error' : 'default'}>
-          本次模型：{modelDisplay}
+          {modelSelection === 'fixed'
+            ? `固定模型：${requestedModelDisplay || modelDisplay}`
+            : `自动模型（${modelDisplay}）`}
         </Tag>
       ) : null}
       {detailCitations.length ? (
@@ -498,5 +504,7 @@ export type AiMessageRow = AiChatMessage & {
   errorCode?: string | null;
   id: string;
   modelDisplay?: string | null;
+  modelSelection?: 'auto' | 'fixed';
+  requestedModelDisplay?: string | null;
   runId?: string | null;
 };

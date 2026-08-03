@@ -117,6 +117,10 @@ export function AiRunInspector({
   const resolvedModelAlias = result?.modelAlias || modelAlias || null;
   const resolvedModelDisplay =
     result?.modelDisplay || modelDisplay || resolvedModelAlias;
+  const modelSelection = run?.modelSelection ?? 'auto';
+  const requestedModelDisplay =
+    run?.requestedModelDisplay ||
+    (modelSelection === 'fixed' ? resolvedModelDisplay : null);
   const failureRecovery = resolvedError
     ? resolveAiFailureRecovery(resolvedErrorCode)
     : null;
@@ -154,8 +158,21 @@ export function AiRunInspector({
               children: durationText(run?.latencyMs),
             },
             {
-              key: 'modelDisplay',
-              label: '本次模型',
+              key: 'modelSelection',
+              label: '请求方式',
+              children: modelSelection === 'fixed' ? '固定模型' : '自动选择',
+            },
+            {
+              key: 'requestedModel',
+              label: '请求模型',
+              children:
+                modelSelection === 'fixed'
+                  ? requestedModelDisplay || '等待模型确认'
+                  : '自动模型（由策略选择）',
+            },
+            {
+              key: 'actualModel',
+              label: '实际模型',
               children: resolvedModelDisplay || '等待模型选择',
             },
             {
@@ -187,8 +204,16 @@ export function AiRunInspector({
                   size="small"
                   items={[
                     {
+                      key: 'requestedModelAlias',
+                      label: '请求模型 Alias',
+                      children:
+                        modelSelection === 'fixed'
+                          ? run?.requestedModelAlias || '-'
+                          : 'auto',
+                    },
+                    {
                       key: 'modelAlias',
-                      label: '能力模型',
+                      label: '实际模型 Alias',
                       children: resolvedModelAlias || '等待首次调用',
                     },
                     {
@@ -282,7 +307,7 @@ export function AiRunInspector({
           action={
             failureRecovery?.action === 'retry' && onRetry ? (
               <Button icon={<ReloadOutlined />} onClick={onRetry} size="small">
-                稍后重试
+                使用当前模型重试
               </Button>
             ) : failureRecovery?.action === 'edit' && onEditRequest ? (
               <Button

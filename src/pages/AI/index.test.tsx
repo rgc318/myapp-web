@@ -185,7 +185,7 @@ jest.mock('./components/AiMessageContent', () => {
           ? React.createElement(
               'button',
               { onClick: onRetry, type: 'button' },
-              '稍后重试',
+              '使用当前模型重试',
             )
           : null,
         errorCode === 'AI_REQUEST_INVALID' && onEditRequest
@@ -404,9 +404,23 @@ describe('AI workspace page', () => {
         {
           capability: 'fast_chat',
           displayName: 'GLM 5.2',
+          lastErrorCode: null,
+          lastHealthAt: '2026-08-03 09:00:00',
+          lastHealthStatus: 'available',
           modelAlias: 'opencode-glm-5.2',
           status: 'active',
           supportsJsonSchema: false,
+          supportsStreaming: true,
+        },
+        {
+          capability: 'reasoning',
+          displayName: 'GPT 5.6 Luna',
+          lastErrorCode: null,
+          lastHealthAt: '2026-08-03 09:00:00',
+          lastHealthStatus: 'available',
+          modelAlias: 'gpt-5.6-luna',
+          status: 'active',
+          supportsJsonSchema: true,
           supportsStreaming: true,
         },
       ],
@@ -556,6 +570,7 @@ describe('AI workspace page', () => {
           message: { content: '找到两个商品', role: 'assistant' },
           model: 'provider-model',
           modelAlias: 'erp-fast-chat',
+          modelDisplay: 'ERP Fast Chat',
           run: {
             error: null,
             errorCode: null,
@@ -563,6 +578,10 @@ describe('AI workspace page', () => {
             latencyMs: 760,
             model: 'provider-model',
             modelAlias: 'erp-fast-chat',
+            modelDisplay: 'ERP Fast Chat',
+            modelSelection: 'auto',
+            requestedModelAlias: null,
+            requestedModelDisplay: null,
             status: 'completed',
             traceId: 'trace-1',
             usage: {
@@ -606,6 +625,7 @@ describe('AI workspace page', () => {
         expect.any(AbortSignal),
       );
     });
+    expect(await screen.findByText('自动模型（ERP Fast Chat）')).toBeTruthy();
     expect(await screen.findByText('找到两个商品')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '当前运行' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /运行详情/ }));
@@ -1050,6 +1070,7 @@ describe('AI workspace page', () => {
     const composer = await screen.findByRole<HTMLInputElement>('textbox', {
       name: 'AI 输入',
     });
+    await screen.findByRole('button', { name: /加载更早消息/ });
     const scrollBox = document.querySelector<HTMLElement>(
       '.ant-bubble-list-scroll-box',
     );
@@ -1068,7 +1089,9 @@ describe('AI workspace page', () => {
     expect(screen.getByText(/来源 ITEM-OLD/)).toBeTruthy();
     expect(screen.getByText('反馈 positive')).toBeTruthy();
     expect(screen.getByText('历史请求失败')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '使用当前模型重试' }),
+    ).toBeNull();
     expect(composer.value).toBe('尚未发送的文本');
     await waitFor(() => expect(scrollBox?.scrollTop).toBe(350));
     expect(getAiConversation).toHaveBeenLastCalledWith('AI-CONV-LONG', {
@@ -1389,7 +1412,9 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     expect(await screen.findByText('AI 服务暂时不可用')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '稍后重试' })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: '使用当前模型重试' }),
+    ).toBeTruthy();
     expect(screen.getByRole('button', { name: '查看诊断' })).toBeTruthy();
   });
 
@@ -1407,7 +1432,9 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     expect(await screen.findByText('需要修改本次问题')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '稍后重试' })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: '使用当前模型重试' }),
+    ).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /修改问题/ }));
     expect(
       screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' }).value,
@@ -1504,14 +1531,29 @@ describe('AI workspace page', () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
     expect(await screen.findByText('历史 AI 运行失败')).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: '稍后重试' }));
+    const retryModelSelect = document.querySelector<HTMLElement>(
+      '.ai-quick-model-select input[role="combobox"]',
+    );
+    expect(retryModelSelect).toBeTruthy();
+    fireEvent.mouseDown(retryModelSelect as HTMLElement);
+    const lunaOption = (
+      await screen.findAllByText('GPT 5.6 Luna · gpt-5.6-luna')
+    )
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+    expect(lunaOption).toBeTruthy();
+    fireEvent.click(lunaOption as HTMLElement);
+    fireEvent.click(
+      await screen.findByRole('button', { name: '使用当前模型重试' }),
+    );
 
     await waitFor(() => {
       expect(streamAiChatMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           content: '查询库存',
           conversationId: 'AI-CONV-FAILED',
-          modelAlias: 'erp-fast-chat',
+          modelAlias: 'gpt-5.6-luna',
+          retryRunId: 'AI-RUN-FAILED',
           scenario: 'general',
         }),
         expect.any(Function),
@@ -1548,8 +1590,16 @@ describe('AI workspace page', () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
     await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole('button', { name: /高级设置/ }));
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'AI 模型' }));
+    await waitFor(() =>
+      expect(
+        document.querySelector('.ai-quick-model-select input[role="combobox"]'),
+      ).toBeTruthy(),
+    );
+    const quickModelSelect = document.querySelector<HTMLElement>(
+      '.ai-quick-model-select input[role="combobox"]',
+    );
+    expect(quickModelSelect).toBeTruthy();
+    fireEvent.mouseDown(quickModelSelect as HTMLElement);
     const modelOption = (
       await screen.findAllByText('GLM 5.2 · opencode-glm-5.2')
     )
@@ -1557,7 +1607,11 @@ describe('AI workspace page', () => {
       .find((node): node is HTMLElement => node instanceof HTMLElement);
     expect(modelOption).toBeTruthy();
     fireEvent.click(modelOption as HTMLElement);
-    await screen.findByText('固定模型：GLM 5.2');
+    await waitFor(() =>
+      expect(quickModelSelect?.closest('.ant-select')?.textContent).toContain(
+        'GLM 5.2',
+      ),
+    );
     fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
       target: { value: '你好' },
     });
@@ -1573,6 +1627,51 @@ describe('AI workspace page', () => {
         expect.any(AbortSignal),
       );
     });
+  });
+
+  it('disables models marked unavailable by the latest health check', async () => {
+    listAiSelectableModels.mockResolvedValueOnce({
+      capabilities: {
+        canSelectFixedModel: true,
+        canViewAdvancedDiagnostics: true,
+      },
+      models: [
+        {
+          capability: 'fast_chat',
+          displayName: 'DeepSeek V4 Flash',
+          lastErrorCode: 'PROVIDER_TIMEOUT',
+          lastHealthAt: '2026-08-03 09:00:00',
+          lastHealthStatus: 'unavailable',
+          modelAlias: 'opencode-deepseek-v4-flash',
+          status: 'active',
+          supportsJsonSchema: false,
+          supportsStreaming: true,
+        },
+      ],
+    });
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('.ai-quick-model-select input[role="combobox"]'),
+      ).toBeTruthy(),
+    );
+    const quickModelSelect = document.querySelector<HTMLElement>(
+      '.ai-quick-model-select input[role="combobox"]',
+    );
+    fireEvent.mouseDown(quickModelSelect as HTMLElement);
+    const unavailableOption = (
+      await screen.findAllByText(
+        'DeepSeek V4 Flash · opencode-deepseek-v4-flash · 不可用',
+      )
+    )
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+
+    expect(unavailableOption).toBeTruthy();
+    expect(unavailableOption?.className).toContain(
+      'ant-select-item-option-disabled',
+    );
   });
 
   it('auto-routes an inventory addition request to the validated draft endpoint', async () => {

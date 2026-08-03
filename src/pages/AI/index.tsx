@@ -114,6 +114,8 @@ type ChatRow = AiMessageRow & {
   scenario?: AiScenario | null;
   sequence?: number | null;
   modelAlias?: string | null;
+  modelSelection?: 'auto' | 'fixed';
+  requestedModelDisplay?: string | null;
 };
 
 const AI_MESSAGE_PAGE_SIZE = 40;
@@ -134,6 +136,15 @@ const BUSINESS_RESULT_CITATION_TYPES = new Set([
   'purchase_order',
   'purchase_invoice',
 ]);
+
+function isDraftScenario(value: AiScenario) {
+  return [
+    'sales_order_draft',
+    'purchase_order_draft',
+    'inventory_adjustment_draft',
+    'product_setup_draft',
+  ].includes(value);
+}
 
 function resolveRunDisplayStatus(
   status: string | null | undefined,
@@ -240,6 +251,8 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
     errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
     modelAlias: item.run?.modelAlias ?? null,
     modelDisplay: item.run?.modelDisplay ?? null,
+    modelSelection: item.run?.modelSelection ?? 'auto',
+    requestedModelDisplay: item.run?.requestedModelDisplay ?? null,
     creation: item.creation,
     run: item.run,
     runId: item.runId,
@@ -309,7 +322,8 @@ export default function AiPage() {
   const [approvalActionId, setApprovalActionId] = useState<string | null>(null);
   const [retryRequest, setRetryRequest] = useState<{
     content: string;
-    modelAlias: string | null;
+    messageId: string;
+    runId: string | null;
     scenario: AiScenario;
   } | null>(null);
   const [selectableModels, setSelectableModels] = useState<AiSelectableModel[]>(
@@ -363,9 +377,26 @@ export default function AiPage() {
   const effectiveCompany = conversationId
     ? conversationCompany || defaultCompany
     : selectedCompany || defaultCompany;
-  const selectedModel = selectedModelAlias
-    ? selectableModels.find((model) => model.modelAlias === selectedModelAlias)
-    : null;
+  const latestAssistantMessage = [...messages]
+    .reverse()
+    .find((item) => item.role === 'assistant');
+  const automaticModelLabel =
+    latestAssistantMessage?.modelSelection === 'auto' &&
+    latestAssistantMessage.modelDisplay
+      ? `自动模型（${latestAssistantMessage.modelDisplay}）`
+      : '自动模型（由策略选择）';
+  const modelSelectOptions = [
+    { label: automaticModelLabel, value: 'auto' },
+    ...selectableModels.map((model) => ({
+      disabled: model.lastHealthStatus === 'unavailable',
+      label: `${
+        model.displayName === model.modelAlias
+          ? model.displayName
+          : `${model.displayName} · ${model.modelAlias}`
+      }${model.lastHealthStatus === 'unavailable' ? ' · 不可用' : ''}`,
+      value: model.modelAlias,
+    })),
+  ];
 
   const setComposerDraft = useCallback(
     (value: string, targetConversationId?: string | null) => {
@@ -421,7 +452,11 @@ export default function AiPage() {
         setSelectedModelAlias((current) =>
           capabilities.canSelectFixedModel &&
           current &&
-          models.some((model) => model.modelAlias === current)
+          models.some(
+            (model) =>
+              model.modelAlias === current &&
+              model.lastHealthStatus !== 'unavailable',
+          )
             ? current
             : null,
         );
@@ -558,7 +593,8 @@ export default function AiPage() {
           failedRequestMessage
           ? {
               content: failedRequestMessage.content,
-              modelAlias: latestRunMessage.run.modelAlias,
+              messageId: latestRunMessage.name,
+              runId: latestRunMessage.runId,
               scenario: latestRunMessage.scenario ?? 'auto',
             }
           : null,
@@ -666,6 +702,7 @@ export default function AiPage() {
     contentValue?: string,
     scenarioValue?: AiScenario,
     modelAliasValue?: string | null,
+    retryContext?: { messageId: string; runId: string } | null,
   ) => {
     const content = (contentValue ?? draft).trim();
     const requestedScenario = scenarioValue ?? scenario;
@@ -718,6 +755,7 @@ export default function AiPage() {
     const userMessage = createMessage('user', content);
     const assistantMessage: ChatRow = {
       ...createMessage('assistant', ''),
+      ...(retryContext ? { id: retryContext.messageId } : {}),
       creation: dayjs().format('YYYY-MM-DD HH:mm:ss'),
       runStatus: 'running',
       runStream: { deltaCount: 0, streamedChars: 0 },
@@ -725,12 +763,23 @@ export default function AiPage() {
       runWarnings: [],
       scenario: resolvedScenario,
       modelAlias: requestedModelAlias,
+      modelSelection: requestedModelAlias ? 'fixed' : 'auto',
+      requestedModelDisplay:
+        selectableModels.find(
+          (model) => model.modelAlias === requestedModelAlias,
+        )?.displayName ?? null,
       modelDisplay:
         selectableModels.find(
           (model) => model.modelAlias === requestedModelAlias,
         )?.displayName ?? null,
     };
-    setMessages((current) => [...current, userMessage, assistantMessage]);
+    setMessages((current) =>
+      retryContext
+        ? current.map((item) =>
+            item.id === retryContext.messageId ? assistantMessage : item,
+          )
+        : [...current, userMessage, assistantMessage],
+    );
     setInspectorOpen(false);
     setInspectedMessageId(null);
     setComposerDraft('', conversationId);
@@ -806,6 +855,8 @@ export default function AiPage() {
                   runStatus: 'completed',
                   modelAlias: result.modelAlias,
                   modelDisplay: result.modelDisplay,
+                  modelSelection: result.run.modelSelection,
+                  requestedModelDisplay: result.run.requestedModelDisplay,
                   runStream: result.stream,
                   runWarnings: result.warnings,
                 }
@@ -823,6 +874,7 @@ export default function AiPage() {
           content,
           conversationId,
           modelAlias: requestedModelAlias,
+          retryRunId: retryContext?.runId ?? null,
           scenario: requestScenario,
         },
         (event) => {
@@ -1044,6 +1096,8 @@ export default function AiPage() {
                   runStatus: 'waiting_approval',
                   modelAlias: result.modelAlias,
                   modelDisplay: result.modelDisplay,
+                  modelSelection: result.run.modelSelection,
+                  requestedModelDisplay: result.run.requestedModelDisplay,
                 }
               : item,
           ),
@@ -1082,6 +1136,8 @@ export default function AiPage() {
                 runStatus: 'completed',
                 modelAlias: result.modelAlias,
                 modelDisplay: result.modelDisplay,
+                modelSelection: result.run.modelSelection,
+                requestedModelDisplay: result.run.requestedModelDisplay,
                 runStream: result.stream,
                 runWarnings: Array.from(
                   new Set([...(item.runWarnings ?? []), ...result.warnings]),
@@ -1097,7 +1153,8 @@ export default function AiPage() {
         setRunProgress(null);
         setRetryRequest({
           content,
-          modelAlias: requestedModelAlias,
+          messageId: assistantMessage.id,
+          runId: null,
           scenario: resolvedScenario,
         });
         setMessages((current) =>
@@ -1126,7 +1183,8 @@ export default function AiPage() {
         setRunErrorCode(errorCode);
         setRetryRequest({
           content,
-          modelAlias: requestedModelAlias,
+          messageId: assistantMessage.id,
+          runId: failedRunId ?? null,
           scenario: resolvedScenario,
         });
         setMessages((current) =>
@@ -1231,15 +1289,7 @@ export default function AiPage() {
     if (!retryRequest) return;
     setComposerDraft(retryRequest.content, conversationId);
     setScenario(retryRequest.scenario);
-    setSelectedModelAlias(
-      retryRequest.modelAlias &&
-        selectableModels.some(
-          (model) => model.modelAlias === retryRequest.modelAlias,
-        )
-        ? retryRequest.modelAlias
-        : null,
-    );
-    message.info('已恢复上次问题，请修改后重新发送。');
+    message.info('已恢复上次问题；发送时将使用页头当前选择的模型。');
   };
 
   const handoffDraft = async (draftId: string) => {
@@ -1720,7 +1770,14 @@ export default function AiPage() {
                   void submit(
                     retryRequest.content,
                     retryRequest.scenario,
-                    retryRequest.modelAlias,
+                    selectedModelAlias,
+                    retryRequest.runId &&
+                      !isDraftScenario(retryRequest.scenario)
+                      ? {
+                          messageId: retryRequest.messageId,
+                          runId: retryRequest.runId,
+                        }
+                      : null,
                   )
               : undefined
           }
@@ -1729,6 +1786,8 @@ export default function AiPage() {
           }
           onViewRun={item.runId ? () => openMessageRun(item.id) : undefined}
           modelDisplay={item.modelDisplay}
+          modelSelection={item.modelSelection}
+          requestedModelDisplay={item.requestedModelDisplay}
           progressMessage={
             loading && index === messages.length - 1
               ? runProgress?.message
@@ -1852,11 +1911,29 @@ export default function AiPage() {
                     ?.label ?? '智能模式'}
                   {scenario !== 'auto' ? ' · 仅本次发送' : ''}
                 </Tag>
-                {selectedModelAlias ? (
-                  <Tag color="purple">
-                    固定模型：{selectedModel?.displayName ?? selectedModelAlias}
-                  </Tag>
-                ) : null}
+                {workspaceCapabilities.canSelectFixedModel ? (
+                  <Space size={6}>
+                    <Typography.Text id="ai-quick-model-label" type="secondary">
+                      运行模型
+                    </Typography.Text>
+                    <Select
+                      aria-labelledby="ai-quick-model-label"
+                      className="ai-quick-model-select"
+                      disabled={loading}
+                      loading={modelsLoading}
+                      onChange={(value) =>
+                        setSelectedModelAlias(value === 'auto' ? null : value)
+                      }
+                      optionFilterProp="label"
+                      options={modelSelectOptions}
+                      showSearch
+                      style={{ minWidth: 240 }}
+                      value={selectedModelAlias ?? 'auto'}
+                    />
+                  </Space>
+                ) : (
+                  <Tag color="purple">{automaticModelLabel}</Tag>
+                )}
                 <Button
                   icon={<SettingOutlined />}
                   onClick={() => setAdvancedSettingsOpen(true)}
@@ -2184,16 +2261,7 @@ export default function AiPage() {
                     setSelectedModelAlias(value === 'auto' ? null : value)
                   }
                   optionFilterProp="label"
-                  options={[
-                    { label: '自动选择（已发布策略）', value: 'auto' },
-                    ...selectableModels.map((model) => ({
-                      label:
-                        model.displayName === model.modelAlias
-                          ? model.displayName
-                          : `${model.displayName} · ${model.modelAlias}`,
-                      value: model.modelAlias,
-                    })),
-                  ]}
+                  options={modelSelectOptions}
                   showSearch
                   style={{ width: '100%' }}
                   value={selectedModelAlias ?? 'auto'}
@@ -2254,7 +2322,14 @@ export default function AiPage() {
                       void submit(
                         retryRequest.content,
                         retryRequest.scenario,
-                        retryRequest.modelAlias,
+                        selectedModelAlias,
+                        retryRequest.runId &&
+                          !isDraftScenario(retryRequest.scenario)
+                          ? {
+                              messageId: retryRequest.messageId,
+                              runId: retryRequest.runId,
+                            }
+                          : null,
                       )
                   : undefined
               }
