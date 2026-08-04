@@ -5,6 +5,7 @@ import {
   Button,
   DatePicker,
   Form,
+  Image,
   Input,
   InputNumber,
   message,
@@ -36,6 +37,7 @@ type FormValues = {
 type CountLine = {
   countedQty: number;
   currentQty: number;
+  imageUrl: string;
   itemCode: string;
   itemName: string;
   key: string;
@@ -111,6 +113,7 @@ const InventoryCountsPage: React.FC = () => {
           product.stockQty ??
           product.totalQty ??
           0,
+        imageUrl: product.imageUrl,
         itemCode: product.itemCode,
         itemName: product.itemName,
         key,
@@ -260,16 +263,32 @@ const InventoryCountsPage: React.FC = () => {
           <ProTable<CountLine>
             columns={[
               {
-                title: '商品编码',
-                dataIndex: 'itemCode',
-                width: 170,
-                fixed: 'left',
-              },
-              {
-                title: '商品名称',
+                title: '商品信息',
                 dataIndex: 'itemName',
-                width: 220,
-                ellipsis: true,
+                width: 300,
+                fixed: 'left',
+                render: (_, record) => (
+                  <Space align="start" size={10}>
+                    {record.imageUrl ? (
+                      <Image
+                        alt={record.itemName || record.itemCode}
+                        height={48}
+                        preview={false}
+                        src={record.imageUrl}
+                        style={{ objectFit: 'cover' }}
+                        width={48}
+                      />
+                    ) : null}
+                    <Space orientation="vertical" size={0}>
+                      <Typography.Text strong>
+                        {record.itemName}
+                      </Typography.Text>
+                      <Typography.Text type="secondary">
+                        {record.itemCode}
+                      </Typography.Text>
+                    </Space>
+                  </Space>
+                ),
               },
               {
                 title: '仓库',

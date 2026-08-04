@@ -1,5 +1,6 @@
 import { callGatewayMethod } from './api-client';
 import { compactPayload, readObject } from './api-utils';
+import { resolveMediaUrl } from './media-url';
 import { runGatewayMutation } from './mutation';
 import type { SalesMode } from '@/utils/sales-order-editor';
 
@@ -186,6 +187,7 @@ export type SalesReturnSourceContextItem = {
   detailId: string;
   detailSubmitKey: string;
   itemCode: string;
+  imageUrl: string;
   itemName: string;
   maxReturnableQty: number | null;
   rate: number | null;
@@ -491,7 +493,9 @@ function normalizeItems(value: unknown): SalesOrderDetailItem[] {
     ? value.map((item: Record<string, any>) => ({
         amount: toNumber(item.amount),
         deliveredQty: toNumber(item.delivered_qty),
-        imageUrl: String(item.image ?? item.image_url ?? item.item_image ?? ''),
+        imageUrl: resolveMediaUrl(
+          String(item.image ?? item.image_url ?? item.item_image ?? ''),
+        ),
         itemCode: String(item.item_code ?? ''),
         itemName: String(item.item_name ?? item.item_code ?? ''),
         qty: toNumber(item.qty),
@@ -1210,6 +1214,7 @@ export async function getSalesReturnSourceContext(
           detailId,
           detailSubmitKey,
           itemCode: String(item.item_code ?? ''),
+          imageUrl: resolveMediaUrl(String(item.image ?? '')),
           itemName: String(item.item_name ?? item.item_code ?? ''),
           maxReturnableQty: toNumber(item.max_returnable_qty),
           rate: toNumber(item.rate),

@@ -16,6 +16,7 @@ import {
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
 import { CurrencySelect } from '@/components/CurrencySelect';
+import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { UomSelect } from '@/components/UomSelect';
 import {
   type AiDraft,
@@ -50,6 +51,7 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   brand: '品牌',
   currency: '币种',
   description: '商品描述',
+  image: '商品图片',
   item_group: '商品分类',
   item_name: '商品名称',
   retail_rate: '零售价',
@@ -636,6 +638,9 @@ export function AiDraftEditorModal({
             </Form.Item>
             {draft.draftType === 'product_setup' ? (
               <>
+                <Form.Item label="商品图片" name="image">
+                  <ItemImageUpload />
+                </Form.Item>
                 <div
                   style={{
                     display: 'grid',

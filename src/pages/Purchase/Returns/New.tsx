@@ -9,6 +9,7 @@ import {
   Button,
   DatePicker,
   Form,
+  Image,
   Input,
   InputNumber,
   message,
@@ -213,14 +214,28 @@ const PurchaseReturnFormPage: React.FC = () => {
     {
       dataIndex: 'itemName',
       render: (_, record) => (
-        <Space orientation="vertical" size={0}>
-          <Typography.Text strong>{record.itemName}</Typography.Text>
-          <Typography.Text type="secondary">{record.itemCode}</Typography.Text>
-          {record.specification ? (
-            <Typography.Text type="secondary">
-              {record.specification}
-            </Typography.Text>
+        <Space align="start" size={10}>
+          {record.imageUrl ? (
+            <Image
+              alt={record.itemName || record.itemCode}
+              height={48}
+              preview={false}
+              src={record.imageUrl}
+              style={{ objectFit: 'cover' }}
+              width={48}
+            />
           ) : null}
+          <Space orientation="vertical" size={0}>
+            <Typography.Text strong>{record.itemName}</Typography.Text>
+            <Typography.Text type="secondary">
+              {record.itemCode}
+            </Typography.Text>
+            {record.specification ? (
+              <Typography.Text type="secondary">
+                {record.specification}
+              </Typography.Text>
+            ) : null}
+          </Space>
         </Space>
       ),
       title: '商品',

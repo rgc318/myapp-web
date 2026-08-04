@@ -248,10 +248,12 @@ export type AiBusinessDocumentDetail = {
   id: string;
   items: Array<{
     amount: number | null;
+    imageUrl?: string | null;
     itemCode: string;
     itemName: string;
     qty: number | null;
     rate: number | null;
+    specification?: string | null;
     uom: string;
     uomDisplay: string | null;
     warehouse: string;

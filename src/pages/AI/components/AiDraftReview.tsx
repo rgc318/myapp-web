@@ -4,6 +4,7 @@ import {
   Button,
   Descriptions,
   Empty,
+  Image,
   List,
   Space,
   Table,
@@ -12,6 +13,7 @@ import {
 } from 'antd';
 import React from 'react';
 import type { AiDraft } from '@/services/myapp/ai';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
 const DRAFT_TYPE_LABELS: Record<AiDraft['draftType'], string> = {
@@ -154,6 +156,21 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
               key: 'itemCode',
               label: '商品编码',
               children: displayValue(payload.item_code),
+            },
+            {
+              key: 'image',
+              label: '商品图片',
+              children:
+                typeof payload.image === 'string' && payload.image ? (
+                  <Image
+                    height={96}
+                    src={resolveMediaUrl(payload.image)}
+                    style={{ objectFit: 'cover' }}
+                    width={96}
+                  />
+                ) : (
+                  '未设置'
+                ),
             },
             {
               key: 'itemGroup',

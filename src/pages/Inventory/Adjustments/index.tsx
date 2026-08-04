@@ -5,6 +5,7 @@ import {
   Button,
   DatePicker,
   Form,
+  Image,
   Input,
   InputNumber,
   message,
@@ -249,7 +250,16 @@ const InventoryAdjustmentPage: React.FC = () => {
             <Input />
           </Form.Item>
           {selectedProduct && (
-            <Space size={32} style={{ marginBottom: 16 }}>
+            <Space align="center" size={24} style={{ marginBottom: 16 }} wrap>
+              {selectedProduct.imageUrl ? (
+                <Image
+                  alt={selectedProduct.itemName || selectedProduct.itemCode}
+                  height={72}
+                  src={selectedProduct.imageUrl}
+                  style={{ objectFit: 'cover' }}
+                  width={72}
+                />
+              ) : null}
               <Statistic
                 title="当前仓库库存"
                 value={`${formatQty(selectedProduct.warehouseStockQty ?? selectedProduct.stockQty)} ${stockUomDisplay}`}

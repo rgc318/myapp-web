@@ -7,6 +7,7 @@ import {
   replaceItemImage,
   uploadItemImage,
 } from '@/services/myapp/media';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -32,17 +33,18 @@ function validateImage(file: File) {
 }
 
 export const ItemImageUpload: React.FC<{
+  commitMode?: 'immediate' | 'staged';
   disabled?: boolean;
   itemCode?: string | null;
   onChange?: (fileUrl: string) => void;
   value?: string;
-}> = ({ disabled, itemCode, onChange, value }) => {
-  const [previewUrl, setPreviewUrl] = useState(value ?? '');
+}> = ({ commitMode = 'staged', disabled, itemCode, onChange, value }) => {
+  const [previewUrl, setPreviewUrl] = useState(resolveMediaUrl(value));
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   React.useEffect(() => {
-    setPreviewUrl(value ?? '');
+    setPreviewUrl(resolveMediaUrl(value));
   }, [value]);
 
   const uploadProps: UploadProps = {
@@ -52,18 +54,19 @@ export const ItemImageUpload: React.FC<{
       try {
         validateImage(file);
         const fileContentBase64 = await fileToBase64(file);
-        const uploaded = itemCode
-          ? await replaceItemImage({
-              contentType: file.type,
-              fileContentBase64,
-              filename: file.name,
-              itemCode,
-            })
-          : await uploadItemImage({
-              contentType: file.type,
-              fileContentBase64,
-              filename: file.name,
-            });
+        const uploaded =
+          itemCode && commitMode === 'immediate'
+            ? await replaceItemImage({
+                contentType: file.type,
+                fileContentBase64,
+                filename: file.name,
+                itemCode,
+              })
+            : await uploadItemImage({
+                contentType: file.type,
+                fileContentBase64,
+                filename: file.name,
+              });
 
         setPreviewUrl(uploaded.previewUrl);
         onChange?.(uploaded.fileUrl);
@@ -80,7 +83,7 @@ export const ItemImageUpload: React.FC<{
   };
 
   const handleDelete = async () => {
-    if (!itemCode) {
+    if (!itemCode || commitMode === 'staged') {
       setPreviewUrl('');
       onChange?.('');
       return;
@@ -101,7 +104,7 @@ export const ItemImageUpload: React.FC<{
   return (
     <Space align="start" size={12}>
       {previewUrl ? (
-        <Image height={96} src={previewUrl} width={96} />
+        <Image alt="商品图片" height={96} src={previewUrl} width={96} />
       ) : (
         <div
           style={{
@@ -124,7 +127,7 @@ export const ItemImageUpload: React.FC<{
             icon={<UploadOutlined />}
             loading={uploading}
           >
-            {itemCode ? '替换图片' : '上传图片'}
+            {itemCode || previewUrl ? '替换图片' : '上传图片'}
           </Button>
         </Upload>
         <Button

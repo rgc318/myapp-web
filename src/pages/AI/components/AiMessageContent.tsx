@@ -11,7 +11,7 @@ import {
 import { ProCard } from '@ant-design/pro-components';
 import { Actions } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
-import { Alert, Button, Dropdown, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Dropdown, Image, Space, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
 import {
@@ -22,6 +22,7 @@ import {
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
 } from '@/services/myapp/ai';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { useAiWorkspaceStyles } from '../styles';
 import { AiDraftCompactSummary } from './AiDraftCompactSummary';
 import { resolveAiFailureRecovery } from './ai-failure';
@@ -161,45 +162,57 @@ function CitationCard({
       }
     >
       {citation.type === 'product' ? (
-        <Space orientation="vertical" size={6} style={{ width: '100%' }}>
-          <Space size={[8, 4]} wrap>
-            <Tag color="blue">回答时数据</Tag>
-            {citation.id ? <Tag>{citation.id}</Tag> : null}
-            {citation.data.specification ? (
-              <Tag>{String(citation.data.specification)}</Tag>
-            ) : null}
-            {citation.data.match_reason ? (
-              <Tag color="purple">{String(citation.data.match_reason)}</Tag>
-            ) : null}
-            {typeof citation.data.semantic_score === 'number' ? (
-              <Tag color="geekblue">
-                语义相关度{' '}
-                {Math.max(
-                  0,
-                  Math.min(
-                    100,
-                    Math.round(Number(citation.data.semantic_score) * 100),
-                  ),
-                )}
-                %
-              </Tag>
-            ) : null}
-            <Typography.Text>
-              库存 {Number(citation.data.qty ?? 0)}{' '}
-              {String(citation.data.uom_display ?? citation.data.uom ?? '')}
-            </Typography.Text>
-            <Typography.Text>
-              参考价 {Number(citation.data.price ?? 0)}
+        <Space align="start" size={12} style={{ width: '100%' }}>
+          {typeof citation.data.image === 'string' && citation.data.image ? (
+            <Image
+              alt={citation.label}
+              height={64}
+              preview={false}
+              src={resolveMediaUrl(citation.data.image)}
+              style={{ flex: '0 0 auto', objectFit: 'cover' }}
+              width={64}
+            />
+          ) : null}
+          <Space orientation="vertical" size={6} style={{ minWidth: 0 }}>
+            <Space size={[8, 4]} wrap>
+              <Tag color="blue">回答时数据</Tag>
+              {citation.id ? <Tag>{citation.id}</Tag> : null}
+              {citation.data.specification ? (
+                <Tag>{String(citation.data.specification)}</Tag>
+              ) : null}
+              {citation.data.match_reason ? (
+                <Tag color="purple">{String(citation.data.match_reason)}</Tag>
+              ) : null}
+              {typeof citation.data.semantic_score === 'number' ? (
+                <Tag color="geekblue">
+                  语义相关度{' '}
+                  {Math.max(
+                    0,
+                    Math.min(
+                      100,
+                      Math.round(Number(citation.data.semantic_score) * 100),
+                    ),
+                  )}
+                  %
+                </Tag>
+              ) : null}
+              <Typography.Text>
+                库存 {Number(citation.data.qty ?? 0)}{' '}
+                {String(citation.data.uom_display ?? citation.data.uom ?? '')}
+              </Typography.Text>
+              <Typography.Text>
+                参考价 {Number(citation.data.price ?? 0)}
+              </Typography.Text>
+            </Space>
+            <Typography.Text type="secondary">
+              查询时间：
+              {formatBusinessTime(citation.data.queried_at) ??
+                '历史记录未保存查询时间'}
+              {' · '}
+              公司：{String(citation.data.company ?? '未记录')}
+              {' · '}当前账号权限范围
             </Typography.Text>
           </Space>
-          <Typography.Text type="secondary">
-            查询时间：
-            {formatBusinessTime(citation.data.queried_at) ??
-              '历史记录未保存查询时间'}
-            {' · '}
-            公司：{String(citation.data.company ?? '未记录')}
-            {' · '}当前账号权限范围
-          </Typography.Text>
         </Space>
       ) : citation.type === 'ai_draft' ? (
         <Space orientation="vertical" size={8}>

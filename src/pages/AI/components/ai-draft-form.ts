@@ -17,6 +17,7 @@ export type AiDraftFormValues = {
   currency?: string;
   defaultMode?: 'wholesale' | 'retail';
   description?: string;
+  image?: string;
   itemCode?: string;
   itemGroup?: string;
   itemName?: string;
@@ -63,6 +64,7 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   currency: '币种',
   defaultMode: '业务模式',
   description: '商品描述',
+  image: '商品图片',
   itemCode: '商品编码',
   itemGroup: '商品分类',
   itemName: '商品名称',
@@ -89,6 +91,7 @@ const PRODUCT_FIELDS: (keyof AiDraftFormValues)[] = [
   'company',
   'itemName',
   'itemCode',
+  'image',
   'itemGroup',
   'brand',
   'stockUom',
@@ -257,6 +260,7 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       company: textValue(payload.company) ?? draft.company ?? undefined,
       currency: textValue(payload.currency) ?? 'CNY',
       description: textValue(payload.description),
+      image: typeof payload.image === 'string' ? payload.image : undefined,
       itemCode: textValue(payload.item_code),
       itemGroup: textValue(payload.item_group),
       itemName: textValue(payload.item_name),
@@ -540,6 +544,7 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       company: values.company,
       currency: values.currency,
       description: values.description,
+      image: values.image ?? '',
       item_code: values.itemCode,
       item_group: values.itemGroup,
       item_group_query: values.itemGroup

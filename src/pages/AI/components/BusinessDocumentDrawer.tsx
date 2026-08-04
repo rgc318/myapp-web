@@ -6,6 +6,7 @@ import {
   Button,
   Descriptions,
   Drawer,
+  Image,
   Space,
   Spin,
   Tag,
@@ -34,8 +35,34 @@ const TYPE_LABELS: Record<AiBusinessDocumentResult['type'], string> = {
 type DetailItem = AiBusinessDocumentDetail['items'][number];
 
 const columns: ProColumns<DetailItem>[] = [
-  { dataIndex: 'itemCode', title: '商品编码', width: 150 },
-  { dataIndex: 'itemName', ellipsis: true, title: '商品名称', width: 220 },
+  {
+    dataIndex: 'itemName',
+    title: '商品信息',
+    width: 320,
+    render: (_, row) => (
+      <Space align="start" size={10}>
+        {row.imageUrl ? (
+          <Image
+            alt={row.itemName || row.itemCode}
+            height={48}
+            preview={false}
+            src={row.imageUrl}
+            style={{ objectFit: 'cover' }}
+            width={48}
+          />
+        ) : null}
+        <Space orientation="vertical" size={0}>
+          <Typography.Text strong>{row.itemName}</Typography.Text>
+          <Typography.Text type="secondary">{row.itemCode}</Typography.Text>
+          {row.specification ? (
+            <Typography.Text type="secondary">
+              {row.specification}
+            </Typography.Text>
+          ) : null}
+        </Space>
+      </Space>
+    ),
+  },
   {
     align: 'right',
     dataIndex: 'qty',

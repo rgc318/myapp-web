@@ -20,6 +20,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
+import { buildInvoiceItemColumns } from '@/components/BusinessOrderDetail';
 import { PrintDocumentButton } from '@/components/PrintDocumentButton';
 import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
@@ -31,7 +32,6 @@ import {
 import {
   formatCurrencyCode,
   formatCurrencyValue,
-  resolveDisplayUom,
   StatusTag,
 } from '@/utils/myapp-display';
 
@@ -46,53 +46,7 @@ function docLinks(values: string[], basePath: string) {
     : '无';
 }
 
-const itemColumns = [
-  {
-    title: '商品编码',
-    dataIndex: 'itemCode',
-    width: 160,
-  },
-  {
-    title: '商品名称',
-    dataIndex: 'itemName',
-    ellipsis: true,
-  },
-  {
-    title: '数量',
-    dataIndex: 'qty',
-    align: 'right' as const,
-    width: 100,
-  },
-  {
-    title: '单位',
-    dataIndex: 'uom',
-    width: 90,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      resolveDisplayUom(record.uom, record.uomDisplay),
-  },
-  {
-    title: '单价',
-    dataIndex: 'rate',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.rate),
-  },
-  {
-    title: '金额',
-    dataIndex: 'amount',
-    align: 'right' as const,
-    width: 120,
-    render: (_: unknown, record: PurchaseDocumentItem) =>
-      formatCurrencyValue(record.amount),
-  },
-  {
-    title: '仓库',
-    dataIndex: 'warehouse',
-    ellipsis: true,
-    width: 180,
-  },
-];
+const itemColumns = buildInvoiceItemColumns<PurchaseDocumentItem>();
 
 const PurchaseReceiptDetailPage: React.FC = () => {
   const params = useParams();

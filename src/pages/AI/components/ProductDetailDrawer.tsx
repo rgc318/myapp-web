@@ -5,6 +5,7 @@ import {
   Button,
   Descriptions,
   Drawer,
+  Image,
   Space,
   Spin,
   Table,
@@ -169,6 +170,16 @@ export function ProductDetailDrawer({
                 {detail.modified ? ` · 商品最近修改：${detail.modified}` : ''}
               </Typography.Text>
             </Space>
+            {detail.imageUrl ? (
+              <ProCard title="商品图片" variant="outlined">
+                <Image
+                  alt={detail.itemName || detail.itemCode}
+                  src={detail.imageUrl}
+                  style={{ maxHeight: 320, objectFit: 'contain' }}
+                  width={240}
+                />
+              </ProCard>
+            ) : null}
             <Descriptions
               bordered
               column={{ lg: 2, md: 2, sm: 1, xs: 1 }}

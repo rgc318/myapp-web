@@ -750,7 +750,9 @@ const ProductsPage: React.FC = () => {
     try {
       const payload = JSON.parse(stored) as Record<string, unknown>;
       setEditingProduct(null);
-      setUploadedImageUrl(undefined);
+      setUploadedImageUrl(
+        typeof payload.image === 'string' ? payload.image : undefined,
+      );
       form.resetFields();
       form.setFieldsValue({
         brand: typeof payload.brand === 'string' ? payload.brand : undefined,
@@ -867,7 +869,12 @@ const ProductsPage: React.FC = () => {
     setSubmitting(true);
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.itemCode, values);
+        await updateProduct(editingProduct.itemCode, {
+          ...values,
+          ...(uploadedImageUrl !== undefined
+            ? { image: uploadedImageUrl }
+            : {}),
+        });
       } else {
         await createProduct({
           ...values,
@@ -1380,7 +1387,10 @@ const ProductsPage: React.FC = () => {
       <Modal
         confirmLoading={submitting}
         destroyOnHidden
-        onCancel={() => setModalOpen(false)}
+        onCancel={() => {
+          setModalOpen(false);
+          setUploadedImageUrl(undefined);
+        }}
         onOk={() => form.submit()}
         open={modalOpen}
         title={
@@ -1397,9 +1407,9 @@ const ProductsPage: React.FC = () => {
             <ItemImageUpload
               itemCode={editingProduct?.itemCode}
               onChange={(fileUrl) => {
-                setUploadedImageUrl(fileUrl || undefined);
+                setUploadedImageUrl(fileUrl);
               }}
-              value={editingProduct?.imageUrl}
+              value={uploadedImageUrl ?? editingProduct?.imageUrl}
             />
           </Form.Item>
           {!editingProduct && (

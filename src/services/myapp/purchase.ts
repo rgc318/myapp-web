@@ -75,6 +75,7 @@ export type PurchaseDocumentItem = {
   rate: number | null;
   pendingBillingQty?: number | null;
   receivedQty?: number | null;
+  specification?: string;
   uom: string;
   uomDisplay: string | null;
   warehouse: string;
@@ -162,6 +163,7 @@ export type PurchaseReturnSourceContextItem = {
   detailId: string;
   detailSubmitKey: string;
   itemCode: string;
+  imageUrl: string;
   itemName: string;
   maxReturnableQty: number | null;
   rate: number | null;
@@ -482,6 +484,9 @@ function mapItems(value: unknown): PurchaseDocumentItem[] {
         qty: toOptionalNumber(item.qty),
         rate: toOptionalNumber(item.rate),
         receivedQty: toOptionalNumber(item.received_qty),
+        specification: String(
+          item.specification ?? item.custom_specification ?? '',
+        ),
         uom: String(item.uom ?? ''),
         uomDisplay:
           typeof item.uom_display === 'string' ? item.uom_display : null,
@@ -1003,6 +1008,7 @@ export async function getPurchaseReturnSourceContext(
           detailId,
           detailSubmitKey,
           itemCode: String(item.item_code ?? ''),
+          imageUrl: resolveMediaUrl(String(item.image ?? '')),
           itemName: String(item.item_name ?? item.item_code ?? ''),
           maxReturnableQty: toOptionalNumber(item.max_returnable_qty),
           rate: toOptionalNumber(item.rate),

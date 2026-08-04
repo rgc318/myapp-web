@@ -163,14 +163,49 @@ export function buildInvoiceItemColumns<
 >(): ProColumns<T>[] {
   return [
     {
-      title: '商品编码',
-      dataIndex: 'itemCode',
-      width: 160,
-    },
-    {
-      title: '商品名称',
+      title: '商品信息',
       dataIndex: 'itemName',
-      ellipsis: true,
+      width: 320,
+      render: (_, record) => (
+        <Space align="start" size={12}>
+          {record.imageUrl ? (
+            <Image
+              alt={record.itemName || record.itemCode}
+              height={56}
+              preview={false}
+              src={record.imageUrl}
+              style={{ objectFit: 'cover' }}
+              width={56}
+            />
+          ) : (
+            <div
+              style={{
+                alignItems: 'center',
+                background: '#f5f5f5',
+                border: '1px solid #f0f0f0',
+                color: 'rgba(0, 0, 0, 0.45)',
+                display: 'flex',
+                height: 56,
+                justifyContent: 'center',
+                width: 56,
+              }}
+            >
+              无图
+            </div>
+          )}
+          <Space orientation="vertical" size={0}>
+            <Typography.Text strong>{record.itemName}</Typography.Text>
+            <Typography.Text type="secondary">
+              {record.itemCode}
+            </Typography.Text>
+            {record.specification ? (
+              <Typography.Text type="secondary">
+                {record.specification}
+              </Typography.Text>
+            ) : null}
+          </Space>
+        </Space>
+      ),
     },
     {
       title: '数量',
