@@ -5,7 +5,6 @@ import {
   Button,
   DatePicker,
   Form,
-  Image,
   Input,
   InputNumber,
   message,
@@ -16,6 +15,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
 import { ProductSelect, RemoteLinkSelect, UomSelect } from '@/components';
+import { ProductImage } from '@/components/ProductImage';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { adjustInventoryStock } from '@/services/myapp/inventory';
 import {
@@ -251,15 +251,13 @@ const InventoryAdjustmentPage: React.FC = () => {
           </Form.Item>
           {selectedProduct && (
             <Space align="center" size={24} style={{ marginBottom: 16 }} wrap>
-              {selectedProduct.imageUrl ? (
-                <Image
-                  alt={selectedProduct.itemName || selectedProduct.itemCode}
-                  height={72}
-                  src={selectedProduct.imageUrl}
-                  style={{ objectFit: 'cover' }}
-                  width={72}
-                />
-              ) : null}
+              <ProductImage
+                alt={selectedProduct.itemName || selectedProduct.itemCode}
+                height={72}
+                preview
+                src={selectedProduct.imageUrl}
+                width={72}
+              />
               <Statistic
                 title="当前仓库库存"
                 value={`${formatQty(selectedProduct.warehouseStockQty ?? selectedProduct.stockQty)} ${stockUomDisplay}`}

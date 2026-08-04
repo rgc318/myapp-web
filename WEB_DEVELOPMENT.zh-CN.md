@@ -444,7 +444,12 @@ Idempotency-Key: <uuid>
 - `src/components/ItemImageUpload.tsx`
   - 商品维护弹窗使用的图片上传控件。
   - 新增商品时先上传临时图片，再随 `create_product_v2` 的 `image` 字段绑定到商品。
-  - 编辑商品时调用 `replace_item_image` / `delete_item_image` 直接替换或删除现有商品图片。
+  - 默认使用暂存模式：编辑表单和 AI 商品草稿中选择、替换或删除图片只更新表单值，正式 `Item.image` 随商品保存或草稿执行提交。
+  - 只有明确的独立图片维护入口使用 `commitMode="immediate"`，例如 AI 当前商品详情中的直接上传、替换和删除；即时模式通过 `replace_item_image` / `delete_item_image` 保存，并在成功后重新读取商品详情。
+- `src/components/ProductImage.tsx`
+  - 商品图片的统一展示组件，负责真实图片、无图占位和加载失败降级。
+  - 商品主数据、库存作业、销售 / 采购明细、退货、AI 商品 citation、AI 草稿摘要和 AI 当前业务详情统一使用该组件，不再因图片为空而隐藏整个图片位置或只显示横杠。
+  - 紧凑表格使用 40～56px 占位，商品详情使用可预览的大图占位；页面仍只传领域 Service 已解析的媒体 URL。
 - `src/components/PaymentModeSelect.tsx`
   - 销售 / 采购收付款动作统一使用的付款方式选择器。
 - `src/components/InvoicePaymentForm.tsx`

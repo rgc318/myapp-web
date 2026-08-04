@@ -13,7 +13,6 @@ import {
   Button,
   Empty,
   Form,
-  Image,
   Input,
   InputNumber,
   Modal,
@@ -28,6 +27,7 @@ import {
 import React, { useState } from 'react';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { ProductImage } from '@/components/ProductImage';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
 import {
@@ -776,14 +776,15 @@ const ProductDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="320px" title="商品图片">
-                {data.imageUrl ? (
-                  <Image src={data.imageUrl} width={240} />
-                ) : (
-                  <Empty
-                    description="暂无图片"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  />
-                )}
+                <ProductImage
+                  alt={data.itemName || data.itemCode}
+                  emptyText="暂无图片"
+                  height={240}
+                  objectFit="contain"
+                  preview
+                  src={data.imageUrl}
+                  width={240}
+                />
               </ProCard>
               <ProCard title="基础信息">
                 <ProDescriptions column={2} dataSource={data}>

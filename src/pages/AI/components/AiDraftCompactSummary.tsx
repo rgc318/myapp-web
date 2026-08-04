@@ -1,6 +1,8 @@
 import { Space, Typography } from 'antd';
 import React, { type ReactNode } from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import type { AiDraft } from '@/services/myapp/ai';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { resolveDisplayUom } from '@/utils/display-uom';
 import {
   calculateLineAmount,
@@ -310,7 +312,7 @@ export function AiDraftCompactSummary({ draft }: { draft: AiDraft }) {
         ? inventorySummaryItems(draft)
         : orderSummaryItems(draft);
 
-  return (
+  const summary = (
     <Space orientation="vertical" size={2} style={{ width: '100%' }}>
       {items.map((item) => (
         <div key={item.key}>
@@ -318,6 +320,21 @@ export function AiDraftCompactSummary({ draft }: { draft: AiDraft }) {
           <Typography.Text>{item.value}</Typography.Text>
         </div>
       ))}
+    </Space>
+  );
+
+  if (draft.draftType !== 'product_setup') return summary;
+
+  return (
+    <Space align="start" size={12} style={{ width: '100%' }}>
+      <ProductImage
+        alt={optionalText(draft.payload.item_name) ?? '商品草稿'}
+        emptyText="未设置"
+        height={64}
+        src={resolveMediaUrl(optionalText(draft.payload.image) ?? '')}
+        width={64}
+      />
+      {summary}
     </Space>
   );
 }

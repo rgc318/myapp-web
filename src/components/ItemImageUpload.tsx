@@ -1,6 +1,6 @@
 import { DeleteOutlined, UploadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
-import { Button, Image, message, Space, Upload } from 'antd';
+import { Button, message, Space, Upload } from 'antd';
 import React, { useState } from 'react';
 import {
   deleteItemImage,
@@ -8,6 +8,7 @@ import {
   uploadItemImage,
 } from '@/services/myapp/media';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
+import { ProductImage } from './ProductImage';
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
@@ -103,23 +104,14 @@ export const ItemImageUpload: React.FC<{
 
   return (
     <Space align="start" size={12}>
-      {previewUrl ? (
-        <Image alt="商品图片" height={96} src={previewUrl} width={96} />
-      ) : (
-        <div
-          style={{
-            alignItems: 'center',
-            border: '1px dashed #d9d9d9',
-            color: '#8c8c8c',
-            display: 'flex',
-            height: 96,
-            justifyContent: 'center',
-            width: 96,
-          }}
-        >
-          无图片
-        </div>
-      )}
+      <ProductImage
+        alt="商品图片"
+        emptyText="无图片"
+        height={96}
+        preview
+        src={previewUrl}
+        width={96}
+      />
       <Space orientation="vertical">
         <Upload {...uploadProps}>
           <Button
@@ -127,7 +119,7 @@ export const ItemImageUpload: React.FC<{
             icon={<UploadOutlined />}
             loading={uploading}
           >
-            {itemCode || previewUrl ? '替换图片' : '上传图片'}
+            {previewUrl ? '替换图片' : '上传图片'}
           </Button>
         </Upload>
         <Button

@@ -17,6 +17,7 @@ import { ItemImageUpload } from './ItemImageUpload';
 import PageState from './PageState';
 import PartyManagementPage from './PartyManagementPage';
 import { PrintDocumentButton } from './PrintDocumentButton';
+import { ProductImage } from './ProductImage';
 import { ProductSelect } from './ProductSelect';
 import { PurchaseOrderLinesTable } from './PurchaseOrderLinesTable';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
@@ -36,6 +37,7 @@ export {
   PageState,
   PartyManagementPage,
   PrintDocumentButton,
+  ProductImage,
   ProductSelect,
   PurchaseRollbackGuide,
   PurchaseOrderLinesTable,

@@ -6,7 +6,6 @@ import {
   Button,
   Descriptions,
   Drawer,
-  Image,
   Space,
   Spin,
   Tag,
@@ -14,6 +13,7 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import {
   type AiBusinessDocumentDetail,
   type AiBusinessDocumentResult,
@@ -41,16 +41,7 @@ const columns: ProColumns<DetailItem>[] = [
     width: 320,
     render: (_, row) => (
       <Space align="start" size={10}>
-        {row.imageUrl ? (
-          <Image
-            alt={row.itemName || row.itemCode}
-            height={48}
-            preview={false}
-            src={row.imageUrl}
-            style={{ objectFit: 'cover' }}
-            width={48}
-          />
-        ) : null}
+        <ProductImage alt={row.itemName || row.itemCode} src={row.imageUrl} />
         <Space orientation="vertical" size={0}>
           <Typography.Text strong>{row.itemName}</Typography.Text>
           <Typography.Text type="secondary">{row.itemCode}</Typography.Text>

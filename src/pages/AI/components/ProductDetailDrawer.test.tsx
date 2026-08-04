@@ -73,6 +73,9 @@ describe('ProductDetailDrawer', () => {
     expect(screen.getByText('2026-07-24 09:20:00')).toBeTruthy();
     expect(screen.getByText('4 个')).toBeTruthy();
     expect(screen.getByText('测试商品')).toBeTruthy();
+    expect(screen.getByText('商品图片')).toBeTruthy();
+    expect(screen.getByRole('img', { name: '商品图片：无图片' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /上传图片/ })).toBeTruthy();
     expect(
       screen.getByRole('link', { name: /在商品模块打开/ }).getAttribute('href'),
     ).toBe('/master-data/products/ITEM-001');

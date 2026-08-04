@@ -4,7 +4,6 @@ import {
   Card,
   Col,
   Empty,
-  Image,
   Progress,
   Row,
   Space,
@@ -13,6 +12,7 @@ import {
   Typography,
 } from 'antd';
 import React from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import { businessDocumentPath, toPercent } from '@/utils/business-document';
 import {
   formatCurrencyValue,
@@ -68,31 +68,12 @@ export function buildTransactionItemColumns<T extends TransactionItem>({
       width: 320,
       render: (_, record) => (
         <Space align="start" size={12}>
-          {record.imageUrl ? (
-            <Image
-              alt={record.itemName || record.itemCode}
-              height={56}
-              preview={false}
-              src={record.imageUrl}
-              style={{ objectFit: 'cover' }}
-              width={56}
-            />
-          ) : (
-            <div
-              style={{
-                alignItems: 'center',
-                background: '#f5f5f5',
-                border: '1px solid #f0f0f0',
-                color: 'rgba(0, 0, 0, 0.45)',
-                display: 'flex',
-                height: 56,
-                justifyContent: 'center',
-                width: 56,
-              }}
-            >
-              无图
-            </div>
-          )}
+          <ProductImage
+            alt={record.itemName || record.itemCode}
+            height={56}
+            src={record.imageUrl}
+            width={56}
+          />
           <Space orientation="vertical" size={0}>
             <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">
@@ -168,31 +149,12 @@ export function buildInvoiceItemColumns<
       width: 320,
       render: (_, record) => (
         <Space align="start" size={12}>
-          {record.imageUrl ? (
-            <Image
-              alt={record.itemName || record.itemCode}
-              height={56}
-              preview={false}
-              src={record.imageUrl}
-              style={{ objectFit: 'cover' }}
-              width={56}
-            />
-          ) : (
-            <div
-              style={{
-                alignItems: 'center',
-                background: '#f5f5f5',
-                border: '1px solid #f0f0f0',
-                color: 'rgba(0, 0, 0, 0.45)',
-                display: 'flex',
-                height: 56,
-                justifyContent: 'center',
-                width: 56,
-              }}
-            >
-              无图
-            </div>
-          )}
+          <ProductImage
+            alt={record.itemName || record.itemCode}
+            height={56}
+            src={record.imageUrl}
+            width={56}
+          />
           <Space orientation="vertical" size={0}>
             <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">

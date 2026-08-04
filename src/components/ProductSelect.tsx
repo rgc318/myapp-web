@@ -11,7 +11,6 @@ import {
   Divider,
   Drawer,
   Form,
-  Image,
   Input,
   InputNumber,
   Modal,
@@ -25,6 +24,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import {
   createProductAndStock,
   listProducts,
@@ -649,31 +649,7 @@ export function ProductSelect({
         fixed: 'left',
         render: (_, record) => (
           <Space align="start" size={12}>
-            {record.imageUrl ? (
-              <Image
-                alt={productLabel(record)}
-                height={48}
-                preview={false}
-                src={record.imageUrl}
-                style={{ objectFit: 'cover' }}
-                width={48}
-              />
-            ) : (
-              <div
-                style={{
-                  alignItems: 'center',
-                  background: '#f5f5f5',
-                  border: '1px solid #f0f0f0',
-                  color: 'rgba(0, 0, 0, 0.45)',
-                  display: 'flex',
-                  height: 48,
-                  justifyContent: 'center',
-                  width: 48,
-                }}
-              >
-                无图
-              </div>
-            )}
+            <ProductImage alt={productLabel(record)} src={record.imageUrl} />
             <Space orientation="vertical" size={0}>
               <Space size={6} wrap>
                 <Typography.Text strong>{productLabel(record)}</Typography.Text>

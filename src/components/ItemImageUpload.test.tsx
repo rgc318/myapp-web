@@ -75,6 +75,12 @@ describe('ItemImageUpload', () => {
     expect(uploadItemImage).not.toHaveBeenCalled();
   });
 
+  it('labels an empty existing item as an upload action', () => {
+    render(<ItemImageUpload commitMode="immediate" itemCode="ITEM-001" />);
+
+    expect(screen.getByRole('button', { name: /上传图片/ })).toBeTruthy();
+  });
+
   it('only clears the staged form value when deleting in staged mode', () => {
     const onChange = jest.fn();
     render(

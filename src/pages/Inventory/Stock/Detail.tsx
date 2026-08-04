@@ -6,8 +6,9 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { history, Link, useLocation, useParams, useRequest } from '@umijs/max';
-import { Alert, Button, Empty, Image, Skeleton, Space, Table } from 'antd';
+import { Alert, Button, Empty, Skeleton, Space, Table } from 'antd';
 import React from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -250,14 +251,15 @@ const InventoryStockDetailPage: React.FC = () => {
 
             <ProCard split="vertical">
               <ProCard colSpan="320px" title="商品图片">
-                {data.imageUrl ? (
-                  <Image src={data.imageUrl} width={240} />
-                ) : (
-                  <Empty
-                    description="暂无图片"
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  />
-                )}
+                <ProductImage
+                  alt={data.itemName || data.itemCode}
+                  emptyText="暂无图片"
+                  height={240}
+                  objectFit="contain"
+                  preview
+                  src={data.imageUrl}
+                  width={240}
+                />
               </ProCard>
               <ProCard title="基本信息">
                 <ProDescriptions column={2} dataSource={data}>

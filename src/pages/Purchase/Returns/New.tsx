@@ -9,7 +9,6 @@ import {
   Button,
   DatePicker,
   Form,
-  Image,
   Input,
   InputNumber,
   message,
@@ -23,6 +22,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { ProductImage } from '@/components/ProductImage';
 import { PURCHASE_RETURN_REFUND_ENTRY_ENABLED } from '@/config/feature-flags';
 import {
   getPurchaseReturnSourceContext,
@@ -215,16 +215,10 @@ const PurchaseReturnFormPage: React.FC = () => {
       dataIndex: 'itemName',
       render: (_, record) => (
         <Space align="start" size={10}>
-          {record.imageUrl ? (
-            <Image
-              alt={record.itemName || record.itemCode}
-              height={48}
-              preview={false}
-              src={record.imageUrl}
-              style={{ objectFit: 'cover' }}
-              width={48}
-            />
-          ) : null}
+          <ProductImage
+            alt={record.itemName || record.itemCode}
+            src={record.imageUrl}
+          />
           <Space orientation="vertical" size={0}>
             <Typography.Text strong>{record.itemName}</Typography.Text>
             <Typography.Text type="secondary">

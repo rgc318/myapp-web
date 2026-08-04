@@ -4,7 +4,6 @@ import {
   Button,
   Descriptions,
   Empty,
-  Image,
   List,
   Space,
   Table,
@@ -12,6 +11,7 @@ import {
   Typography,
 } from 'antd';
 import React from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import type { AiDraft } from '@/services/myapp/ai';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
@@ -160,17 +160,18 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             {
               key: 'image',
               label: '商品图片',
-              children:
-                typeof payload.image === 'string' && payload.image ? (
-                  <Image
-                    height={96}
-                    src={resolveMediaUrl(payload.image)}
-                    style={{ objectFit: 'cover' }}
-                    width={96}
-                  />
-                ) : (
-                  '未设置'
-                ),
+              children: (
+                <ProductImage
+                  alt={String(payload.item_name ?? '商品图片')}
+                  emptyText="未设置"
+                  height={96}
+                  preview
+                  src={resolveMediaUrl(
+                    typeof payload.image === 'string' ? payload.image : '',
+                  )}
+                  width={96}
+                />
+              ),
             },
             {
               key: 'itemGroup',

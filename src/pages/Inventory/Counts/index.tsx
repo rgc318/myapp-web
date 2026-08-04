@@ -5,7 +5,6 @@ import {
   Button,
   DatePicker,
   Form,
-  Image,
   Input,
   InputNumber,
   message,
@@ -19,6 +18,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import { ProductSelect, RemoteLinkSelect } from '@/components';
+import { ProductImage } from '@/components/ProductImage';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   type InventoryStockCountResult,
@@ -269,16 +269,10 @@ const InventoryCountsPage: React.FC = () => {
                 fixed: 'left',
                 render: (_, record) => (
                   <Space align="start" size={10}>
-                    {record.imageUrl ? (
-                      <Image
-                        alt={record.itemName || record.itemCode}
-                        height={48}
-                        preview={false}
-                        src={record.imageUrl}
-                        style={{ objectFit: 'cover' }}
-                        width={48}
-                      />
-                    ) : null}
+                    <ProductImage
+                      alt={record.itemName || record.itemCode}
+                      src={record.imageUrl}
+                    />
                     <Space orientation="vertical" size={0}>
                       <Typography.Text strong>
                         {record.itemName}

@@ -5,7 +5,6 @@ import {
   Button,
   Descriptions,
   Drawer,
-  Image,
   Space,
   Spin,
   Table,
@@ -14,11 +13,14 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { ProductImage } from '@/components/ProductImage';
 import type { AiCitation } from '@/services/myapp/ai';
 import {
   getProductDetail,
   type ProductSummary,
 } from '@/services/myapp/master-data';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 
 export function ProductDetailDrawer({
@@ -151,6 +153,25 @@ export function ProductDetailDrawer({
                     'CNY',
                   ),
                 },
+                {
+                  key: 'image',
+                  label: '回答时图片',
+                  span: 2,
+                  children: (
+                    <ProductImage
+                      alt={citation.label}
+                      emptyText="当时无图片"
+                      height={96}
+                      preview
+                      src={resolveMediaUrl(
+                        typeof citation.data.image === 'string'
+                          ? citation.data.image
+                          : '',
+                      )}
+                      width={96}
+                    />
+                  ),
+                },
               ]}
               size="small"
             />
@@ -170,16 +191,19 @@ export function ProductDetailDrawer({
                 {detail.modified ? ` · 商品最近修改：${detail.modified}` : ''}
               </Typography.Text>
             </Space>
-            {detail.imageUrl ? (
-              <ProCard title="商品图片" variant="outlined">
-                <Image
-                  alt={detail.itemName || detail.itemCode}
-                  src={detail.imageUrl}
-                  style={{ maxHeight: 320, objectFit: 'contain' }}
-                  width={240}
+            <ProCard title="商品图片" variant="outlined">
+              <Space orientation="vertical" size={12}>
+                <Typography.Text type="secondary">
+                  在这里上传、替换或删除后会直接保存到当前商品，并记录正式商品修改时间。
+                </Typography.Text>
+                <ItemImageUpload
+                  commitMode="immediate"
+                  itemCode={detail.itemCode}
+                  onChange={() => void loadCurrentData(false)}
+                  value={detail.imageUrl}
                 />
-              </ProCard>
-            ) : null}
+              </Space>
+            </ProCard>
             <Descriptions
               bordered
               column={{ lg: 2, md: 2, sm: 1, xs: 1 }}

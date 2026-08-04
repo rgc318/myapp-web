@@ -11,9 +11,10 @@ import {
 import { ProCard } from '@ant-design/pro-components';
 import { Actions } from '@ant-design/x';
 import XMarkdown from '@ant-design/x-markdown';
-import { Alert, Button, Dropdown, Image, Space, Tag, Typography } from 'antd';
+import { Alert, Button, Dropdown, Space, Tag, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
+import { ProductImage } from '@/components/ProductImage';
 import {
   type AiBusinessDocumentResult,
   type AiBusinessResultSet,
@@ -163,16 +164,16 @@ function CitationCard({
     >
       {citation.type === 'product' ? (
         <Space align="start" size={12} style={{ width: '100%' }}>
-          {typeof citation.data.image === 'string' && citation.data.image ? (
-            <Image
-              alt={citation.label}
-              height={64}
-              preview={false}
-              src={resolveMediaUrl(citation.data.image)}
-              style={{ flex: '0 0 auto', objectFit: 'cover' }}
-              width={64}
-            />
-          ) : null}
+          <ProductImage
+            alt={citation.label}
+            height={64}
+            src={resolveMediaUrl(
+              typeof citation.data.image === 'string'
+                ? citation.data.image
+                : '',
+            )}
+            width={64}
+          />
           <Space orientation="vertical" size={6} style={{ minWidth: 0 }}>
             <Space size={[8, 4]} wrap>
               <Tag color="blue">回答时数据</Tag>

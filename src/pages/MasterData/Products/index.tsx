@@ -14,7 +14,6 @@ import {
   Alert,
   Button,
   Form,
-  Image,
   Input,
   InputNumber,
   Modal,
@@ -29,6 +28,7 @@ import {
 import React, { useEffect, useRef, useState } from 'react';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { ProductImage } from '@/components/ProductImage';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
 import { toOptionalText } from '@/services/myapp/api-utils';
@@ -541,12 +541,14 @@ function buildColumns({
       dataIndex: 'imageUrl',
       search: false,
       width: 64,
-      render: (_, record) =>
-        record.imageUrl ? (
-          <Image height={40} src={record.imageUrl} width={40} />
-        ) : (
-          '-'
-        ),
+      render: (_, record) => (
+        <ProductImage
+          alt={record.itemName || record.itemCode}
+          height={40}
+          src={record.imageUrl}
+          width={40}
+        />
+      ),
     },
     {
       title: '商品编码',

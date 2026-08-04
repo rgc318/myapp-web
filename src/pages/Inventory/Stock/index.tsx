@@ -1,9 +1,10 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { history, Link } from '@umijs/max';
-import { Button, Image, Space, Table, Tag } from 'antd';
+import { Button, Space, Table, Tag } from 'antd';
 import React, { useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components';
+import { ProductImage } from '@/components/ProductImage';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   listProducts,
@@ -154,12 +155,12 @@ function buildColumns(activeCompany?: string): ProColumns<ProductSummary>[] {
       dataIndex: 'imageUrl',
       search: false,
       width: 80,
-      render: (_, record) =>
-        record.imageUrl ? (
-          <Image height={48} src={record.imageUrl} width={48} />
-        ) : (
-          '-'
-        ),
+      render: (_, record) => (
+        <ProductImage
+          alt={record.itemName || record.itemCode}
+          src={record.imageUrl}
+        />
+      ),
     },
     {
       title: '商品编码',
