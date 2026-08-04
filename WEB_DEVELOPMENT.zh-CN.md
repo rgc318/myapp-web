@@ -446,6 +446,13 @@ Idempotency-Key: <uuid>
   - 新增商品时先上传临时图片，再随 `create_product_v2` 的 `image` 字段绑定到商品。
   - 默认使用暂存模式：编辑表单和 AI 商品草稿中选择、替换或删除图片只更新表单值，正式 `Item.image` 随商品保存或草稿执行提交。
   - 只有明确的独立图片维护入口使用 `commitMode="immediate"`，例如 AI 当前商品详情中的直接上传、替换和删除；即时模式通过 `replace_item_image` / `delete_item_image` 保存，并在成功后重新读取商品详情。
+  - 图片选择统一进入 `ImageEditorUpload`，提供 1:1 裁剪、拖动、缩放、90°旋转、WebP 压缩和已有图片“重新裁剪”；页面不得再自行读取原图或实现压缩。
+- `src/components/ImageEditorUpload.tsx`
+  - Web 图片编辑统一入口，根据媒体 profile 决定比例、最低分辨率、输出尺寸、格式、质量和字节上限。
+  - 商品图片使用 `item-square-v1`（1600 × 1600 WebP），头像使用 `avatar-square-v1`（512 × 512 WebP）。
+  - 客户端处理用于 UX 和减少带宽，最终安全与一致性仍由后端真实解码和二次规范化保证。
+- `src/utils/image-processing.ts`
+  - 保存 Web 媒体 profile、来源校验、裁剪位移约束和 Canvas 输出实现；新增图片类型应增加 profile，不在页面复制常量。
 - `src/components/ProductImage.tsx`
   - 商品图片的统一展示组件，负责真实图片、无图占位和加载失败降级。
   - 商品主数据、库存作业、销售 / 采购明细、退货、AI 商品 citation、AI 草稿摘要和 AI 当前业务详情统一使用该组件，不再因图片为空而隐藏整个图片位置或只显示横杠。
@@ -1524,7 +1531,7 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 
 - `/account/center`：个人身份、角色、工作偏好、数据可见范围和最近活动。
 - `/account/settings`：个人资料、工作偏好和密码修改。
-- 个人设置头像使用真实文件上传，不再要求用户手填图片 URL。
+- 个人设置头像使用真实文件上传，不再要求用户手填图片 URL；上传前统一进行 1:1 裁剪、缩放、旋转并输出 512 × 512 WebP，已有头像支持重新裁剪。
 - 安全页展示 Frappe Session、JWT refresh 会话、2FA 状态，并支持注销全部设备。
 - 登录页支持 `JWT_TWO_FACTOR_REQUIRED` 挑战；收到挑战后保留账号密码并显示 6 位 OTP 输入，验证成功后再进入系统。
 

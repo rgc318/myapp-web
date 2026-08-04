@@ -216,7 +216,17 @@ export async function uploadCurrentUserAvatar(payload: {
   fileContentBase64: string;
   filename: string;
 }) {
-  return runGatewayMutation<{ fileId: string; fileName: string; fileUrl: string }>(
+  return runGatewayMutation<{
+    contentType: string;
+    fileId: string;
+    fileName: string;
+    fileSize: number;
+    fileUrl: string;
+    height: number;
+    profile: string;
+    quality: number;
+    width: number;
+  }>(
     'upload_current_user_avatar_v1',
     {
       payload: compactPayload({
@@ -230,7 +240,13 @@ export async function uploadCurrentUserAvatar(payload: {
         return {
           fileId: String(row.file_id ?? ''),
           fileName: String(row.file_name ?? ''),
+          fileSize: Number(row.file_size ?? 0),
           fileUrl: String(row.file_url ?? ''),
+          contentType: String(row.content_type ?? ''),
+          height: Number(row.height ?? 0),
+          profile: String(row.profile ?? ''),
+          quality: Number(row.quality ?? 0),
+          width: Number(row.width ?? 0),
         };
       },
     },

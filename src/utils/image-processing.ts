@@ -1,0 +1,275 @@
+export type ImageEditProfile = {
+  accept: string;
+  aspect: number;
+  description: string;
+  maxOutputBytes: number;
+  maxSourceBytes: number;
+  minSourceEdge: number;
+  outputHeight: number;
+  outputMimeType: 'image/webp';
+  outputQuality: number;
+  outputWidth: number;
+  profile: 'avatar-square-v1' | 'item-square-v1';
+  title: string;
+};
+
+export type PreparedImage = {
+  file: File;
+  height: number;
+  mimeType: string;
+  originalHeight: number;
+  originalSize: number;
+  originalWidth: number;
+  profile: string;
+  width: number;
+};
+
+export type ImageOffset = { x: number; y: number };
+
+export const ITEM_IMAGE_EDIT_PROFILE: ImageEditProfile = {
+  accept: 'image/jpeg,image/png,image/webp',
+  aspect: 1,
+  description: '正方形商品主图，输出 1600 × 1600 WebP',
+  maxOutputBytes: 5 * 1024 * 1024,
+  maxSourceBytes: 20 * 1024 * 1024,
+  minSourceEdge: 300,
+  outputHeight: 1600,
+  outputMimeType: 'image/webp',
+  outputQuality: 0.82,
+  outputWidth: 1600,
+  profile: 'item-square-v1',
+  title: '编辑商品图片',
+};
+
+export const AVATAR_IMAGE_EDIT_PROFILE: ImageEditProfile = {
+  accept: 'image/jpeg,image/png,image/webp',
+  aspect: 1,
+  description: '正方形头像，输出 512 × 512 WebP',
+  maxOutputBytes: 2 * 1024 * 1024,
+  maxSourceBytes: 20 * 1024 * 1024,
+  minSourceEdge: 128,
+  outputHeight: 512,
+  outputMimeType: 'image/webp',
+  outputQuality: 0.85,
+  outputWidth: 512,
+  profile: 'avatar-square-v1',
+  title: '编辑个人头像',
+};
+
+const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+export function validateImageSource(file: File, profile: ImageEditProfile) {
+  if (!ACCEPTED_IMAGE_TYPES.has(file.type)) {
+    throw new Error('请选择 JPG、PNG 或 WebP 图片');
+  }
+  if (file.size > profile.maxSourceBytes) {
+    throw new Error('原始图片请控制在 20MB 以内');
+  }
+}
+
+export function validateImageDimensions(
+  width: number,
+  height: number,
+  profile: ImageEditProfile,
+) {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new Error('无法读取图片尺寸');
+  }
+  if (width * height > 40_000_000) {
+    throw new Error('图片像素过大，请控制在 4000 万像素以内');
+  }
+  if (Math.min(width, height) < profile.minSourceEdge) {
+    throw new Error(
+      `图片分辨率过低，最短边至少需要 ${profile.minSourceEdge} 像素`,
+    );
+  }
+}
+
+export function getOrientedSize(
+  width: number,
+  height: number,
+  rotation: number,
+) {
+  const normalized = ((rotation % 360) + 360) % 360;
+  return normalized === 90 || normalized === 270
+    ? { height: width, width: height }
+    : { height, width };
+}
+
+export function getCoverScale({
+  imageHeight,
+  imageWidth,
+  rotation,
+  viewportHeight,
+  viewportWidth,
+}: {
+  imageHeight: number;
+  imageWidth: number;
+  rotation: number;
+  viewportHeight: number;
+  viewportWidth: number;
+}) {
+  const oriented = getOrientedSize(imageWidth, imageHeight, rotation);
+  return Math.max(
+    viewportWidth / oriented.width,
+    viewportHeight / oriented.height,
+  );
+}
+
+export function clampImageOffset({
+  baseScale,
+  imageHeight,
+  imageWidth,
+  offset,
+  rotation,
+  viewportHeight,
+  viewportWidth,
+  zoom,
+}: {
+  baseScale: number;
+  imageHeight: number;
+  imageWidth: number;
+  offset: ImageOffset;
+  rotation: number;
+  viewportHeight: number;
+  viewportWidth: number;
+  zoom: number;
+}) {
+  const oriented = getOrientedSize(imageWidth, imageHeight, rotation);
+  const maxX = Math.max(
+    0,
+    (oriented.width * baseScale * zoom - viewportWidth) / 2,
+  );
+  const maxY = Math.max(
+    0,
+    (oriented.height * baseScale * zoom - viewportHeight) / 2,
+  );
+  return {
+    x: Math.max(-maxX, Math.min(maxX, offset.x)),
+    y: Math.max(-maxY, Math.min(maxY, offset.y)),
+  };
+}
+
+export function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
+export function buildOutputFilename(filename: string, mimeType: string) {
+  const extension =
+    mimeType === 'image/webp'
+      ? 'webp'
+      : mimeType === 'image/jpeg'
+        ? 'jpg'
+        : 'png';
+  const basename = filename.replace(/\.[^.]+$/, '').trim() || 'image';
+  return `${basename}.${extension}`;
+}
+
+export function fileToBase64(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('读取图片失败'));
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? (value.split(',').pop() ?? '') : value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: string,
+  quality: number,
+) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('图片格式化失败'))),
+      mimeType,
+      quality,
+    );
+  });
+}
+
+export async function renderEditedImage({
+  image,
+  offset,
+  profile,
+  rotation,
+  viewportHeight,
+  viewportWidth,
+  zoom,
+}: {
+  image: HTMLImageElement;
+  offset: ImageOffset;
+  profile: ImageEditProfile;
+  rotation: number;
+  viewportHeight: number;
+  viewportWidth: number;
+  zoom: number;
+}): Promise<PreparedImage> {
+  const canvas = document.createElement('canvas');
+  canvas.width = profile.outputWidth;
+  canvas.height = profile.outputHeight;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('当前浏览器不支持图片编辑');
+
+  const outputScaleX = profile.outputWidth / viewportWidth;
+  const outputScaleY = profile.outputHeight / viewportHeight;
+  const baseScale = getCoverScale({
+    imageHeight: image.naturalHeight,
+    imageWidth: image.naturalWidth,
+    rotation,
+    viewportHeight,
+    viewportWidth,
+  });
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.translate(
+    profile.outputWidth / 2 + offset.x * outputScaleX,
+    profile.outputHeight / 2 + offset.y * outputScaleY,
+  );
+  context.rotate((rotation * Math.PI) / 180);
+  context.scale(
+    baseScale * zoom * outputScaleX,
+    baseScale * zoom * outputScaleY,
+  );
+  context.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
+
+  let quality = profile.outputQuality;
+  let blob = await canvasToBlob(canvas, profile.outputMimeType, quality);
+  while (blob.size > profile.maxOutputBytes && quality > 0.52) {
+    quality -= 0.1;
+    blob = await canvasToBlob(canvas, profile.outputMimeType, quality);
+  }
+  if (blob.size > profile.maxOutputBytes) {
+    throw new Error('格式化后的图片仍然过大，请换一张图片');
+  }
+
+  const mimeType = blob.type || profile.outputMimeType;
+  const file = new File(
+    [blob],
+    buildOutputFilename(image.dataset.filename || 'image', mimeType),
+    {
+      lastModified: Date.now(),
+      type: mimeType,
+    },
+  );
+  return {
+    file,
+    height: profile.outputHeight,
+    mimeType,
+    originalHeight: image.naturalHeight,
+    originalSize: Number(image.dataset.fileSize || 0),
+    originalWidth: image.naturalWidth,
+    profile: profile.profile,
+    width: profile.outputWidth,
+  };
+}

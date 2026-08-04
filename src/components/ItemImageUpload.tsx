@@ -1,6 +1,5 @@
 import { DeleteOutlined, UploadOutlined } from '@ant-design/icons';
-import type { UploadProps } from 'antd';
-import { Button, message, Space, Upload } from 'antd';
+import { Button, message, Space, Typography } from 'antd';
 import React, { useState } from 'react';
 import {
   deleteItemImage,
@@ -8,30 +7,16 @@ import {
   uploadItemImage,
 } from '@/services/myapp/media';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
+import {
+  fileToBase64,
+  formatBytes,
+  ITEM_IMAGE_EDIT_PROFILE,
+  type PreparedImage,
+} from '@/utils/image-processing';
+import { ImageEditorUpload } from './ImageEditorUpload';
 import { ProductImage } from './ProductImage';
 
-const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-
-function fileToBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('读取图片失败'));
-    reader.onload = () => {
-      const value = String(reader.result ?? '');
-      resolve(value.includes(',') ? (value.split(',').pop() ?? '') : value);
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function validateImage(file: File) {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('请选择图片文件');
-  }
-  if (file.size > MAX_IMAGE_SIZE_BYTES) {
-    throw new Error('图片请控制在 5MB 以内');
-  }
-}
+const { Text } = Typography;
 
 export const ItemImageUpload: React.FC<{
   commitMode?: 'immediate' | 'staged';
@@ -48,39 +33,31 @@ export const ItemImageUpload: React.FC<{
     setPreviewUrl(resolveMediaUrl(value));
   }, [value]);
 
-  const uploadProps: UploadProps = {
-    accept: 'image/*',
-    beforeUpload: async (file) => {
-      setUploading(true);
-      try {
-        validateImage(file);
-        const fileContentBase64 = await fileToBase64(file);
-        const uploaded =
-          itemCode && commitMode === 'immediate'
-            ? await replaceItemImage({
-                contentType: file.type,
-                fileContentBase64,
-                filename: file.name,
-                itemCode,
-              })
-            : await uploadItemImage({
-                contentType: file.type,
-                fileContentBase64,
-                filename: file.name,
-              });
+  const handlePreparedImage = async (prepared: PreparedImage) => {
+    setUploading(true);
+    try {
+      const fileContentBase64 = await fileToBase64(prepared.file);
+      const uploaded =
+        itemCode && commitMode === 'immediate'
+          ? await replaceItemImage({
+              contentType: prepared.mimeType,
+              fileContentBase64,
+              filename: prepared.file.name,
+              itemCode,
+            })
+          : await uploadItemImage({
+              contentType: prepared.mimeType,
+              fileContentBase64,
+              filename: prepared.file.name,
+            });
 
-        setPreviewUrl(uploaded.previewUrl);
-        onChange?.(uploaded.fileUrl);
-      } catch (caught) {
-        message.error(caught instanceof Error ? caught.message : '上传失败');
-      } finally {
-        setUploading(false);
-      }
-      return Upload.LIST_IGNORE;
-    },
-    disabled: disabled || uploading || deleting,
-    maxCount: 1,
-    showUploadList: false,
+      setPreviewUrl(uploaded.previewUrl);
+      onChange?.(uploaded.fileUrl);
+    } catch (caught) {
+      throw caught instanceof Error ? caught : new Error('上传失败');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -113,7 +90,12 @@ export const ItemImageUpload: React.FC<{
         width={96}
       />
       <Space orientation="vertical">
-        <Upload {...uploadProps}>
+        <ImageEditorUpload
+          disabled={disabled || uploading || deleting}
+          onPrepared={handlePreparedImage}
+          profile={ITEM_IMAGE_EDIT_PROFILE}
+          sourceUrl={previewUrl}
+        >
           <Button
             disabled={disabled || deleting}
             icon={<UploadOutlined />}
@@ -121,7 +103,7 @@ export const ItemImageUpload: React.FC<{
           >
             {previewUrl ? '替换图片' : '上传图片'}
           </Button>
-        </Upload>
+        </ImageEditorUpload>
         <Button
           danger
           disabled={disabled || uploading || !previewUrl}
@@ -131,6 +113,12 @@ export const ItemImageUpload: React.FC<{
         >
           删除图片
         </Button>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          JPG / PNG / WebP，原图最大 20MB
+          <br />
+          自动裁剪为 1600 × 1600 WebP，最大{' '}
+          {formatBytes(ITEM_IMAGE_EDIT_PROFILE.maxOutputBytes)}
+        </Text>
       </Space>
     </Space>
   );

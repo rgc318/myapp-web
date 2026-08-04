@@ -12,6 +12,7 @@ import {
   SalesRollbackGuide,
 } from './DownstreamRollbackGuide';
 import Footer from './Footer';
+import { ImageEditorUpload } from './ImageEditorUpload';
 import { InvoicePaymentForm } from './InvoicePaymentForm';
 import { ItemImageUpload } from './ItemImageUpload';
 import PageState from './PageState';
@@ -34,6 +35,7 @@ export {
   Footer,
   InvoicePaymentForm,
   ItemImageUpload,
+  ImageEditorUpload,
   PageState,
   PartyManagementPage,
   PrintDocumentButton,

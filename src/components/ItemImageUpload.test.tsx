@@ -7,6 +7,37 @@ import {
 } from '@/services/myapp/media';
 import { ItemImageUpload } from './ItemImageUpload';
 
+jest.mock('./ImageEditorUpload', () => ({
+  ImageEditorUpload: ({
+    children,
+    onPrepared,
+  }: {
+    children: unknown;
+    onPrepared: (value: unknown) => Promise<void>;
+  }) => (
+    <div>
+      {children as string}
+      <input
+        type="file"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          void onPrepared({
+            file,
+            height: 1600,
+            mimeType: file.type,
+            originalHeight: 800,
+            originalSize: file.size,
+            originalWidth: 1200,
+            profile: 'item-square-v1',
+            width: 1600,
+          });
+        }}
+      />
+    </div>
+  ),
+}));
+
 jest.mock('@/services/myapp/media', () => ({
   deleteItemImage: jest.fn(),
   replaceItemImage: jest.fn(),
@@ -34,7 +65,7 @@ function selectImage(container: HTMLElement) {
   if (!input) throw new Error('upload input missing');
   fireEvent.change(input, {
     target: {
-      files: [new File(['image'], 'item.png', { type: 'image/png' })],
+      files: [new File(['image'], 'item.webp', { type: 'image/webp' })],
     },
   });
 }

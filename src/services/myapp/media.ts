@@ -7,10 +7,19 @@ export type UploadedItemImage = {
   attachedToName: string | null;
   fileId: string | null;
   fileName: string | null;
+  fileSize: number | null;
   fileUrl: string;
+  height: number | null;
   previewUrl: string;
   isPrivate: boolean;
   storageProvider: string | null;
+  contentType: string | null;
+  profile: string | null;
+  quality: number | null;
+  sourceFormat: string | null;
+  sourceHeight: number | null;
+  sourceWidth: number | null;
+  width: number | null;
 };
 
 export type DeletedItemImage = {
@@ -46,11 +55,24 @@ function mapUploadedItemImage(value: unknown): UploadedItemImage {
       typeof data.attached_to_name === 'string' ? data.attached_to_name : null,
     fileId: typeof data.file_id === 'string' ? data.file_id : null,
     fileName: typeof data.file_name === 'string' ? data.file_name : null,
+    fileSize: typeof data.file_size === 'number' ? data.file_size : null,
     fileUrl,
     previewUrl: resolveMediaUrl(fileUrl, { version: mediaVersion }),
     isPrivate: Boolean(data.is_private),
+    height: typeof data.height === 'number' ? data.height : null,
     storageProvider:
       typeof data.storage_provider === 'string' ? data.storage_provider : null,
+    contentType:
+      typeof data.content_type === 'string' ? data.content_type : null,
+    profile: typeof data.profile === 'string' ? data.profile : null,
+    quality: typeof data.quality === 'number' ? data.quality : null,
+    sourceFormat:
+      typeof data.source_format === 'string' ? data.source_format : null,
+    sourceHeight:
+      typeof data.source_height === 'number' ? data.source_height : null,
+    sourceWidth:
+      typeof data.source_width === 'number' ? data.source_width : null,
+    width: typeof data.width === 'number' ? data.width : null,
   };
 }
 
