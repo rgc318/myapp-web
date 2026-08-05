@@ -1,19 +1,31 @@
+export type ImageAspectPreset = {
+  aspect: number;
+  label: string;
+  value: string;
+};
+
 export type ImageEditProfile = {
   accept: string;
   aspect: number;
+  aspectPresets?: readonly ImageAspectPreset[];
+  allowFreeAspect?: boolean;
   description: string;
+  maxAspect?: number;
   maxOutputBytes: number;
   maxSourceBytes: number;
+  minAspect?: number;
   minSourceEdge: number;
   outputHeight: number;
   outputMimeType: 'image/webp';
   outputQuality: number;
   outputWidth: number;
-  profile: 'avatar-square-v1' | 'item-square-v1';
+  preserveAspect?: boolean;
+  profile: 'avatar-square-v1' | 'item-flexible-v2';
   title: string;
 };
 
 export type PreparedImage = {
+  aspectRatio: number;
   file: File;
   height: number;
   mimeType: string;
@@ -29,15 +41,25 @@ export type ImageOffset = { x: number; y: number };
 export const ITEM_IMAGE_EDIT_PROFILE: ImageEditProfile = {
   accept: 'image/jpeg,image/png,image/webp',
   aspect: 1,
-  description: '正方形商品主图，输出 1600 × 1600 WebP',
+  allowFreeAspect: true,
+  aspectPresets: [
+    { aspect: 1, label: '1:1', value: 'square' },
+    { aspect: 4 / 3, label: '4:3', value: '4:3' },
+    { aspect: 3 / 2, label: '3:2', value: '3:2' },
+    { aspect: 16 / 9, label: '16:9', value: '16:9' },
+  ],
+  description: '商品主图支持自由裁剪和常用比例，最长边输出 1600px WebP',
+  maxAspect: 2.5,
   maxOutputBytes: 5 * 1024 * 1024,
   maxSourceBytes: 20 * 1024 * 1024,
+  minAspect: 0.4,
   minSourceEdge: 300,
   outputHeight: 1600,
   outputMimeType: 'image/webp',
   outputQuality: 0.82,
   outputWidth: 1600,
-  profile: 'item-square-v1',
+  preserveAspect: true,
+  profile: 'item-flexible-v2',
   title: '编辑商品图片',
 };
 
@@ -161,6 +183,36 @@ export function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 }
 
+export function clampImageAspect(aspect: number, profile: ImageEditProfile) {
+  const fallback = profile.aspect > 0 ? profile.aspect : 1;
+  const normalized = Number.isFinite(aspect) && aspect > 0 ? aspect : fallback;
+  return Math.max(
+    profile.minAspect ?? 0,
+    Math.min(profile.maxAspect ?? Number.POSITIVE_INFINITY, normalized),
+  );
+}
+
+export function getOutputDimensions(
+  profile: ImageEditProfile,
+  aspect = profile.aspect,
+) {
+  if (!profile.preserveAspect) {
+    return { height: profile.outputHeight, width: profile.outputWidth };
+  }
+
+  const resolvedAspect = clampImageAspect(aspect, profile);
+  if (resolvedAspect >= 1) {
+    return {
+      height: Math.max(1, Math.round(profile.outputWidth / resolvedAspect)),
+      width: profile.outputWidth,
+    };
+  }
+  return {
+    height: profile.outputHeight,
+    width: Math.max(1, Math.round(profile.outputHeight * resolvedAspect)),
+  };
+}
+
 export function buildOutputFilename(filename: string, mimeType: string) {
   const extension =
     mimeType === 'image/webp'
@@ -199,6 +251,7 @@ function canvasToBlob(
 }
 
 export async function renderEditedImage({
+  cropAspect,
   image,
   offset,
   profile,
@@ -207,6 +260,7 @@ export async function renderEditedImage({
   viewportWidth,
   zoom,
 }: {
+  cropAspect?: number;
   image: HTMLImageElement;
   offset: ImageOffset;
   profile: ImageEditProfile;
@@ -215,14 +269,15 @@ export async function renderEditedImage({
   viewportWidth: number;
   zoom: number;
 }): Promise<PreparedImage> {
+  const outputDimensions = getOutputDimensions(profile, cropAspect);
   const canvas = document.createElement('canvas');
-  canvas.width = profile.outputWidth;
-  canvas.height = profile.outputHeight;
+  canvas.width = outputDimensions.width;
+  canvas.height = outputDimensions.height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('当前浏览器不支持图片编辑');
 
-  const outputScaleX = profile.outputWidth / viewportWidth;
-  const outputScaleY = profile.outputHeight / viewportHeight;
+  const outputScaleX = outputDimensions.width / viewportWidth;
+  const outputScaleY = outputDimensions.height / viewportHeight;
   const baseScale = getCoverScale({
     imageHeight: image.naturalHeight,
     imageWidth: image.naturalWidth,
@@ -233,8 +288,8 @@ export async function renderEditedImage({
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
   context.translate(
-    profile.outputWidth / 2 + offset.x * outputScaleX,
-    profile.outputHeight / 2 + offset.y * outputScaleY,
+    outputDimensions.width / 2 + offset.x * outputScaleX,
+    outputDimensions.height / 2 + offset.y * outputScaleY,
   );
   context.rotate((rotation * Math.PI) / 180);
   context.scale(
@@ -263,13 +318,16 @@ export async function renderEditedImage({
     },
   );
   return {
+    aspectRatio: Number(
+      (outputDimensions.width / outputDimensions.height).toFixed(6),
+    ),
     file,
-    height: profile.outputHeight,
+    height: outputDimensions.height,
     mimeType,
     originalHeight: image.naturalHeight,
     originalSize: Number(image.dataset.fileSize || 0),
     originalWidth: image.naturalWidth,
     profile: profile.profile,
-    width: profile.outputWidth,
+    width: outputDimensions.width,
   };
 }

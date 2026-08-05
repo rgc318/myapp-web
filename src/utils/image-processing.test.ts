@@ -1,8 +1,10 @@
 import {
   buildOutputFilename,
+  clampImageAspect,
   clampImageOffset,
   getCoverScale,
   getOrientedSize,
+  getOutputDimensions,
   ITEM_IMAGE_EDIT_PROFILE,
   validateImageDimensions,
   validateImageSource,
@@ -14,8 +16,25 @@ describe('image processing policy', () => {
       outputHeight: 1600,
       outputMimeType: 'image/webp',
       outputWidth: 1600,
-      profile: 'item-square-v1',
+      profile: 'item-flexible-v2',
+      preserveAspect: true,
     });
+    expect(
+      ITEM_IMAGE_EDIT_PROFILE.aspectPresets?.map(({ label }) => label),
+    ).toEqual(['1:1', '4:3', '3:2', '16:9']);
+  });
+
+  it('calculates bounded output dimensions for preset and free ratios', () => {
+    expect(getOutputDimensions(ITEM_IMAGE_EDIT_PROFILE, 16 / 9)).toEqual({
+      height: 900,
+      width: 1600,
+    });
+    expect(getOutputDimensions(ITEM_IMAGE_EDIT_PROFILE, 3 / 4)).toEqual({
+      height: 1600,
+      width: 1200,
+    });
+    expect(clampImageAspect(5, ITEM_IMAGE_EDIT_PROFILE)).toBe(2.5);
+    expect(clampImageAspect(0.1, ITEM_IMAGE_EDIT_PROFILE)).toBe(0.4);
   });
 
   it('rejects unsupported and oversized source files', () => {

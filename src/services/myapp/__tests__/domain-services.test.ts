@@ -1788,12 +1788,14 @@ describe('myapp domain services', () => {
     mockedCallGatewayMethod
       .mockResolvedValueOnce({
         data: {
+          aspect_ratio: 1.5,
           attached_to_doctype: null,
           attached_to_name: null,
           file_id: 'FILE-001',
           file_name: 'item.png',
           file_url: '/files/item.png',
           is_private: 0,
+          profile: 'item-flexible-v2',
           storage_provider: 'frappe',
         },
       })
@@ -1831,8 +1833,10 @@ describe('myapp domain services', () => {
     const deleted = await deleteItemImage('ITEM-001');
 
     expect(uploaded).toMatchObject({
+      aspectRatio: 1.5,
       fileId: 'FILE-001',
       fileUrl: '/files/item.png',
+      profile: 'item-flexible-v2',
       previewUrl: 'http://api.example.test/files/item.png?v=FILE-001',
     });
     expect(replaced.attachedToName).toBe('ITEM-001');

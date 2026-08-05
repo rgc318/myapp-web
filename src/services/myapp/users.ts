@@ -217,6 +217,7 @@ export async function uploadCurrentUserAvatar(payload: {
   filename: string;
 }) {
   return runGatewayMutation<{
+    aspectRatio: number;
     contentType: string;
     fileId: string;
     fileName: string;
@@ -238,6 +239,7 @@ export async function uploadCurrentUserAvatar(payload: {
       transform: (value) => {
         const row = readObject(value);
         return {
+          aspectRatio: Number(row.aspect_ratio ?? 1),
           fileId: String(row.file_id ?? ''),
           fileName: String(row.file_name ?? ''),
           fileSize: Number(row.file_size ?? 0),

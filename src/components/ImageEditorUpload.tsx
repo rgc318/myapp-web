@@ -2,6 +2,7 @@ import {
   EditOutlined,
   RedoOutlined,
   ReloadOutlined,
+  SwapOutlined,
   UndoOutlined,
   ZoomInOutlined,
 } from '@ant-design/icons';
@@ -14,6 +15,7 @@ import {
   Modal,
   message,
   Row,
+  Segmented,
   Slider,
   Space,
   Typography,
@@ -21,9 +23,11 @@ import {
 } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  clampImageAspect,
   clampImageOffset,
   formatBytes,
   getCoverScale,
+  getOutputDimensions,
   type ImageEditProfile,
   type ImageOffset,
   type PreparedImage,
@@ -33,6 +37,7 @@ import {
 } from '@/utils/image-processing';
 
 const { Text } = Typography;
+const FREE_ASPECT_VALUE = 'free';
 
 type SourceDimensions = { height: number; width: number };
 type ViewportDimensions = { height: number; width: number };
@@ -155,6 +160,10 @@ function ImageEditorModal({
   const [rotation, setRotation] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [aspectMode, setAspectMode] = useState(
+    profile.aspectPresets?.[0]?.value ?? 'fixed',
+  );
+  const [cropAspect, setCropAspect] = useState(profile.aspect);
 
   useEffect(() => {
     if (!file) {
@@ -167,8 +176,10 @@ function ImageEditorModal({
     setRotation(0);
     setSource(null);
     setZoom(1);
+    setAspectMode(profile.aspectPresets?.[0]?.value ?? 'fixed');
+    setCropAspect(profile.aspect);
     return () => URL.revokeObjectURL?.(nextUrl);
-  }, [file]);
+  }, [file, profile]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -221,6 +232,29 @@ function ImageEditorModal({
     setZoom(1);
   };
 
+  const resetViewportTransform = () => {
+    setOffset({ x: 0, y: 0 });
+    setZoom(1);
+  };
+
+  const selectAspectMode = (nextMode: string) => {
+    setAspectMode(nextMode);
+    if (nextMode === FREE_ASPECT_VALUE) {
+      setCropAspect(
+        clampImageAspect(
+          source ? source.width / source.height : cropAspect,
+          profile,
+        ),
+      );
+    } else {
+      const preset = profile.aspectPresets?.find(
+        (option) => option.value === nextMode,
+      );
+      setCropAspect(preset?.aspect ?? profile.aspect);
+    }
+    resetViewportTransform();
+  };
+
   const rotate = (change: number) => {
     setRotation((current) => (current + change + 360) % 360);
     setOffset({ x: 0, y: 0 });
@@ -247,6 +281,7 @@ function ImageEditorModal({
     setSaving(true);
     try {
       const prepared = await renderEditedImage({
+        cropAspect,
         image,
         offset,
         profile,
@@ -264,6 +299,16 @@ function ImageEditorModal({
   };
 
   const imageScale = baseScale * zoom;
+  const outputDimensions = getOutputDimensions(profile, cropAspect);
+  const aspectOptions = [
+    ...(profile.aspectPresets ?? []).map((option) => ({
+      label: option.label,
+      value: option.value,
+    })),
+    ...(profile.allowFreeAspect
+      ? [{ label: '自由', value: FREE_ASPECT_VALUE }]
+      : []),
+  ];
 
   return (
     <Modal
@@ -279,7 +324,7 @@ function ImageEditorModal({
       width={760}
     >
       <Alert
-        description="拖动图片调整取景范围，使用缩放和旋转修正构图。系统会移除原图元数据并生成统一规格。"
+        description="拖动图片调整取景范围，使用比例、缩放和旋转修正构图。系统会移除原图元数据并生成统一规格。"
         showIcon
         style={{ marginBottom: 16 }}
         title={profile.description}
@@ -316,7 +361,7 @@ function ImageEditorModal({
             }}
             ref={viewportRef}
             style={{
-              aspectRatio: String(profile.aspect),
+              aspectRatio: String(cropAspect),
               background:
                 'linear-gradient(45deg, #f0f0f0 25%, transparent 25%), linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f0f0f0 75%), linear-gradient(-45deg, transparent 75%, #f0f0f0 75%)',
               backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
@@ -325,11 +370,15 @@ function ImageEditorModal({
               borderRadius: 8,
               cursor: source ? 'grab' : 'default',
               maxHeight: 480,
+              margin: '0 auto',
               overflow: 'hidden',
               position: 'relative',
               touchAction: 'none',
               userSelect: 'none',
-              width: '100%',
+              width:
+                cropAspect >= 1
+                  ? '100%'
+                  : `min(100%, ${Math.round(480 * cropAspect)}px)`,
             }}
           >
             {objectUrl ? (
@@ -396,6 +445,58 @@ function ImageEditorModal({
         </Col>
         <Col md={8} xs={24}>
           <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
+            {aspectOptions.length > 0 ? (
+              <div>
+                <Text>裁剪比例</Text>
+                <Segmented
+                  block
+                  disabled={!source}
+                  onChange={(value) => selectAspectMode(String(value))}
+                  options={aspectOptions}
+                  size="small"
+                  style={{ marginTop: 8 }}
+                  value={aspectMode}
+                />
+                {aspectMode === FREE_ASPECT_VALUE ? (
+                  <>
+                    <Slider
+                      disabled={!source}
+                      max={profile.maxAspect ?? 2.5}
+                      min={profile.minAspect ?? 0.4}
+                      onChange={(nextAspect) => {
+                        setCropAspect(clampImageAspect(nextAspect, profile));
+                        resetViewportTransform();
+                      }}
+                      step={0.01}
+                      tooltip={{
+                        formatter: (value) =>
+                          value ? `${value.toFixed(2)}:1` : '-',
+                      }}
+                      value={cropAspect}
+                    />
+                    <Text type="secondary">
+                      当前宽高比 {cropAspect.toFixed(2)}:1
+                    </Text>
+                  </>
+                ) : cropAspect !== 1 ? (
+                  <Button
+                    block
+                    disabled={!source}
+                    icon={<SwapOutlined />}
+                    onClick={() => {
+                      setCropAspect((current) =>
+                        clampImageAspect(1 / current, profile),
+                      );
+                      resetViewportTransform();
+                    }}
+                    size="small"
+                    style={{ marginTop: 8 }}
+                  >
+                    切换横向 / 纵向
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             <div>
               <Space size={6}>
                 <ZoomInOutlined />
@@ -435,7 +536,7 @@ function ImageEditorModal({
                 {file ? formatBytes(file.size) : '-'}
               </Descriptions.Item>
               <Descriptions.Item label="输出">
-                {profile.outputWidth} × {profile.outputHeight}
+                {outputDimensions.width} × {outputDimensions.height}
               </Descriptions.Item>
               <Descriptions.Item label="格式">WebP</Descriptions.Item>
               <Descriptions.Item label="质量">

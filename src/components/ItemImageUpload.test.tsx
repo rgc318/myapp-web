@@ -23,13 +23,14 @@ jest.mock('./ImageEditorUpload', () => ({
           const file = event.target.files?.[0];
           if (!file) return;
           void onPrepared({
+            aspectRatio: 1.5,
             file,
-            height: 1600,
+            height: 1067,
             mimeType: file.type,
             originalHeight: 800,
             originalSize: file.size,
             originalWidth: 1200,
-            profile: 'item-square-v1',
+            profile: 'item-flexible-v2',
             width: 1600,
           });
         }}

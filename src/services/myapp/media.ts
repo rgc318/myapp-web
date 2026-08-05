@@ -3,6 +3,7 @@ import { resolveMediaUrl } from './media-url';
 import { runGatewayMutation } from './mutation';
 
 export type UploadedItemImage = {
+  aspectRatio: number | null;
   attachedToDoctype: string | null;
   attachedToName: string | null;
   fileId: string | null;
@@ -47,6 +48,8 @@ function mapUploadedItemImage(value: unknown): UploadedItemImage {
         ? data.modified
         : null;
   return {
+    aspectRatio:
+      typeof data.aspect_ratio === 'number' ? data.aspect_ratio : null,
     attachedToDoctype:
       typeof data.attached_to_doctype === 'string'
         ? data.attached_to_doctype

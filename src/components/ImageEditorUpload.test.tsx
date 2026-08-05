@@ -37,6 +37,8 @@ describe('ImageEditorUpload', () => {
     fireEvent.click(screen.getByRole('button', { name: /重新裁剪/ }));
 
     expect(await screen.findByText('编辑商品图片')).toBeTruthy();
+    expect(screen.getByText('16:9')).toBeTruthy();
+    expect(screen.getByText('自由')).toBeTruthy();
     expect(global.fetch).toHaveBeenCalledWith(
       'http://api.example.test/files/current.png',
       { credentials: 'include' },

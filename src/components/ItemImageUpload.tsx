@@ -116,7 +116,7 @@ export const ItemImageUpload: React.FC<{
         <Text type="secondary" style={{ fontSize: 12 }}>
           JPG / PNG / WebP，原图最大 20MB
           <br />
-          自动裁剪为 1600 × 1600 WebP，最大{' '}
+          支持自由、1:1、4:3、3:2、16:9 裁剪，最长边 1600px，最大{' '}
           {formatBytes(ITEM_IMAGE_EDIT_PROFILE.maxOutputBytes)}
         </Text>
       </Space>
