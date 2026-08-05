@@ -280,6 +280,8 @@ Web 商品模块当前按企业级主数据维护界面建设，不只复刻移�
 - 列表导入能力支持下载 CSV 模板、上传后预览校验，并按行执行 `create` / `update`；当前为前端顺序调用既有商品创建 / 更新接口，适合小批量维护
 - 商品编辑支持图片、分类、品牌、条码、库存单位、批发 / 零售默认单位、标准售价、批发价、零售价、标准采购价、估值价
 - 商品详情页支持多条码管理，包括新增条码、删除条码和设置主条码；条码列表使用 ProTable 展示主条码状态和顺序，基础编辑表单中的 `barcode` 仍只作为主条码兼容字段
+- 商品列表工具栏支持摄像头扫码搜索；命中停用商品时自动切换状态筛选，未命中时只提示用户确认新建并预填条码，不自动创建商品或调用外部条码数据源
+- 商品创建 / 编辑、商品详情新增条码和主条码字段均复用 `BarcodeScannerButton`；销售、采购等共享 `ProductSelect` 也支持扫码后按现有 `search_product_v2` 结果选品
 
 字段与接口约定：
 
@@ -437,6 +439,7 @@ Idempotency-Key: <uuid>
   - 支持公司、仓库和 `itemContext` 上下文；销售开单传 `sales`，采购开单传 `purchase`，库存类场景可传 `inventory`，通用场景可传 `any`。
   - 支持关键词、商品分类、品牌和仅有库存筛选；非交易弹窗关键词为空时必须至少选择分类或品牌，不把 `search_product_v2` 当作无条件全量商品浏览接口使用。交易选品 Drawer 可以空关键词自动加载候选，优先用 `list_products_v2` 并传 `item_context` 兜底过滤。
   - 销售 / 采购交易选品点击“加入”后直接写入订单明细并保持面板打开，不再使用表格勾选暂存；库存调整场景保持单选，因为页面一次只调整一个目标商品。
+  - 工具栏提供扫码入口，扫描结果只写入 `searchKey` 并刷新候选列表，默认由用户确认商品后再加入交易，避免重复识别直接产生重复明细。
   - 返回已规范化的 `ProductSummary`，包含别名、单位、换算、价格摘要、销售 / 采购标识和库存参考字段。
 - `src/components/UomSelect.tsx`
   - 通过 `listUoms` / `list_uoms_v2` 查询启用单位。
@@ -449,9 +452,16 @@ Idempotency-Key: <uuid>
   - 图片选择统一进入 `ImageEditorUpload`。商品图提供自由、1:1、4:3、3:2、16:9、横纵切换、图片拖动、裁剪框移动、四边/四角缩放、画面缩放、90°旋转、WebP 压缩和已有图片“重新裁剪”；页面不得再自行读取原图或实现压缩。
 - `src/components/ImageEditorUpload.tsx`
   - Web 图片编辑统一入口，根据媒体 profile 决定比例、最低分辨率、输出尺寸、格式、质量和字节上限。
+  - 同时保留文件选择和明确的“拍照”入口；拍照支持平板、内置摄像头和外置 USB 摄像头选择，确认照片后生成 JPEG `File` 并进入同一裁剪、WebP 和上传链路，不允许绕过 profile。
   - 使用 Cropper.js 提供统一的可移动、可缩放裁剪框；自由模式允许独立拖动四边和四角，预设模式保持裁剪框可移动但锁定宽高比，框外拖动继续用于移动图片。
   - 商品图片使用 `item-flexible-v2`（保留裁剪比例、最长边 1600px WebP），头像使用 `avatar-square-v1`（固定 512 × 512 WebP）。
   - 客户端处理用于 UX 和减少带宽，最终安全与一致性仍由后端真实解码和二次规范化保证。
+- `src/components/CameraCaptureModal.tsx`
+  - 使用 `navigator.mediaDevices.getUserMedia()` 预览和拍照，授权后枚举 `videoinput` 并允许切换摄像头；关闭、重拍、切换设备和卸载时必须停止全部 MediaStream tracks。
+- `src/components/BarcodeScannerModal.tsx` / `BarcodeScannerButton.tsx`
+  - 使用 ZXing 扫描常见一维码和二维码，支持摄像头选择、单次识别锁、手动输入降级及流释放。
+  - 扫码组件只返回规范化后的字符串；商品查询、未命中处理、表单赋值和交易选品仍由调用页面与领域 Service 决定。
+  - 浏览器摄像头 API 只在 HTTPS 或 localhost 安全上下文工作。权限拒绝、无设备、设备占用或浏览器不支持时必须给出明确提示，并保留手动输入或文件选择路径。
 - `src/utils/image-processing.ts`
   - 保存 Web 媒体 profile、来源校验、自由比例边界和 Canvas/WebP 输出实现；新增图片类型应增加 profile，不在页面复制常量。
 - `src/components/ProductImage.tsx`

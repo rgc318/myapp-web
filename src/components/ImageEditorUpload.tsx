@@ -1,4 +1,5 @@
 import {
+  CameraOutlined,
   EditOutlined,
   RedoOutlined,
   ReloadOutlined,
@@ -34,6 +35,7 @@ import {
   validateImageDimensions,
   validateImageSource,
 } from '@/utils/image-processing';
+import { CameraCaptureModal } from './CameraCaptureModal';
 
 const { Text } = Typography;
 const FREE_ASPECT_VALUE = 'free';
@@ -54,6 +56,7 @@ export function ImageEditorUpload({
   sourceUrl?: string | null;
 }) {
   const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [loadingSource, setLoadingSource] = useState(false);
   const uploadProps: UploadProps = {
     accept: profile.accept,
@@ -105,6 +108,13 @@ export function ImageEditorUpload({
     <>
       <Space wrap size={8}>
         <Upload {...uploadProps}>{children}</Upload>
+        <Button
+          disabled={disabled}
+          icon={<CameraOutlined />}
+          onClick={() => setCameraOpen(true)}
+        >
+          拍照
+        </Button>
         {sourceUrl ? (
           <Button
             disabled={disabled}
@@ -116,6 +126,21 @@ export function ImageEditorUpload({
           </Button>
         ) : null}
       </Space>
+      <CameraCaptureModal
+        onCancel={() => setCameraOpen(false)}
+        onCaptured={(file) => {
+          try {
+            validateImageSource(file, profile);
+            setSourceFile(file);
+            setCameraOpen(false);
+          } catch (caught) {
+            message.error(
+              caught instanceof Error ? caught.message : '拍摄图片无法读取',
+            );
+          }
+        }}
+        open={cameraOpen}
+      />
       <ImageEditorModal
         file={sourceFile}
         onCancel={() => setSourceFile(null)}

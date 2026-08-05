@@ -7,7 +7,11 @@ import {
   StopOutlined,
   UploadOutlined,
 } from '@ant-design/icons';
-import type { ActionType, ProColumns } from '@ant-design/pro-components';
+import type {
+  ActionType,
+  ProColumns,
+  ProFormInstance,
+} from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import { Link } from '@umijs/max';
 import {
@@ -26,6 +30,7 @@ import {
   Upload,
 } from 'antd';
 import React, { useEffect, useRef, useState } from 'react';
+import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductImage } from '@/components/ProductImage';
@@ -39,6 +44,7 @@ import {
   listProducts,
   type ProductSummary,
   type SaveProductPayload,
+  searchProducts,
   setProductDisabled,
   updateProduct,
 } from '@/services/myapp/master-data';
@@ -722,6 +728,7 @@ function buildColumns({
 
 const ProductsPage: React.FC = () => {
   const actionRef = useRef<ActionType | undefined>(undefined);
+  const searchFormRef = useRef<ProFormInstance | undefined>(undefined);
   const [form] = Form.useForm<ProductFormValues>();
   const [bulkForm] = Form.useForm<ProductBulkFormValues>();
   const [editingProduct, setEditingProduct] = useState<ProductSummary | null>(
@@ -829,16 +836,51 @@ const ProductsPage: React.FC = () => {
     actionRef.current?.reload();
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = (barcode?: string) => {
     setEditingProduct(null);
     setUploadedImageUrl(undefined);
     form.resetFields();
     form.setFieldsValue({
       currency: 'CNY',
       disabled: false,
+      barcode,
       stockUom: 'Nos',
     });
     setModalOpen(true);
+  };
+
+  const handleScannedProductSearch = async (barcode: string) => {
+    const commonOptions = {
+      company: lastQuery.company,
+      limit: 2,
+      searchKey: barcode,
+    };
+    const [enabledResult, disabledResult] = await Promise.all([
+      searchProducts({ ...commonOptions, disabled: 0 }),
+      searchProducts({ ...commonOptions, disabled: 1 }),
+    ]);
+    const disabledFilter = enabledResult.total > 0 ? 'enabled' : 'disabled';
+    searchFormRef.current?.setFieldsValue({
+      brandFilter: undefined,
+      disabledFilter,
+      itemGroupFilter: undefined,
+      searchKey: barcode,
+      stockScope: 'all',
+      warehouseFilter: undefined,
+    });
+    actionRef.current?.reloadAndRest?.();
+    if (enabledResult.total > 0) return;
+    if (disabledResult.total > 0) {
+      message.info('该条码对应停用商品，已切换到停用商品筛选');
+      return;
+    }
+    Modal.confirm({
+      cancelText: '仅保留搜索条件',
+      content: `本地商品库中没有条码 ${barcode}，不会自动联网或创建商品。`,
+      okText: '新建并预填条码',
+      onOk: () => openCreateModal(barcode),
+      title: '未找到对应商品',
+    });
   };
 
   const openEditModal = (record: ProductSummary) => {
@@ -1165,6 +1207,7 @@ const ProductsPage: React.FC = () => {
       <ProTable<ProductSummary>
         actionRef={actionRef}
         columns={columns}
+        formRef={searchFormRef}
         columnsState={{
           defaultValue: {
             retailRate: { show: false },
@@ -1205,6 +1248,11 @@ const ProductsPage: React.FC = () => {
           `已选择 ${keys.length} 个商品`
         }
         toolBarRender={() => [
+          <BarcodeScannerButton
+            key="scan-search"
+            onScanned={handleScannedProductSearch}
+            title="扫码搜索商品"
+          />,
           <Button
             disabled={!selectedItemCodes.length}
             icon={<EditOutlined />}
@@ -1445,8 +1493,18 @@ const ProductsPage: React.FC = () => {
             <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
               <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
             </Form.Item>
-            <Form.Item label="主条码" name="barcode" style={{ minWidth: 200 }}>
-              <Input placeholder="主条码" />
+            <Form.Item label="主条码" name="barcode" style={{ minWidth: 240 }}>
+              <Space.Compact block>
+                <Input placeholder="主条码" />
+                <BarcodeScannerButton
+                  buttonProps={{ title: '扫描主条码' }}
+                  label={null}
+                  onScanned={(barcode) =>
+                    form.setFieldValue('barcode', barcode)
+                  }
+                  title="扫描商品主条码"
+                />
+              </Space.Compact>
             </Form.Item>
           </Space>
           {!editingProduct ? (

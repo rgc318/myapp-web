@@ -24,6 +24,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { ProductImage } from '@/components/ProductImage';
 import {
   createProductAndStock,
@@ -1176,6 +1177,14 @@ export function ProductSelect({
           }
           toolbar={{
             actions: [
+              <BarcodeScannerButton
+                key="scan-product"
+                onScanned={(barcode) => {
+                  formRef.current?.setFieldsValue({ searchKey: barcode });
+                  actionRef.current?.reloadAndRest?.();
+                }}
+                title="扫码选择商品"
+              />,
               <Button
                 icon={<PlusOutlined />}
                 key="quick-create"

@@ -25,6 +25,7 @@ import {
   Tag,
 } from 'antd';
 import React, { useState } from 'react';
+import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductImage } from '@/components/ProductImage';
@@ -833,7 +834,17 @@ const ProductDetailPage: React.FC = () => {
                     name="barcode"
                     rules={[{ required: true, message: '请输入条码' }]}
                   >
-                    <Input placeholder="新增条码" style={{ width: 260 }} />
+                    <Space.Compact style={{ width: 300 }}>
+                      <Input placeholder="新增条码" />
+                      <BarcodeScannerButton
+                        buttonProps={{ title: '扫描新增条码' }}
+                        label={null}
+                        onScanned={(barcode) =>
+                          barcodeForm.setFieldValue('barcode', barcode)
+                        }
+                        title="扫描新增商品条码"
+                      />
+                    </Space.Compact>
                   </Form.Item>
                   <Form.Item>
                     <Button
@@ -1016,8 +1027,18 @@ const ProductDetailPage: React.FC = () => {
             <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
               <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
             </Form.Item>
-            <Form.Item label="主条码" name="barcode" style={{ minWidth: 200 }}>
-              <Input placeholder="主条码" />
+            <Form.Item label="主条码" name="barcode" style={{ minWidth: 240 }}>
+              <Space.Compact block>
+                <Input placeholder="主条码" />
+                <BarcodeScannerButton
+                  buttonProps={{ title: '扫描主条码' }}
+                  label={null}
+                  onScanned={(barcode) =>
+                    form.setFieldValue('barcode', barcode)
+                  }
+                  title="扫描商品主条码"
+                />
+              </Space.Compact>
             </Form.Item>
           </Space>
           <Space size={16} style={{ width: '100%' }}>
