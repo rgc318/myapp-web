@@ -1,11 +1,9 @@
 import {
   buildOutputFilename,
   clampImageAspect,
-  clampImageOffset,
-  getCoverScale,
-  getOrientedSize,
   getOutputDimensions,
   ITEM_IMAGE_EDIT_PROFILE,
+  validateCropAspect,
   validateImageDimensions,
   validateImageSource,
 } from './image-processing';
@@ -37,6 +35,16 @@ describe('image processing policy', () => {
     expect(clampImageAspect(0.1, ITEM_IMAGE_EDIT_PROFILE)).toBe(0.4);
   });
 
+  it('rejects crop frames outside the governed free-aspect range', () => {
+    expect(validateCropAspect(4 / 3, ITEM_IMAGE_EDIT_PROFILE)).toBe(4 / 3);
+    expect(() => validateCropAspect(3, ITEM_IMAGE_EDIT_PROFILE)).toThrow(
+      '0.40:1 到 2.50:1',
+    );
+    expect(() => validateCropAspect(0.2, ITEM_IMAGE_EDIT_PROFILE)).toThrow(
+      '0.40:1 到 2.50:1',
+    );
+  });
+
   it('rejects unsupported and oversized source files', () => {
     expect(() =>
       validateImageSource(
@@ -56,33 +64,6 @@ describe('image processing policy', () => {
     expect(() =>
       validateImageDimensions(1200, 200, ITEM_IMAGE_EDIT_PROFILE),
     ).toThrow('最短边至少需要 300 像素');
-  });
-
-  it('accounts for rotation and clamps drag offsets to covered content', () => {
-    expect(getOrientedSize(1200, 800, 90)).toEqual({
-      height: 1200,
-      width: 800,
-    });
-    const baseScale = getCoverScale({
-      imageHeight: 800,
-      imageWidth: 1200,
-      rotation: 0,
-      viewportHeight: 400,
-      viewportWidth: 400,
-    });
-    expect(baseScale).toBe(0.5);
-    expect(
-      clampImageOffset({
-        baseScale,
-        imageHeight: 800,
-        imageWidth: 1200,
-        offset: { x: 999, y: 999 },
-        rotation: 0,
-        viewportHeight: 400,
-        viewportWidth: 400,
-        zoom: 1,
-      }),
-    ).toEqual({ x: 100, y: 0 });
   });
 
   it('renames the edited file to match its real output format', () => {

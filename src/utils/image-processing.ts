@@ -36,8 +36,6 @@ export type PreparedImage = {
   width: number;
 };
 
-export type ImageOffset = { x: number; y: number };
-
 export const ITEM_IMAGE_EDIT_PROFILE: ImageEditProfile = {
   accept: 'image/jpeg,image/png,image/webp',
   aspect: 1,
@@ -112,71 +110,6 @@ export function validateImageDimensions(
   }
 }
 
-export function getOrientedSize(
-  width: number,
-  height: number,
-  rotation: number,
-) {
-  const normalized = ((rotation % 360) + 360) % 360;
-  return normalized === 90 || normalized === 270
-    ? { height: width, width: height }
-    : { height, width };
-}
-
-export function getCoverScale({
-  imageHeight,
-  imageWidth,
-  rotation,
-  viewportHeight,
-  viewportWidth,
-}: {
-  imageHeight: number;
-  imageWidth: number;
-  rotation: number;
-  viewportHeight: number;
-  viewportWidth: number;
-}) {
-  const oriented = getOrientedSize(imageWidth, imageHeight, rotation);
-  return Math.max(
-    viewportWidth / oriented.width,
-    viewportHeight / oriented.height,
-  );
-}
-
-export function clampImageOffset({
-  baseScale,
-  imageHeight,
-  imageWidth,
-  offset,
-  rotation,
-  viewportHeight,
-  viewportWidth,
-  zoom,
-}: {
-  baseScale: number;
-  imageHeight: number;
-  imageWidth: number;
-  offset: ImageOffset;
-  rotation: number;
-  viewportHeight: number;
-  viewportWidth: number;
-  zoom: number;
-}) {
-  const oriented = getOrientedSize(imageWidth, imageHeight, rotation);
-  const maxX = Math.max(
-    0,
-    (oriented.width * baseScale * zoom - viewportWidth) / 2,
-  );
-  const maxY = Math.max(
-    0,
-    (oriented.height * baseScale * zoom - viewportHeight) / 2,
-  );
-  return {
-    x: Math.max(-maxX, Math.min(maxX, offset.x)),
-    y: Math.max(-maxY, Math.min(maxY, offset.y)),
-  };
-}
-
 export function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -190,6 +123,23 @@ export function clampImageAspect(aspect: number, profile: ImageEditProfile) {
     profile.minAspect ?? 0,
     Math.min(profile.maxAspect ?? Number.POSITIVE_INFINITY, normalized),
   );
+}
+
+export function validateCropAspect(aspect: number, profile: ImageEditProfile) {
+  if (!Number.isFinite(aspect) || aspect <= 0) {
+    throw new Error('裁剪区域比例无效，请重新调整裁剪边框');
+  }
+  if (
+    (profile.minAspect !== undefined && aspect < profile.minAspect) ||
+    (profile.maxAspect !== undefined && aspect > profile.maxAspect)
+  ) {
+    throw new Error(
+      `裁剪比例需保持在 ${(profile.minAspect ?? 0).toFixed(2)}:1 到 ${(
+        profile.maxAspect ?? Number.POSITIVE_INFINITY
+      ).toFixed(2)}:1 之间`,
+    );
+  }
+  return aspect;
 }
 
 export function getOutputDimensions(
@@ -250,54 +200,15 @@ function canvasToBlob(
   });
 }
 
-export async function renderEditedImage({
-  cropAspect,
+export async function prepareCroppedCanvas({
+  canvas,
   image,
-  offset,
   profile,
-  rotation,
-  viewportHeight,
-  viewportWidth,
-  zoom,
 }: {
-  cropAspect?: number;
+  canvas: HTMLCanvasElement;
   image: HTMLImageElement;
-  offset: ImageOffset;
   profile: ImageEditProfile;
-  rotation: number;
-  viewportHeight: number;
-  viewportWidth: number;
-  zoom: number;
 }): Promise<PreparedImage> {
-  const outputDimensions = getOutputDimensions(profile, cropAspect);
-  const canvas = document.createElement('canvas');
-  canvas.width = outputDimensions.width;
-  canvas.height = outputDimensions.height;
-  const context = canvas.getContext('2d');
-  if (!context) throw new Error('当前浏览器不支持图片编辑');
-
-  const outputScaleX = outputDimensions.width / viewportWidth;
-  const outputScaleY = outputDimensions.height / viewportHeight;
-  const baseScale = getCoverScale({
-    imageHeight: image.naturalHeight,
-    imageWidth: image.naturalWidth,
-    rotation,
-    viewportHeight,
-    viewportWidth,
-  });
-  context.imageSmoothingEnabled = true;
-  context.imageSmoothingQuality = 'high';
-  context.translate(
-    outputDimensions.width / 2 + offset.x * outputScaleX,
-    outputDimensions.height / 2 + offset.y * outputScaleY,
-  );
-  context.rotate((rotation * Math.PI) / 180);
-  context.scale(
-    baseScale * zoom * outputScaleX,
-    baseScale * zoom * outputScaleY,
-  );
-  context.drawImage(image, -image.naturalWidth / 2, -image.naturalHeight / 2);
-
   let quality = profile.outputQuality;
   let blob = await canvasToBlob(canvas, profile.outputMimeType, quality);
   while (blob.size > profile.maxOutputBytes && quality > 0.52) {
@@ -318,16 +229,14 @@ export async function renderEditedImage({
     },
   );
   return {
-    aspectRatio: Number(
-      (outputDimensions.width / outputDimensions.height).toFixed(6),
-    ),
+    aspectRatio: Number((canvas.width / canvas.height).toFixed(6)),
     file,
-    height: outputDimensions.height,
+    height: canvas.height,
     mimeType,
     originalHeight: image.naturalHeight,
     originalSize: Number(image.dataset.fileSize || 0),
     originalWidth: image.naturalWidth,
     profile: profile.profile,
-    width: outputDimensions.width,
+    width: canvas.width,
   };
 }

@@ -92,3 +92,72 @@ ol {
     }
   }
 }
+
+.image-editor-cropper {
+  .cropper-container {
+    height: 100% !important;
+    width: 100% !important;
+  }
+
+  .cropper-view-box {
+    outline: 2px solid #1677ff;
+    outline-color: rgba(22, 119, 255, 0.95);
+  }
+
+  .cropper-line {
+    background-color: #1677ff;
+    opacity: 0.8;
+  }
+
+  .cropper-point {
+    width: 12px;
+    height: 12px;
+    box-sizing: border-box;
+    background-color: #1677ff;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    opacity: 1;
+  }
+
+  .cropper-point.point-e {
+    right: -6px;
+    margin-top: -6px;
+  }
+
+  .cropper-point.point-n {
+    top: -6px;
+    margin-left: -6px;
+  }
+
+  .cropper-point.point-w {
+    left: -6px;
+    margin-top: -6px;
+  }
+
+  .cropper-point.point-s {
+    bottom: -6px;
+    margin-left: -6px;
+  }
+
+  .cropper-point.point-ne {
+    top: -6px;
+    right: -6px;
+  }
+
+  .cropper-point.point-nw {
+    top: -6px;
+    left: -6px;
+  }
+
+  .cropper-point.point-sw {
+    bottom: -6px;
+    left: -6px;
+  }
+
+  .cropper-point.point-se {
+    right: -6px;
+    bottom: -6px;
+    width: 12px;
+    height: 12px;
+  }
+}
