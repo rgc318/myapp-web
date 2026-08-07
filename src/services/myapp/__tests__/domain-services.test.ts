@@ -658,7 +658,11 @@ describe('myapp domain services', () => {
       .mockResolvedValueOnce({
         data: {
           meta: { company: 'rgc (Demo)', date_from: '2026-06-01', limit: 8 },
-          overview: { sales_amount_total: '100' },
+          overview: {
+            purchase_amount_total: null,
+            sales_amount_total: '100',
+          },
+          visibility: { purchase: 0, sales: 1 },
           tables: {
             sales_summary: [{ amount: '100', count: 2, name: 'ACME' }],
             sales_trend: [{ amount: '100', count: 2, trend_date: '2026-06-04' }],
@@ -690,6 +694,9 @@ describe('myapp domain services', () => {
     const cashflow = await fetchCashflowEntries();
 
     expect(salesReport.overview.salesAmountTotal).toBe(100);
+    expect(salesReport.overview.purchaseAmountTotal).toBeNull();
+    expect(salesReport.visibility.purchase).toBe(false);
+    expect(salesReport.visibility.sales).toBe(true);
     expect(salesReport.tables.salesSummary[0]).toMatchObject({
       amount: 100,
       count: 2,

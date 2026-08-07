@@ -113,11 +113,13 @@ export default [
       {
         path: '/sales/invoices',
         name: 'invoices',
+        access: 'canViewSalesInvoices',
         component: './Sales/Invoices',
       },
       {
         path: '/sales/invoices/:name',
         name: 'invoice-detail',
+        access: 'canViewSalesInvoices',
         component: './Sales/Invoices/Detail',
         hideInMenu: true,
       },
@@ -326,35 +328,41 @@ export default [
     routes: [
       {
         path: '/master-data',
-        redirect: '/master-data/products',
+        component: './MasterData',
       },
       {
         path: '/master-data/products',
         name: 'products',
+        access: 'canViewProducts',
         component: './MasterData/Products',
       },
       {
         path: '/master-data/products/:itemCode',
+        access: 'canViewProducts',
         component: './MasterData/Products/Detail',
       },
       {
         path: '/master-data/customers',
         name: 'customers',
+        access: 'canViewCustomers',
         component: './MasterData/Customers',
       },
       {
         path: '/master-data/suppliers',
         name: 'suppliers',
+        access: 'canViewSuppliers',
         component: './MasterData/Suppliers',
       },
       {
         path: '/master-data/uoms',
         name: 'uoms',
+        access: 'canViewUoms',
         component: './MasterData/Uoms',
       },
       {
         path: '/master-data/warehouses',
         name: 'warehouses',
+        access: 'canViewWarehouses',
         component: './MasterData/Warehouses',
       },
     ],

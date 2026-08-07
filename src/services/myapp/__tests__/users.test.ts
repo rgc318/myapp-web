@@ -146,6 +146,13 @@ describe('users service', () => {
       })
       .mockResolvedValueOnce({
         data: {
+          permission_catalog: [
+            {
+              allow: 'Company',
+              applicable_doctypes: ['Sales Order'],
+              supports_descendants: 1,
+            },
+          ],
           permissions: [
             { doctype: 'Sales Order', read: 1, write: 1, create: 0 },
           ],
@@ -167,6 +174,13 @@ describe('users service', () => {
     ).resolves.toMatchObject({
       permissions: [
         { create: false, doctype: 'Sales Order', read: true, write: true },
+      ],
+      permissionCatalog: [
+        {
+          allow: 'Company',
+          applicableDoctypes: ['Sales Order'],
+          supportsDescendants: true,
+        },
       ],
       roles: ['Sales User'],
     });

@@ -117,6 +117,12 @@ export type UserPermissionSnapshotRow = {
   write: boolean;
 };
 
+export type UserPermissionCatalogEntry = {
+  allow: string;
+  applicableDoctypes: string[];
+  supportsDescendants: boolean;
+};
+
 const text = (value: unknown) =>
   typeof value === 'string' && value.trim() ? value : null;
 
@@ -320,6 +326,20 @@ export async function getUserPermissionSnapshot(user: string) {
   );
   const data = readObject(result.data);
   return {
+    permissionCatalog: Array.isArray(data.permission_catalog)
+      ? data.permission_catalog.map((value): UserPermissionCatalogEntry => {
+          const row = readObject(value);
+          return {
+            allow: String(row.allow ?? ''),
+            applicableDoctypes: Array.isArray(row.applicable_doctypes)
+              ? row.applicable_doctypes.filter(
+                  (doctype): doctype is string => typeof doctype === 'string',
+                )
+              : [],
+            supportsDescendants: Boolean(row.supports_descendants),
+          };
+        })
+      : [],
     permissions: Array.isArray(data.permissions)
       ? data.permissions.map((value): UserPermissionSnapshotRow => {
           const row = readObject(value);
@@ -579,6 +599,7 @@ export async function addUserPermission(payload: {
   applicableFor?: string;
   applyToAllDoctypes?: boolean;
   forValue: string;
+  hideDescendants?: boolean;
   isDefault?: boolean;
   user: string;
 }) {
@@ -589,6 +610,7 @@ export async function addUserPermission(payload: {
       apply_to_all_doctypes:
         payload.applyToAllDoctypes === false ? 0 : 1,
       for_value: payload.forValue,
+      hide_descendants: payload.hideDescendants ? 1 : 0,
       is_default: payload.isDefault ? 1 : 0,
       user: payload.user,
     }),

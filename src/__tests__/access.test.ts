@@ -14,6 +14,14 @@ describe('access', () => {
     expect(result.canViewFinance).toBe(true);
     expect(result.canViewInventory).toBe(true);
     expect(result.canViewMasterData).toBe(true);
+    expect(result.canViewProducts).toBe(true);
+    expect(result.canViewCustomers).toBe(true);
+    expect(result.canViewSuppliers).toBe(true);
+    expect(result.canViewUoms).toBe(true);
+    expect(result.canViewWarehouses).toBe(true);
+    expect(result.canViewSalesInvoices).toBe(true);
+    expect(result.canCreateSalesInvoices).toBe(true);
+    expect(result.canCreatePurchaseInvoices).toBe(true);
     expect(result.canViewPurchase).toBe(true);
     expect(result.canViewPrinting).toBe(true);
     expect(result.canViewAiGovernance).toBe(true);
@@ -41,6 +49,30 @@ describe('access', () => {
     expect(result.canViewSales).toBe(true);
     expect(result.canViewPurchase).toBe(false);
     expect(result.canViewFinance).toBe(false);
+    expect(result.canViewProducts).toBe(true);
+    expect(result.canViewCustomers).toBe(true);
+    expect(result.canViewSuppliers).toBe(false);
+    expect(result.canViewUoms).toBe(true);
+    expect(result.canViewWarehouses).toBe(true);
+    expect(result.canViewSalesInvoices).toBe(false);
+    expect(result.canCreateSalesInvoices).toBe(false);
+    expect(result.canCreatePurchaseInvoices).toBe(false);
+  });
+
+  it('does not expose unrelated master-data pages to a purchase manager role alone', () => {
+    const result = access({
+      currentUser: {
+        name: 'Purchase Manager',
+        roles: ['Purchase Manager'],
+      },
+    });
+
+    expect(result.canViewMasterData).toBe(true);
+    expect(result.canViewProducts).toBe(false);
+    expect(result.canViewCustomers).toBe(false);
+    expect(result.canViewSuppliers).toBe(true);
+    expect(result.canViewUoms).toBe(false);
+    expect(result.canViewWarehouses).toBe(false);
   });
 
   it('allows AI governance roles without granting user administration', () => {

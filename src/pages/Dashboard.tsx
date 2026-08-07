@@ -6,7 +6,7 @@ import {
 } from '@ant-design/icons';
 import { Area, Column, Pie } from '@ant-design/plots';
 import { PageContainer, StatisticCard } from '@ant-design/pro-components';
-import { Link, useRequest } from '@umijs/max';
+import { Link, useAccess, useRequest } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -27,7 +27,7 @@ import type { RangePickerProps } from 'antd/es/date-picker';
 import type { ColumnsType } from 'antd/es/table';
 import { createStyles } from 'antd-style';
 import dayjs, { type Dayjs } from 'dayjs';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { listInventoryStockSummary } from '@/services/myapp/inventory';
 import {
   type BusinessReport,
@@ -359,6 +359,7 @@ const focusColumns: ColumnsType<FocusRow> = [
 
 const Dashboard: React.FC = () => {
   const { styles } = useStyles();
+  const access = useAccess();
   const [activeTab, setActiveTab] = useState('sales');
   const [rangePickerValue, setRangePickerValue] = useState<RangePickerValue>(
     getTimeDistance('year'),
@@ -373,18 +374,24 @@ const Dashboard: React.FC = () => {
         dateTo,
         limit: DEFAULT_LIMIT,
       };
+      const overviewReport = await fetchBusinessReportOverview(filter);
+      const { visibility } = overviewReport;
       const [
-        overviewReport,
         salesReport,
         purchaseReport,
         receivablePayableReport,
         cashflowReport,
       ] = await Promise.all([
-        fetchBusinessReportOverview(filter),
-        fetchSalesReport(filter),
-        fetchPurchaseReport(filter),
-        fetchReceivablePayableReport(filter),
-        fetchCashflowReport(filter),
+        visibility.sales ? fetchSalesReport(filter) : Promise.resolve(null),
+        visibility.purchase
+          ? fetchPurchaseReport(filter)
+          : Promise.resolve(null),
+        visibility.receivable || visibility.payable
+          ? fetchReceivablePayableReport(filter)
+          : Promise.resolve(null),
+        visibility.cashflow
+          ? fetchCashflowReport(filter)
+          : Promise.resolve(null),
       ]);
 
       return {
@@ -392,18 +399,21 @@ const Dashboard: React.FC = () => {
         overview: overviewReport.overview,
         tables: {
           ...overviewReport.tables,
-          salesSummary: salesReport.tables.salesSummary,
-          salesTrend: salesReport.tables.salesTrend,
-          salesTrendHourly: salesReport.tables.salesTrendHourly,
-          salesProductSummary: salesReport.tables.salesProductSummary,
-          purchaseSummary: purchaseReport.tables.purchaseSummary,
-          purchaseTrend: purchaseReport.tables.purchaseTrend,
-          purchaseTrendHourly: purchaseReport.tables.purchaseTrendHourly,
-          purchaseProductSummary: purchaseReport.tables.purchaseProductSummary,
-          receivableSummary: receivablePayableReport.tables.receivableSummary,
-          payableSummary: receivablePayableReport.tables.payableSummary,
-          cashflowTrend: cashflowReport.trend,
+          salesSummary: salesReport?.tables.salesSummary ?? [],
+          salesTrend: salesReport?.tables.salesTrend ?? [],
+          salesTrendHourly: salesReport?.tables.salesTrendHourly ?? [],
+          salesProductSummary: salesReport?.tables.salesProductSummary ?? [],
+          purchaseSummary: purchaseReport?.tables.purchaseSummary ?? [],
+          purchaseTrend: purchaseReport?.tables.purchaseTrend ?? [],
+          purchaseTrendHourly: purchaseReport?.tables.purchaseTrendHourly ?? [],
+          purchaseProductSummary:
+            purchaseReport?.tables.purchaseProductSummary ?? [],
+          receivableSummary:
+            receivablePayableReport?.tables.receivableSummary ?? [],
+          payableSummary: receivablePayableReport?.tables.payableSummary ?? [],
+          cashflowTrend: cashflowReport?.trend ?? [],
         },
+        visibility,
       } satisfies BusinessReport;
     },
     {
@@ -417,22 +427,25 @@ const Dashboard: React.FC = () => {
     loading: inventoryLoading,
     refresh: refreshInventory,
   } = useRequest(
-    () =>
-      listInventoryStockSummary({
+    () => {
+      if (!access.canViewInventory) return Promise.resolve(null);
+      return listInventoryStockSummary({
         lowStockThreshold: 10,
         page: 1,
         pageSize: 5,
         stockStatus: 'all',
-      }),
+      });
+    },
     {
       formatResult: (result) => result,
-      refreshDeps: [],
+      refreshDeps: [access.canViewInventory],
     },
   );
 
   const report = data as BusinessReport | undefined;
   const overview = report?.overview;
   const tables = report?.tables;
+  const visibility = report?.visibility;
   const stockSummary = inventoryData?.summary;
   const salesChartData = toDashboardTrendData(
     tables?.salesTrend ?? [],
@@ -485,6 +498,19 @@ const Dashboard: React.FC = () => {
       (overview?.receivableOutstandingTotal ?? 0),
   );
 
+  useEffect(() => {
+    if (!visibility) return;
+    if (activeTab === 'sales' && !visibility.sales && visibility.purchase) {
+      setActiveTab('purchase');
+    } else if (
+      activeTab === 'purchase' &&
+      !visibility.purchase &&
+      visibility.sales
+    ) {
+      setActiveTab('sales');
+    }
+  }, [activeTab, visibility]);
+
   const selectDate = (type: TimeType) => {
     setRangePickerValue(getTimeDistance(type));
   };
@@ -533,6 +559,15 @@ const Dashboard: React.FC = () => {
           />
         )}
 
+        {visibility && Object.values(visibility).some((value) => !value) ? (
+          <Alert
+            description="无权限的业务域不会发起查询，也不会用 0 冒充实际数据；其余有权限模块保持正常展示。"
+            message="经营概览已按当前角色权限分区"
+            showIcon
+            type="info"
+          />
+        ) : null}
+
         <Row gutter={24}>
           <Col
             lg={12}
@@ -570,7 +605,7 @@ const Dashboard: React.FC = () => {
               }
               loading={loading && !report}
               statistic={{
-                prefix: '¥',
+                prefix: visibility?.sales === false ? undefined : '¥',
                 title: (
                   <Space size={6}>
                     总销售额
@@ -579,7 +614,10 @@ const Dashboard: React.FC = () => {
                     </Tooltip>
                   </Space>
                 ),
-                value: formatNumber(overview?.salesAmountTotal),
+                value:
+                  visibility?.sales === false
+                    ? '无查看权限'
+                    : formatNumber(overview?.salesAmountTotal),
               }}
               variant="borderless"
             />
@@ -623,7 +661,10 @@ const Dashboard: React.FC = () => {
                     </Tooltip>
                   </Space>
                 ),
-                value: formatCompactCurrency(overview?.purchaseAmountTotal),
+                value:
+                  visibility?.purchase === false
+                    ? '无查看权限'
+                    : formatCompactCurrency(overview?.purchaseAmountTotal),
               }}
               variant="borderless"
             />
@@ -649,31 +690,43 @@ const Dashboard: React.FC = () => {
                 />
               }
               footer={
-                <Space size={12}>
+                visibility?.cashflow === false ? (
                   <Typography.Text type="secondary">
-                    收 {formatCurrencyValue(overview?.receivedAmountTotal)}
+                    当前角色无资金数据查看权限
                   </Typography.Text>
-                  <Typography.Text type="secondary">
-                    付 {formatCurrencyValue(overview?.paidAmountTotal)}
-                  </Typography.Text>
-                </Space>
+                ) : (
+                  <Space size={12}>
+                    <Typography.Text type="secondary">
+                      收 {formatCurrencyValue(overview?.receivedAmountTotal)}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      付 {formatCurrencyValue(overview?.paidAmountTotal)}
+                    </Typography.Text>
+                  </Space>
+                )
               }
               loading={loading && !report}
               statistic={{
                 prefix:
-                  (overview?.netCashflowTotal ?? 0) >= 0 ? (
+                  visibility?.cashflow ===
+                  false ? undefined : (overview?.netCashflowTotal ?? 0) >= 0 ? (
                     <ArrowUpOutlined />
                   ) : (
                     <ArrowDownOutlined />
                   ),
                 title: '净现金流',
-                value: formatCompactCurrency(overview?.netCashflowTotal),
+                value:
+                  visibility?.cashflow === false
+                    ? '无查看权限'
+                    : formatCompactCurrency(overview?.netCashflowTotal),
                 styles: {
                   content: {
                     color:
-                      (overview?.netCashflowTotal ?? 0) >= 0
-                        ? '#1677ff'
-                        : '#cf1322',
+                      visibility?.cashflow === false
+                        ? undefined
+                        : (overview?.netCashflowTotal ?? 0) >= 0
+                          ? '#1677ff'
+                          : '#cf1322',
                   },
                 },
               }}
@@ -697,16 +750,26 @@ const Dashboard: React.FC = () => {
               }
               footer={
                 <Typography.Text type="secondary">
-                  库存资产 {formatCurrencyValue(stockSummary?.stockValueTotal)}
+                  {access.canViewInventory
+                    ? `库存资产 ${formatCurrencyValue(stockSummary?.stockValueTotal)}`
+                    : '当前角色无库存数据查看权限'}
                 </Typography.Text>
               }
               loading={
                 (loading && !report) || (inventoryLoading && !inventoryData)
               }
               statistic={{
-                suffix: '%',
+                suffix:
+                  visibility?.cashflow === false ||
+                  visibility?.receivable === false
+                    ? undefined
+                    : '%',
                 title: '收款达成率',
-                value: collectionRate,
+                value:
+                  visibility?.cashflow === false ||
+                  visibility?.receivable === false
+                    ? '无查看权限'
+                    : collectionRate,
               }}
               variant="borderless"
             />
@@ -723,6 +786,7 @@ const Dashboard: React.FC = () => {
             className={styles.salesCard}
             items={[
               {
+                disabled: visibility?.sales === false,
                 key: 'sales',
                 label: '销售额',
                 children: (
@@ -765,6 +829,7 @@ const Dashboard: React.FC = () => {
                 ),
               },
               {
+                disabled: visibility?.purchase === false,
                 key: 'purchase',
                 label: '采购额',
                 children: (
@@ -860,7 +925,11 @@ const Dashboard: React.FC = () => {
                 <Col sm={12} style={{ marginBottom: 24 }} xs={24}>
                   <Typography.Text type="secondary">应收未结</Typography.Text>
                   <Typography.Title level={4} style={{ margin: '8px 0 0' }}>
-                    {formatCurrencyValue(overview?.receivableOutstandingTotal)}
+                    {visibility?.receivable === false
+                      ? '无查看权限'
+                      : formatCurrencyValue(
+                          overview?.receivableOutstandingTotal,
+                        )}
                   </Typography.Title>
                   <Area
                     axis={false}
@@ -879,8 +948,10 @@ const Dashboard: React.FC = () => {
                 <Col sm={12} style={{ marginBottom: 24 }} xs={24}>
                   <Typography.Text type="secondary">库存预警</Typography.Text>
                   <Typography.Title level={4} style={{ margin: '8px 0 0' }}>
-                    {(stockSummary?.negativeCount ?? 0) +
-                      (stockSummary?.outOfStockCount ?? 0)}
+                    {access.canViewInventory
+                      ? (stockSummary?.negativeCount ?? 0) +
+                        (stockSummary?.outOfStockCount ?? 0)
+                      : '无查看权限'}
                   </Typography.Title>
                   <Area
                     axis={false}
@@ -900,7 +971,13 @@ const Dashboard: React.FC = () => {
               <Table<FocusRow>
                 columns={focusColumns}
                 dataSource={focusRows}
-                locale={{ emptyText: '暂无关注事项' }}
+                locale={{
+                  emptyText:
+                    visibility?.receivable === false &&
+                    visibility?.payable === false
+                      ? '当前角色无应收应付数据查看权限'
+                      : '暂无关注事项',
+                }}
                 pagination={{ pageSize: 5, style: { marginBottom: 0 } }}
                 rowKey="key"
                 size="small"
@@ -921,7 +998,9 @@ const Dashboard: React.FC = () => {
               title="销售额类别占比"
               variant="borderless"
             >
-              {pieData.length ? (
+              {visibility?.sales === false ? (
+                <Empty description="当前角色无销售数据查看权限" />
+              ) : pieData.length ? (
                 <>
                   <Typography.Text>销售额</Typography.Text>
                   <Pie

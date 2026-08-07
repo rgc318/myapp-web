@@ -15,6 +15,54 @@ export default function access(
   const canViewAiDataGovernance = Boolean(
     isAdmin || hasRole('AI Data Steward', 'AI Data Approver', 'AI Auditor'),
   );
+  const canViewProducts = Boolean(
+    isAdmin ||
+      hasRole(
+        'Item Manager',
+        'Sales User',
+        'Purchase User',
+        'Stock Manager',
+        'Stock User',
+        'Accounts User',
+      ),
+  );
+  const canViewCustomers = Boolean(
+    isAdmin ||
+      hasRole(
+        'Sales Manager',
+        'Sales User',
+        'Stock Manager',
+        'Stock User',
+        'Accounts Manager',
+        'Accounts User',
+      ),
+  );
+  const canViewSuppliers = Boolean(
+    isAdmin ||
+      hasRole(
+        'Purchase Manager',
+        'Purchase User',
+        'Stock Manager',
+        'Stock User',
+        'Accounts Manager',
+        'Accounts User',
+      ),
+  );
+  const canViewUoms = Boolean(
+    isAdmin ||
+      hasRole('Sales Manager', 'Sales User', 'Stock Manager', 'Stock User'),
+  );
+  const canViewWarehouses = Boolean(
+    isAdmin ||
+      hasRole('Sales User', 'Purchase User', 'Stock User', 'Accounts User'),
+  );
+  const canViewSalesInvoices = Boolean(
+    isAdmin || hasRole('Accounts Manager', 'Accounts User'),
+  );
+  const canCreateSalesInvoices = canViewSalesInvoices;
+  const canCreatePurchaseInvoices = Boolean(
+    isAdmin || hasRole('Accounts Manager', 'Accounts User'),
+  );
 
   return {
     canAdmin: Boolean(isAdmin),
@@ -28,14 +76,17 @@ export default function access(
       isAdmin || hasRole('Stock Manager', 'Stock User'),
     ),
     canViewMasterData: Boolean(
-      isAdmin ||
-        hasRole(
-          'Item Manager',
-          'Sales Manager',
-          'Purchase Manager',
-          'Stock Manager',
-        ),
+      canViewProducts ||
+        canViewCustomers ||
+        canViewSuppliers ||
+        canViewUoms ||
+        canViewWarehouses,
     ),
+    canViewProducts,
+    canViewCustomers,
+    canViewSuppliers,
+    canViewUoms,
+    canViewWarehouses,
     canViewPendingConfirmations: Boolean(
       isAdmin ||
         hasRole(
@@ -71,6 +122,9 @@ export default function access(
         ),
     ),
     canViewSales: Boolean(isAdmin || hasRole('Sales Manager', 'Sales User')),
+    canViewSalesInvoices,
+    canCreateSalesInvoices,
+    canCreatePurchaseInvoices,
     canUseAI: Boolean(currentUser),
     canViewAiGovernance,
     canManageAiGovernance: Boolean(isAdmin || hasRole('AI Model Manager')),

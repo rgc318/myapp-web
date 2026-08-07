@@ -21,13 +21,21 @@ export type ReportFilter = {
 };
 
 export type BusinessOverview = {
-  netCashflowTotal: number;
-  paidAmountTotal: number;
-  payableOutstandingTotal: number;
-  purchaseAmountTotal: number;
-  receivableOutstandingTotal: number;
-  receivedAmountTotal: number;
-  salesAmountTotal: number;
+  netCashflowTotal: number | null;
+  paidAmountTotal: number | null;
+  payableOutstandingTotal: number | null;
+  purchaseAmountTotal: number | null;
+  receivableOutstandingTotal: number | null;
+  receivedAmountTotal: number | null;
+  salesAmountTotal: number | null;
+};
+
+export type ReportVisibility = {
+  cashflow: boolean;
+  payable: boolean;
+  purchase: boolean;
+  receivable: boolean;
+  sales: boolean;
 };
 
 export type PartySummaryRow = {
@@ -167,6 +175,7 @@ export type BusinessReport = {
     salesTrend: TrendRow[];
     salesTrendHourly: HourlyTrendRow[];
   };
+  visibility: ReportVisibility;
 };
 
 function buildPayload(filter: ReportFilter = {}) {
@@ -212,14 +221,31 @@ function emptyTables(): BusinessReport['tables'] {
 
 function mapOverview(value: unknown): BusinessOverview {
   const row = readObject(value);
+  const metric = (key: string) =>
+    Object.prototype.hasOwnProperty.call(row, key) && row[key] == null
+      ? null
+      : toNumber(row[key]);
   return {
-    netCashflowTotal: toNumber(row.net_cashflow_total),
-    paidAmountTotal: toNumber(row.paid_amount_total),
-    payableOutstandingTotal: toNumber(row.payable_outstanding_total),
-    purchaseAmountTotal: toNumber(row.purchase_amount_total),
-    receivableOutstandingTotal: toNumber(row.receivable_outstanding_total),
-    receivedAmountTotal: toNumber(row.received_amount_total),
-    salesAmountTotal: toNumber(row.sales_amount_total),
+    netCashflowTotal: metric('net_cashflow_total'),
+    paidAmountTotal: metric('paid_amount_total'),
+    payableOutstandingTotal: metric('payable_outstanding_total'),
+    purchaseAmountTotal: metric('purchase_amount_total'),
+    receivableOutstandingTotal: metric('receivable_outstanding_total'),
+    receivedAmountTotal: metric('received_amount_total'),
+    salesAmountTotal: metric('sales_amount_total'),
+  };
+}
+
+function mapVisibility(value: unknown): ReportVisibility {
+  const row = readObject(value);
+  const visible = (key: keyof ReportVisibility) =>
+    row[key] == null ? true : Boolean(row[key]);
+  return {
+    cashflow: visible('cashflow'),
+    payable: visible('payable'),
+    purchase: visible('purchase'),
+    receivable: visible('receivable'),
+    sales: visible('sales'),
   };
 }
 
@@ -502,6 +528,7 @@ function mapReport(data: Record<string, any>, fallbackLimit = 0): BusinessReport
         .map(mapHourlyRow)
         .filter((row): row is HourlyTrendRow => Boolean(row)),
     },
+    visibility: mapVisibility(data.visibility),
   };
 }
 

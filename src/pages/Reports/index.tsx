@@ -8,7 +8,7 @@ import {
   StatisticCard,
 } from '@ant-design/pro-components';
 import { useRequest } from '@umijs/max';
-import { Button, Space, Typography } from 'antd';
+import { Alert, Button, Space, Typography } from 'antd';
 import dayjs from 'dayjs';
 import React, { useMemo, useState } from 'react';
 import PageState from '@/components/PageState';
@@ -42,6 +42,10 @@ function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: 2,
   }).format(value ?? 0);
+}
+
+function formatMetric(value: number | null | undefined, visible: boolean) {
+  return visible ? formatCurrencyValue(value ?? 0) : '无查看权限';
 }
 
 function normalizeFilters(values: ReportFilters) {
@@ -193,6 +197,7 @@ const ReportsPage: React.FC = () => {
   const report = data as BusinessReport | undefined;
   const overview = report?.overview;
   const meta = report?.meta;
+  const visibility = report?.visibility;
   const companyLabel = meta?.company || requestFilters.company || '全部公司';
 
   return (
@@ -257,28 +262,48 @@ const ReportsPage: React.FC = () => {
               </Space>
             </ProCard>
 
+            {visibility && Object.values(visibility).some((value) => !value) ? (
+              <Alert
+                showIcon
+                type="info"
+                title="当前报表按角色权限分区展示"
+                description="无权限的业务指标不会查询，也不会用 0 冒充真实数据；其他有权限的指标仍可正常查看。"
+              />
+            ) : null}
+
             <StatisticCard.Group direction="row">
               <StatisticCard
                 statistic={{
                   title: '销售额',
-                  value: formatCurrencyValue(overview?.salesAmountTotal),
+                  value: formatMetric(
+                    overview?.salesAmountTotal,
+                    visibility?.sales ?? true,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '采购额',
-                  value: formatCurrencyValue(overview?.purchaseAmountTotal),
+                  value: formatMetric(
+                    overview?.purchaseAmountTotal,
+                    visibility?.purchase ?? true,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '净现金流',
-                  value: formatCurrencyValue(overview?.netCashflowTotal),
+                  value: formatMetric(
+                    overview?.netCashflowTotal,
+                    visibility?.cashflow ?? true,
+                  ),
                   valueStyle: {
                     color:
-                      (overview?.netCashflowTotal ?? 0) >= 0
-                        ? '#1677ff'
-                        : '#cf1322',
+                      visibility?.cashflow === false
+                        ? undefined
+                        : (overview?.netCashflowTotal ?? 0) >= 0
+                          ? '#1677ff'
+                          : '#cf1322',
                   },
                 }}
               />
@@ -288,100 +313,164 @@ const ReportsPage: React.FC = () => {
               <StatisticCard
                 statistic={{
                   title: '已收金额',
-                  value: formatCurrencyValue(overview?.receivedAmountTotal),
+                  value: formatMetric(
+                    overview?.receivedAmountTotal,
+                    visibility?.cashflow ?? true,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '应收未结',
-                  value: formatCurrencyValue(
+                  value: formatMetric(
                     overview?.receivableOutstandingTotal,
+                    visibility?.receivable ?? true,
                   ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '已付金额',
-                  value: formatCurrencyValue(overview?.paidAmountTotal),
+                  value: formatMetric(
+                    overview?.paidAmountTotal,
+                    visibility?.cashflow ?? true,
+                  ),
                 }}
               />
               <StatisticCard
                 statistic={{
                   title: '应付未结',
-                  value: formatCurrencyValue(overview?.payableOutstandingTotal),
+                  value: formatMetric(
+                    overview?.payableOutstandingTotal,
+                    visibility?.payable ?? true,
+                  ),
                 }}
               />
             </StatisticCard.Group>
 
             <ProCard gutter={[16, 16]} wrap>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="销售客户排行">
-                <MiniTable
-                  columns={partyColumns}
-                  dataSource={report.tables.salesSummary}
-                  rowKey="name"
-                />
+                {visibility?.sales === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无销售数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={partyColumns}
+                    dataSource={report.tables.salesSummary}
+                    rowKey="name"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="采购供应商排行">
-                <MiniTable
-                  columns={partyColumns}
-                  dataSource={report.tables.purchaseSummary}
-                  rowKey="name"
-                />
+                {visibility?.purchase === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无采购数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={partyColumns}
+                    dataSource={report.tables.purchaseSummary}
+                    rowKey="name"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="应收明细">
-                <MiniTable
-                  columns={partyColumns}
-                  dataSource={report.tables.receivableSummary}
-                  rowKey="name"
-                />
+                {visibility?.receivable === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无应收数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={partyColumns}
+                    dataSource={report.tables.receivableSummary}
+                    rowKey="name"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="应付明细">
-                <MiniTable
-                  columns={partyColumns}
-                  dataSource={report.tables.payableSummary}
-                  rowKey="name"
-                />
+                {visibility?.payable === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无应付数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={partyColumns}
+                    dataSource={report.tables.payableSummary}
+                    rowKey="name"
+                  />
+                )}
               </ProCard>
             </ProCard>
 
             <ProCard gutter={[16, 16]} wrap>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="销售商品排行">
-                <MiniTable
-                  columns={productColumns}
-                  dataSource={report.tables.salesProductSummary}
-                  rowKey="itemKey"
-                />
+                {visibility?.sales === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无销售数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={productColumns}
+                    dataSource={report.tables.salesProductSummary}
+                    rowKey="itemKey"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 12 }} title="采购商品排行">
-                <MiniTable
-                  columns={productColumns}
-                  dataSource={report.tables.purchaseProductSummary}
-                  rowKey="itemKey"
-                />
+                {visibility?.purchase === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无采购数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={productColumns}
+                    dataSource={report.tables.purchaseProductSummary}
+                    rowKey="itemKey"
+                  />
+                )}
               </ProCard>
             </ProCard>
 
             <ProCard gutter={[16, 16]} wrap>
               <ProCard colSpan={{ xs: 24, xl: 8 }} title="销售趋势">
-                <MiniTable
-                  columns={trendColumns}
-                  dataSource={report.tables.salesTrend}
-                  rowKey="trendDate"
-                />
+                {visibility?.sales === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无销售数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={trendColumns}
+                    dataSource={report.tables.salesTrend}
+                    rowKey="trendDate"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 8 }} title="采购趋势">
-                <MiniTable
-                  columns={trendColumns}
-                  dataSource={report.tables.purchaseTrend}
-                  rowKey="trendDate"
-                />
+                {visibility?.purchase === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无采购数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={trendColumns}
+                    dataSource={report.tables.purchaseTrend}
+                    rowKey="trendDate"
+                  />
+                )}
               </ProCard>
               <ProCard colSpan={{ xs: 24, xl: 8 }} title="资金趋势">
-                <MiniTable
-                  columns={cashflowTrendColumns}
-                  dataSource={report.tables.cashflowTrend}
-                  rowKey="trendDate"
-                />
+                {visibility?.cashflow === false ? (
+                  <Typography.Text type="secondary">
+                    当前角色无资金数据查看权限
+                  </Typography.Text>
+                ) : (
+                  <MiniTable
+                    columns={cashflowTrendColumns}
+                    dataSource={report.tables.cashflowTrend}
+                    rowKey="trendDate"
+                  />
+                )}
               </ProCard>
             </ProCard>
           </>

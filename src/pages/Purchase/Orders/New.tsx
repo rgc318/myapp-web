@@ -4,7 +4,7 @@ import {
   PageContainer,
   ProCard,
 } from '@ant-design/pro-components';
-import { history, useLocation } from '@umijs/max';
+import { history, useAccess, useLocation } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -14,6 +14,7 @@ import {
   message,
   Select,
   Space,
+  Tooltip,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
@@ -84,6 +85,7 @@ type FormValues = {
 };
 
 const PurchaseOrderNewPage: React.FC = () => {
+  const access = useAccess();
   const location = useLocation();
   const [form] = Form.useForm<FormValues>();
   const [lines, setLines] = useState<PurchaseOrderEditorLine[]>([]);
@@ -522,9 +524,23 @@ const PurchaseOrderNewPage: React.FC = () => {
             >
               保存订单
             </Button>
-            <Button loading={submitting} onClick={() => void submitOrder(true)}>
-              快捷采购
-            </Button>
+            <Tooltip
+              title={
+                access.canCreatePurchaseInvoices
+                  ? undefined
+                  : '当前账号没有创建采购发票的权限，请先保存采购订单后按可用动作继续处理。'
+              }
+            >
+              <span>
+                <Button
+                  disabled={!access.canCreatePurchaseInvoices}
+                  loading={submitting}
+                  onClick={() => void submitOrder(true)}
+                >
+                  快捷采购
+                </Button>
+              </span>
+            </Tooltip>
           </Space>
         </div>
       </FooterToolbar>

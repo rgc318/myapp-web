@@ -15,6 +15,7 @@ import {
 } from '@ant-design/pro-components';
 import { history, useParams } from '@umijs/max';
 import {
+  Alert,
   Avatar,
   Button,
   Card,
@@ -49,6 +50,7 @@ import {
   revokeUserSessions,
   setUserEnabled,
   type UserPermission,
+  type UserPermissionCatalogEntry,
   type UserPermissionSnapshotRow,
   type UserProfile,
   type UserSecurity,
@@ -56,6 +58,15 @@ import {
   updateUserRoles,
 } from '@/services/myapp/users';
 import { useAdministrationStyles } from '../styles';
+import {
+  buildPermissionScopeRows,
+  describePermissionAddition,
+  describePermissionDeletion,
+  type ManagedPermissionType,
+  managedPermissionTypes,
+  type PermissionScopeRow,
+  permissionApplicableDoctypes,
+} from './permission-scope';
 
 const { Text, Title } = Typography;
 
@@ -68,12 +79,23 @@ export default function UserDetailPage() {
   const [permissionSnapshot, setPermissionSnapshot] = useState<
     UserPermissionSnapshotRow[]
   >([]);
+  const [permissionCatalog, setPermissionCatalog] = useState<
+    UserPermissionCatalogEntry[]
+  >([]);
   const [roles, setRoles] = useState<RoleSummary[]>([]);
   const [permissionOpen, setPermissionOpen] = useState(false);
   const [profileForm] = Form.useForm();
   const [roleForm] = Form.useForm();
   const [permissionForm] = Form.useForm();
   const permissionDoctype = Form.useWatch('allow', permissionForm);
+  const permissionApplyToAll = Form.useWatch(
+    'applyToAllDoctypes',
+    permissionForm,
+  );
+  const permissionApplicableFor = Form.useWatch(
+    'applicableFor',
+    permissionForm,
+  );
 
   const load = async () => {
     const [next, nextSecurity, snapshot] = await Promise.all([
@@ -84,6 +106,7 @@ export default function UserDetailPage() {
     setProfile(next);
     setSecurity(nextSecurity);
     setPermissionSnapshot(snapshot.permissions);
+    setPermissionCatalog(snapshot.permissionCatalog);
     profileForm.setFieldsValue(next);
     roleForm.setFieldsValue({ roles: next.roles });
   };
@@ -104,6 +127,19 @@ export default function UserDetailPage() {
   }, [user]);
   if (!profile) return <Spin fullscreen tip="正在加载用户详情" />;
 
+  const permissionScopeRows = buildPermissionScopeRows(profile);
+  const isAdministrator = profile.name === 'Administrator';
+  const managedCatalog = permissionCatalog.length
+    ? permissionCatalog
+    : managedPermissionTypes.map((allow) => ({
+        allow,
+        applicableDoctypes: permissionApplicableDoctypes[allow],
+        supportsDescendants: allow === 'Company' || allow === 'Warehouse',
+      }));
+  const selectedPermissionCatalog = managedCatalog.find(
+    (entry) => entry.allow === (permissionDoctype || 'Company'),
+  );
+
   const permissionColumns: ProColumns<UserPermission>[] = [
     { title: '授权类型', dataIndex: 'allow' },
     { title: '授权值', dataIndex: 'forValue' },
@@ -122,6 +158,7 @@ export default function UserDetailPage() {
       render: (_, row) => (
         <Popconfirm
           title="确认删除该数据权限？"
+          description={describePermissionDeletion(profile.userPermissions, row)}
           onConfirm={async () => {
             await runAction(() => deleteUserPermission(user, row.name), load);
           }}
@@ -131,6 +168,40 @@ export default function UserDetailPage() {
           </a>
         </Popconfirm>
       ),
+    },
+  ];
+  const permissionScopeColumns: ProColumns<PermissionScopeRow>[] = [
+    { title: '隔离维度', dataIndex: 'allow', width: 130 },
+    {
+      title: '当前模式',
+      dataIndex: 'mode',
+      width: 170,
+      render: (_, row) => {
+        if (row.mode === 'bypass') return <Tag color="purple">系统绕过</Tag>;
+        if (row.mode === 'unrestricted')
+          return <Tag color="warning">未按该维度限制</Tag>;
+        if (row.mode === 'targeted')
+          return <Tag color="processing">仅指定单据受限</Tag>;
+        if (row.mode === 'mixed') return <Tag color="cyan">全局与定向混合</Tag>;
+        return <Tag color="success">已限制</Tag>;
+      },
+    },
+    {
+      title: '允许值',
+      render: (_, row) =>
+        row.values.length ? row.values.join('、') : '角色允许的全部数据',
+    },
+    {
+      title: '默认值',
+      dataIndex: 'defaultValue',
+      width: 180,
+      render: (_, row) => row.defaultValue || '-',
+    },
+    {
+      title: '风险提示',
+      dataIndex: 'warning',
+      render: (_, row) =>
+        row.warning ? <Text type="danger">{row.warning}</Text> : '-',
     },
   ];
   const snapshotColumns: ProColumns<UserPermissionSnapshotRow>[] = [
@@ -378,9 +449,42 @@ export default function UserDetailPage() {
                 label: `数据权限 (${profile.userPermissions.length})`,
                 children: (
                   <>
+                    <Alert
+                      showIcon
+                      type={
+                        isAdministrator ||
+                        permissionScopeRows.every(
+                          (row) => row.mode !== 'unrestricted',
+                        )
+                          ? 'info'
+                          : 'warning'
+                      }
+                      title={
+                        isAdministrator
+                          ? 'Administrator 不受 User Permission 限制'
+                          : '没有配置某一维度不代表“无权访问”'
+                      }
+                      description={
+                        isAdministrator
+                          ? '请使用普通业务账号配置并验证公司、仓库、客户或供应商范围。'
+                          : '未配置的维度仍按角色权限访问全部可见数据。Company 与 Warehouse 同时配置时会共同收窄范围；同类型多条权限按允许值并集生效。'
+                      }
+                      style={{ marginBottom: 16 }}
+                    />
+                    <ProTable<PermissionScopeRow>
+                      rowKey="allow"
+                      search={false}
+                      options={false}
+                      pagination={false}
+                      dataSource={permissionScopeRows}
+                      columns={permissionScopeColumns}
+                      headerTitle="有效数据范围摘要"
+                      style={{ marginBottom: 16 }}
+                    />
                     <Button
                       type="primary"
                       icon={<PlusOutlined />}
+                      disabled={isAdministrator}
                       onClick={() => setPermissionOpen(true)}
                       style={{ marginBottom: 16 }}
                     >
@@ -537,7 +641,11 @@ export default function UserDetailPage() {
         <Form
           form={permissionForm}
           layout="vertical"
-          initialValues={{ allow: 'Company', applyToAllDoctypes: true }}
+          initialValues={{
+            allow: 'Company',
+            applyToAllDoctypes: true,
+            hideDescendants: false,
+          }}
           onFinish={async (values) => {
             await runAction(
               () => addUserPermission({ ...values, user }),
@@ -551,11 +659,31 @@ export default function UserDetailPage() {
         >
           <Form.Item name="allow" label="授权类型" rules={[{ required: true }]}>
             <Select
-              options={['Company', 'Warehouse', 'Customer', 'Supplier'].map(
-                (value) => ({ label: value, value }),
-              )}
+              onChange={() => {
+                permissionForm.setFieldsValue({
+                  applicableFor: undefined,
+                  forValue: undefined,
+                  hideDescendants: false,
+                });
+              }}
+              options={managedCatalog.map((entry) => ({
+                label: entry.allow,
+                value: entry.allow,
+              }))}
             />
           </Form.Item>
+          <Alert
+            showIcon
+            type="info"
+            title="保存后的范围变化"
+            description={describePermissionAddition(
+              profile.userPermissions,
+              (permissionDoctype || 'Company') as ManagedPermissionType,
+              permissionApplyToAll !== false,
+              permissionApplicableFor,
+            )}
+            style={{ marginBottom: 16 }}
+          />
           <Form.Item
             name="forValue"
             label="授权值"
@@ -595,20 +723,24 @@ export default function UserDetailPage() {
                 >
                   <Select
                     showSearch
-                    options={[
-                      'Sales Order',
-                      'Sales Invoice',
-                      'Delivery Note',
-                      'Purchase Order',
-                      'Purchase Invoice',
-                      'Purchase Receipt',
-                      'Payment Entry',
-                    ].map((value) => ({ label: value, value }))}
+                    options={(
+                      selectedPermissionCatalog?.applicableDoctypes || []
+                    ).map((value) => ({ label: value, value }))}
                   />
                 </Form.Item>
               ) : null
             }
           </Form.Item>
+          {selectedPermissionCatalog?.supportsDescendants ? (
+            <Form.Item
+              name="hideDescendants"
+              label="不自动包含下级节点"
+              valuePropName="checked"
+              extra="开启后只授权当前节点；关闭时会按 Frappe 树形权限包含下级公司或仓库。"
+            >
+              <Switch />
+            </Form.Item>
+          ) : null}
         </Form>
       </Modal>
     </PageContainer>
