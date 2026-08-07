@@ -1559,6 +1559,14 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 - 设置页采用左侧导航 + 右侧内容工作区，并使用响应式栅格组织资料表单。
 - 用户列表增加用户治理指标、头像身份列、横向滚动和最多 100 人的批量启停。
 - 用户详情增加账号状态头和角色 / 数据权限 / 审计指标。
+- 数据权限页必须显示 Company、Warehouse、Customer、Supplier 四个维度的有效范围摘要。没有权限记录时显示“未按该维度限制”，不能误导为“无权访问”。
+- 添加首条全局权限时提示访问范围将被收窄；删除某类型最后一条权限时提示可能恢复为角色允许的全部数据。Company 与 Warehouse 同时配置时共同收窄，同类型多条值按并集展示。
+- 授权类型、允许的定向 DocType 和是否支持下级节点由 `get_user_permission_snapshot_v1.permission_catalog` 返回；Web 只保留故障降级目录，不作为长期事实来源。
+- `Administrator` 不受 User Permission 限制，用户详情页禁用其数据权限添加入口；普通 `System Manager` 仍可按业务需要配置数据范围。
+- 默认公司或默认仓库不在当前授权值内时显示冲突警告，管理员应先修正偏好或授权，不得由前端自动扩大范围。
+- Dashboard 与经营报表必须消费 Backend `visibility`，只请求当前角色允许的业务域。无权限指标显示“无查看权限”，不得把 Backend `null` 转换为 `0`，也不得因一个无权业务域让整个页面失败。
+- 主数据父菜单使用聚合能力，Products、Customers、Suppliers、UOM、Warehouses 子路由必须分别配置 access；`/master-data` 根据当前可用子模块动态跳转，不能固定重定向到无权页面。
+- 快捷销售 / 采购会同时创建下游发货 / 收货和发票。缺少发票创建权限时必须禁用快捷入口并说明原因；订单详情继续以后端 `actions` 为事实来源，不自行推断可执行动作。
 - 角色目录增加权限规则、DocType 覆盖和可写范围摘要。
 
 页面样式集中在 `src/pages/Account/styles.ts` 和 `src/pages/Administration/styles.ts`，使用 `antd-style` token，不硬编码整套主题颜色，也不引入第三方后台模板。
