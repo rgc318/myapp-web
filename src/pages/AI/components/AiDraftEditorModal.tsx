@@ -48,6 +48,7 @@ type DraftVersionConflict = {
 };
 
 const PRODUCT_STATE_LABELS: Record<string, string> = {
+  barcode: '条码',
   brand: '品牌',
   currency: '币种',
   description: '商品描述',
@@ -57,6 +58,7 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   retail_rate: '零售价',
   standard_buying_rate: '成本价',
   standard_selling_rate: '标准售价',
+  specification: '规格',
   stock_uom: '库存基准单位',
   wholesale_rate: '批发价',
 };
@@ -191,14 +193,14 @@ export function AiDraftEditorModal({
   const inventoryItemCode = Form.useWatch('itemCode', form);
   const selectedItemGroup = Form.useWatch('itemGroup', form);
   const openingQty = Form.useWatch('openingQty', form);
+  const productOperation = Form.useWatch('operation', form);
   const selectedParty = Form.useWatch('party', form);
   const stockUom = Form.useWatch('stockUom', form);
   const selectedWarehouse = Form.useWatch('warehouse', form);
   const orderItems = Form.useWatch('items', form);
   const hasOpeningStock = Number(openingQty ?? 0) > 0;
   const isProductUpdate =
-    draft?.draftType === 'product_setup' &&
-    draft.payload.operation === 'update';
+    draft?.draftType === 'product_setup' && productOperation === 'update';
   const busy = saving || executing;
 
   const inventorySourceItem =
@@ -232,6 +234,11 @@ export function AiDraftEditorModal({
     draft?.draftType === 'product_setup'
       ? unresolvedSelectionQuery(draft.payload, 'warehouse', 'warehouse_query')
       : '';
+  const duplicateProductCandidates =
+    draft?.draftType === 'product_setup' &&
+    Array.isArray(draft.payload.duplicate_candidates)
+      ? draft.payload.duplicate_candidates.map(objectValue)
+      : [];
   const isPurchaseOrder = draft?.draftType === 'purchase_order';
   const unresolvedOrderPartyQuery =
     draft?.draftType === 'sales_order' || isPurchaseOrder
@@ -638,6 +645,62 @@ export function AiDraftEditorModal({
             </Form.Item>
             {draft.draftType === 'product_setup' ? (
               <>
+                {duplicateProductCandidates.length ? (
+                  <Alert
+                    description="请选择是新增一个独立商品，还是完善下面某个疑似相同商品。系统不会仅凭照片自动覆盖现有商品。"
+                    showIcon
+                    style={{ marginBottom: 16 }}
+                    title={`发现 ${duplicateProductCandidates.length} 个疑似相同商品`}
+                    type="warning"
+                  />
+                ) : null}
+                <div
+                  style={{
+                    display: 'grid',
+                    gap: 12,
+                    gridTemplateColumns: '1fr 1fr',
+                  }}
+                >
+                  <Form.Item
+                    label="处理方式"
+                    name="operation"
+                    rules={[{ required: true }]}
+                  >
+                    <Select
+                      options={[
+                        { label: '新增商品', value: 'create' },
+                        { label: '完善现有商品', value: 'update' },
+                      ]}
+                    />
+                  </Form.Item>
+                  {duplicateProductCandidates.length ? (
+                    <Form.Item label="疑似相同商品">
+                      <Select
+                        allowClear
+                        onChange={(value) => {
+                          if (value) {
+                            form.setFieldsValue({
+                              itemCode: value,
+                              operation: 'update',
+                            });
+                            setDirty(true);
+                          }
+                        }}
+                        options={duplicateProductCandidates.map(
+                          (candidate) => ({
+                            label: `${String(candidate.item_name ?? candidate.item_code ?? '')} · ${String(candidate.item_code ?? '')}${
+                              candidate.specification
+                                ? ` · ${String(candidate.specification)}`
+                                : ''
+                            }`,
+                            value: String(candidate.item_code ?? ''),
+                          }),
+                        )}
+                        placeholder="选择后切换为完善现有商品"
+                      />
+                    </Form.Item>
+                  ) : null}
+                </div>
                 <Form.Item label="商品图片" name="image">
                   <ItemImageUpload />
                 </Form.Item>
@@ -657,6 +720,12 @@ export function AiDraftEditorModal({
                   </Form.Item>
                   <Form.Item label="商品编码" name="itemCode">
                     <Input disabled={isProductUpdate} />
+                  </Form.Item>
+                  <Form.Item label="条码" name="barcode">
+                    <Input maxLength={140} />
+                  </Form.Item>
+                  <Form.Item label="规格" name="specification">
+                    <Input maxLength={500} />
                   </Form.Item>
                   <Form.Item
                     extra={
@@ -953,6 +1022,36 @@ export function AiDraftEditorModal({
                     gridTemplateColumns: '1fr 1fr',
                   }}
                 >
+                  <Form.Item
+                    label="处理方式"
+                    name="operation"
+                    rules={[{ required: true }]}
+                  >
+                    <Select
+                      options={[
+                        { label: '创建新订单', value: 'create' },
+                        { label: '修改现有订单', value: 'update' },
+                      ]}
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    label="来源订单号"
+                    name="orderNumber"
+                    rules={[
+                      {
+                        validator: async (_, value) => {
+                          if (productOperation === 'update' && !value) {
+                            throw new Error('修改订单时必须填写本系统订单号');
+                          }
+                        },
+                      },
+                    ]}
+                  >
+                    <Input
+                      disabled={productOperation !== 'update'}
+                      placeholder="例如 SO-0001 / PO-0001"
+                    />
+                  </Form.Item>
                   <Form.Item
                     extra={
                       unresolvedOrderPartyQuery

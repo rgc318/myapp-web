@@ -396,6 +396,23 @@ export default function AiModelGovernancePage({
       ),
     },
     {
+      title: '特性',
+      search: false,
+      width: 220,
+      render: (_, row) => (
+        <Space size={[4, 4]} wrap>
+          <Tag color={row.supportsStreaming ? 'green' : 'default'}>流式</Tag>
+          <Tag color={row.supportsTools ? 'cyan' : 'default'}>工具调用</Tag>
+          <Tag color={row.supportsJsonSchema ? 'blue' : 'default'}>
+            JSON Schema
+          </Tag>
+          <Tag color={row.supportsVision ? 'purple' : 'default'}>
+            {row.supportsVision ? '图片输入' : '纯文本'}
+          </Tag>
+        </Space>
+      ),
+    },
+    {
       title: '成本',
       search: false,
       width: 220,
@@ -422,6 +439,12 @@ export default function AiModelGovernancePage({
           <Text type="secondary">{row.lastHealthAt || '-'}</Text>
           {row.lastErrorCode ? (
             <Text type="danger">{row.lastErrorCode}</Text>
+          ) : null}
+          {row.lastVisionErrorCode ? (
+            <Text type="warning">视觉：{row.lastVisionErrorCode}</Text>
+          ) : null}
+          {row.lastToolErrorCode ? (
+            <Text type="warning">工具：{row.lastToolErrorCode}</Text>
           ) : null}
         </Space>
       ),

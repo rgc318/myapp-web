@@ -1699,6 +1699,7 @@ describe('AI workspace page', () => {
         content: '给迪莫添加10个库存',
         conversationId: null,
         modelAlias: 'opencode-glm-5.2',
+        retryRunId: null,
       });
     });
     expect(streamAiChatMessage).not.toHaveBeenCalled();
@@ -1729,6 +1730,7 @@ describe('AI workspace page', () => {
         content: '完善迪莫商品资料',
         conversationId: null,
         modelAlias: 'opencode-glm-5.2',
+        retryRunId: null,
       });
     });
     expect(streamAiChatMessage).not.toHaveBeenCalled();

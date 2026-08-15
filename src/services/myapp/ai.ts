@@ -11,6 +11,19 @@ import { getSalesInvoiceDetail, getSalesOrderDetail } from './sales';
 
 export type AiChatRole = 'user' | 'assistant';
 
+export type AiAttachment = {
+  attachmentId: string;
+  contentType: string;
+  filename: string;
+  fileSize: number;
+  height: number;
+  previewUrl: string;
+  retentionUntil: string | null;
+  sha256: string;
+  status: string;
+  width: number;
+};
+
 export type AiScenario =
   | 'auto'
   | 'general'
@@ -26,12 +39,14 @@ export type AiSelectableModel = {
   capability: string;
   displayName: string;
   lastErrorCode: string | null;
+  lastVisionErrorCode?: string | null;
   lastHealthAt: string | null;
   lastHealthStatus: string | null;
   modelAlias: string;
   status: string;
   supportsJsonSchema: boolean;
   supportsStreaming: boolean;
+  supportsVision?: boolean;
 };
 
 export type AiWorkspaceCapabilities = {
@@ -269,6 +284,7 @@ export type AiBusinessDocumentDetail = {
 export type AiChatMessage = {
   role: AiChatRole;
   content: string;
+  attachments?: AiAttachment[];
   citations?: AiCitation[];
 };
 
@@ -550,6 +566,23 @@ function mapCitation(value: unknown): AiCitation {
     label: typeof row.label === 'string' ? row.label : '',
     href: typeof row.href === 'string' ? row.href : null,
     data: readObject(row.data),
+  };
+}
+
+function mapAiAttachment(value: unknown): AiAttachment {
+  const row = readObject(value);
+  return {
+    attachmentId: String(row.attachment_id ?? ''),
+    contentType: String(row.content_type ?? ''),
+    filename: String(row.filename ?? ''),
+    fileSize: toNumber(row.file_size),
+    height: toNumber(row.height),
+    previewUrl: String(row.preview_url ?? ''),
+    retentionUntil:
+      typeof row.retention_until === 'string' ? row.retention_until : null,
+    sha256: String(row.sha256 ?? ''),
+    status: String(row.status ?? ''),
+    width: toNumber(row.width),
   };
 }
 
@@ -967,6 +1000,9 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
     sequence: toNumber(row.sequence),
     role: row.role === 'assistant' ? 'assistant' : 'user',
     content: String(row.content ?? ''),
+    attachments: Array.isArray(row.attachments)
+      ? row.attachments.map(mapAiAttachment)
+      : [],
     scenario:
       typeof row.scenario === 'string' ? (row.scenario as AiScenario) : null,
     runId: typeof row.run_id === 'string' ? row.run_id : null,
@@ -1054,6 +1090,10 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
             typeof row.last_error_code === 'string'
               ? row.last_error_code
               : null,
+          lastVisionErrorCode:
+            typeof row.last_vision_error_code === 'string'
+              ? row.last_vision_error_code
+              : null,
           lastHealthAt:
             typeof row.last_health_at === 'string'
               ? row.last_health_at
@@ -1066,10 +1106,37 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
           status: String(row.status ?? ''),
           supportsJsonSchema: Boolean(row.supports_json_schema),
           supportsStreaming: Boolean(row.supports_streaming),
+          supportsVision: Boolean(row.supports_vision),
         };
       })
       : [],
   };
+}
+
+export async function uploadAiImageAttachment(payload: {
+  contentType: string;
+  fileContentBase64: string;
+  filename: string;
+}): Promise<AiAttachment> {
+  const result = await runGatewayMutation<Record<string, unknown>>(
+    'upload_ai_image_attachment_v1',
+    {
+      notifyError: false,
+      payload: {
+        content_type: payload.contentType,
+        file_content_base64: payload.fileContentBase64,
+        filename: payload.filename,
+      },
+    },
+  );
+  return mapAiAttachment(result.data);
+}
+
+export async function discardAiAttachment(attachmentId: string): Promise<void> {
+  await runGatewayMutation('discard_ai_attachment_v1', {
+    notifyError: false,
+    payload: { attachment_id: attachmentId },
+  });
 }
 
 export async function listAiConversations(params?: {
@@ -1208,6 +1275,7 @@ export async function submitAiFeedback(payload: {
 
 export async function sendAiChatMessage(payload: {
   content: string;
+  attachmentIds?: string[];
   conversationId?: string | null;
   scenario?: AiScenario;
   company?: string | null;
@@ -1215,6 +1283,9 @@ export async function sendAiChatMessage(payload: {
 }): Promise<AiChatResult> {
   const result = await callGatewayMethod<Record<string, unknown>>('chat_ai_v1', {
     content: payload.content,
+    ...(payload.attachmentIds?.length
+      ? { attachment_ids: payload.attachmentIds }
+      : {}),
     scenario: payload.scenario ?? 'auto',
     ...(payload.conversationId
       ? { conversation_id: payload.conversationId }
@@ -1227,16 +1298,22 @@ export async function sendAiChatMessage(payload: {
 
 export async function generateAiSalesOrderDraft(payload: {
   content: string;
+  attachmentIds?: string[];
   conversationId?: string | null;
   company: string;
   modelAlias?: string | null;
+  retryRunId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_sales_order_draft_v1',
     {
       content: payload.content,
+      ...(payload.attachmentIds?.length
+        ? { attachment_ids: payload.attachmentIds }
+        : {}),
       company: payload.company,
       ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+      ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -1248,16 +1325,22 @@ export async function generateAiSalesOrderDraft(payload: {
 
 export async function generateAiPurchaseOrderDraft(payload: {
   content: string;
+  attachmentIds?: string[];
   conversationId?: string | null;
   company: string;
   modelAlias?: string | null;
+  retryRunId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_purchase_order_draft_v1',
     {
       content: payload.content,
+      ...(payload.attachmentIds?.length
+        ? { attachment_ids: payload.attachmentIds }
+        : {}),
       company: payload.company,
       ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+      ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
       ...(payload.conversationId ? { conversation_id: payload.conversationId } : {}),
     },
   );
@@ -1267,16 +1350,22 @@ export async function generateAiPurchaseOrderDraft(payload: {
 
 export async function generateAiInventoryAdjustmentDraft(payload: {
   content: string;
+  attachmentIds?: string[];
   conversationId?: string | null;
   company: string;
   modelAlias?: string | null;
+  retryRunId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_inventory_adjustment_draft_v1',
     {
       content: payload.content,
+      ...(payload.attachmentIds?.length
+        ? { attachment_ids: payload.attachmentIds }
+        : {}),
       company: payload.company,
       ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+      ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -1286,10 +1375,25 @@ export async function generateAiInventoryAdjustmentDraft(payload: {
   return { ...mapChatResult(data), draft: mapAiDraft(data.draft) };
 }
 
-export async function resolveAiScenario(content: string): Promise<AiScenario> {
+export async function resolveAiScenario(
+  input:
+    | string
+    | {
+        attachmentIds?: string[];
+        content: string;
+        modelAlias?: string | null;
+      },
+): Promise<AiScenario> {
+  const payload = typeof input === 'string' ? { content: input } : input;
   const result = await callGatewayMethod<Record<string, unknown>>(
     'resolve_ai_scenario_v1',
-    { content },
+    {
+      content: payload.content,
+      ...(payload.attachmentIds?.length
+        ? { attachment_ids: payload.attachmentIds }
+        : {}),
+      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+    },
   );
   const scenario = String(readObject(result.data).scenario ?? 'general');
   return scenario as AiScenario;
@@ -1297,16 +1401,22 @@ export async function resolveAiScenario(content: string): Promise<AiScenario> {
 
 export async function generateAiProductSetupDraft(payload: {
   content: string;
+  attachmentIds?: string[];
   conversationId?: string | null;
   company: string;
   modelAlias?: string | null;
+  retryRunId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_product_setup_draft_v1',
     {
       content: payload.content,
+      ...(payload.attachmentIds?.length
+        ? { attachment_ids: payload.attachmentIds }
+        : {}),
       company: payload.company,
       ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+      ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
       ...(payload.conversationId
         ? { conversation_id: payload.conversationId }
         : {}),
@@ -1431,6 +1541,7 @@ export async function restoreAiDraftVersion(
 export async function streamAiChatMessage(
   payload: {
     content: string;
+    attachmentIds?: string[];
     conversationId?: string | null;
     scenario?: AiScenario;
     company?: string | null;
@@ -1455,6 +1566,9 @@ export async function streamAiChatMessage(
         },
         body: JSON.stringify({
           content: payload.content,
+          ...(payload.attachmentIds?.length
+            ? { attachment_ids: payload.attachmentIds }
+            : {}),
           scenario: payload.scenario ?? 'auto',
           ...(payload.conversationId
             ? { conversation_id: payload.conversationId }

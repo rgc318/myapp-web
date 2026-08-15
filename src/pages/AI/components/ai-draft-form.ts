@@ -12,6 +12,7 @@ export type AiDraftItemFormValues = {
 
 export type AiDraftFormValues = {
   adjustmentType?: 'set_target' | 'increase' | 'decrease';
+  barcode?: string;
   brand?: string;
   company?: string;
   currency?: string;
@@ -23,6 +24,8 @@ export type AiDraftFormValues = {
   itemName?: string;
   items?: AiDraftItemFormValues[];
   openingQty?: number;
+  operation?: 'create' | 'update';
+  orderNumber?: string;
   party?: string;
   postingDate?: Dayjs;
   quantity?: number;
@@ -31,6 +34,7 @@ export type AiDraftFormValues = {
   retailRate?: number;
   standardBuyingRate?: number;
   standardSellingRate?: number;
+  specification?: string;
   stockUom?: string;
   supplierRef?: string;
   targetDate?: Dayjs;
@@ -59,6 +63,7 @@ export type AiDraftFormFieldIssue = {
 
 const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   adjustmentType: '调整方式',
+  barcode: '条码',
   brand: '品牌',
   company: '公司',
   currency: '币种',
@@ -70,6 +75,8 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   itemName: '商品名称',
   items: '商品明细',
   openingQty: '初始库存数量',
+  operation: '处理方式',
+  orderNumber: '订单号',
   party: '往来单位',
   postingDate: '过账日期',
   quantity: '数量',
@@ -78,6 +85,7 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   retailRate: '零售价',
   standardBuyingRate: '成本价（默认采购价）',
   standardSellingRate: '标准售价（默认单价）',
+  specification: '规格',
   stockUom: '库存基准单位',
   supplierRef: '供应商参考号',
   targetDate: '交货/到货日期',
@@ -89,8 +97,11 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
 
 const PRODUCT_FIELDS: (keyof AiDraftFormValues)[] = [
   'company',
+  'operation',
   'itemName',
   'itemCode',
+  'barcode',
+  'specification',
   'image',
   'itemGroup',
   'brand',
@@ -118,6 +129,8 @@ const INVENTORY_FIELDS: (keyof AiDraftFormValues)[] = [
 
 const ORDER_FIELDS: (keyof AiDraftFormValues)[] = [
   'company',
+  'operation',
+  'orderNumber',
   'party',
   'warehouse',
   'transactionDate',
@@ -257,6 +270,7 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
   if (draft.draftType === 'product_setup') {
     return {
       brand: textValue(payload.brand),
+      barcode: textValue(payload.barcode),
       company: textValue(payload.company) ?? draft.company ?? undefined,
       currency: textValue(payload.currency) ?? 'CNY',
       description: textValue(payload.description),
@@ -265,12 +279,14 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       itemGroup: textValue(payload.item_group),
       itemName: textValue(payload.item_name),
       openingQty: numberValue(payload.opening_qty),
+      operation: payload.operation === 'update' ? 'update' : 'create',
       standardBuyingRate:
         numberValue(payload.standard_buying_rate) ??
         numberValue(payload.valuation_rate),
       retailRate: numberValue(payload.retail_rate),
       standardSellingRate: numberValue(payload.standard_selling_rate),
       stockUom: textValue(payload.stock_uom),
+      specification: textValue(payload.specification),
       warehouse: textValue(payload.warehouse),
       wholesaleRate: numberValue(payload.wholesale_rate),
     };
@@ -298,6 +314,8 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
   }
   return {
     company: textValue(payload.company) ?? draft.company ?? undefined,
+    operation: payload.operation === 'update' ? 'update' : 'create',
+    orderNumber: textValue(payload.order_number),
     defaultMode:
       (draft.draftType === 'purchase_order'
         ? textValue(payload.default_purchase_mode)
@@ -533,10 +551,12 @@ export function getAiDraftFormFieldIssues(
 
 export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
   if (draft.draftType === 'product_setup') {
-    const operation =
-      draft.payload.operation === 'update' ? 'update' : 'create';
+    const operation = values.operation === 'update' ? 'update' : 'create';
     return {
       _state: draft.payload._state,
+      source_attachments: draft.payload.source_attachments,
+      duplicate_candidates: draft.payload.duplicate_candidates,
+      barcode: values.barcode,
       brand: values.brand,
       brand_query: values.brand
         ? undefined
@@ -558,6 +578,7 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       standard_buying_rate: values.standardBuyingRate,
       standard_selling_rate: values.standardSellingRate,
       stock_uom: values.stockUom,
+      specification: values.specification,
       warehouse: operation === 'create' ? values.warehouse : undefined,
       warehouse_query:
         operation === 'create' && !values.warehouse
@@ -595,7 +616,18 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
   const originalItems = Array.isArray(draft.payload.items)
     ? draft.payload.items.map(readPayloadRow)
     : [];
+  const operation = values.operation === 'update' ? 'update' : 'create';
+  const originalValues = getAiDraftFormValues(draft);
+  const updateItemsExplicit =
+    operation === 'update' &&
+    (draft.payload.update_items_explicit === true ||
+      !valuesEqual('items', originalValues.items, values.items));
   return {
+    source_attachments: draft.payload.source_attachments,
+    operation,
+    order_number: values.orderNumber,
+    source_document_type: draft.payload.source_document_type,
+    update_items_explicit: updateItemsExplicit,
     ...(draft.draftType === 'purchase_order'
       ? {
           supplier: values.party,

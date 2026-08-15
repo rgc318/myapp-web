@@ -581,6 +581,38 @@ describe('AI domain service', () => {
     expect(result.draft.validation.readyForHandoff).toBe(true);
   });
 
+  it('passes the failed run id when retrying a multimodal draft', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: {
+        conversation: 'AI-CONV-RETRY',
+        run_id: 'AI-RUN-RETRY',
+        message: { role: 'assistant', content: '已重试商品草稿' },
+        draft: {
+          name: 'AI-DRAFT-RETRY',
+          title: '商品草稿',
+          status: 'draft',
+          draft_type: 'product_setup',
+          payload: {},
+          validation: { ready_for_handoff: true, errors: [], warnings: [] },
+        },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await generateAiProductSetupDraft({
+      company: 'rgc (Demo)',
+      content: '按照照片新增商品',
+      conversationId: 'AI-CONV-RETRY',
+      retryRunId: 'AI-RUN-FAILED',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'generate_ai_product_setup_draft_v1',
+      expect.objectContaining({ retry_run_id: 'AI-RUN-FAILED' }),
+    );
+  });
+
   it('resolves product creation and maps a product setup draft', async () => {
     mockedCallGatewayMethod
       .mockResolvedValueOnce({

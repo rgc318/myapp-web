@@ -71,6 +71,8 @@ export type AiModel = {
   lastErrorCode: string | null;
   lastHealthAt: string | null;
   lastHealthStatus: string | null;
+  lastToolErrorCode?: string | null;
+  lastVisionErrorCode?: string | null;
   modelAlias: string;
   modified: string | null;
   outputCost: number;
@@ -82,6 +84,7 @@ export type AiModel = {
   status: string;
   supportsJsonSchema: boolean;
   supportsStreaming: boolean;
+  supportsTools?: boolean;
   supportsVision: boolean;
 };
 
@@ -339,6 +342,8 @@ export function mapAiModel(value: unknown): AiModel {
     lastErrorCode: text(row.last_error_code),
     lastHealthAt: text(row.last_health_at),
     lastHealthStatus: text(row.last_health_status),
+    lastToolErrorCode: text(row.last_tool_error_code),
+    lastVisionErrorCode: text(row.last_vision_error_code),
     modelAlias: String(row.model_alias ?? ''),
     modified: text(row.modified),
     outputCost: toNumber(row.output_cost),
@@ -350,6 +355,7 @@ export function mapAiModel(value: unknown): AiModel {
     status: String(row.status ?? ''),
     supportsJsonSchema: Boolean(row.supports_json_schema),
     supportsStreaming: Boolean(row.supports_streaming),
+    supportsTools: Boolean(row.supports_tools),
     supportsVision: Boolean(row.supports_vision),
   };
 }

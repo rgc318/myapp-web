@@ -222,6 +222,14 @@ function orderSummaryItems(draft: AiDraft): SummaryItem[] {
 
   return [
     {
+      key: 'operation',
+      label: '操作',
+      value:
+        payload.operation === 'update'
+          ? `修改订单 ${optionalText(payload.order_number) ?? '-'}`
+          : '创建新订单',
+    },
+    {
       key: 'party',
       label: isPurchase ? '供应商' : '客户',
       value: party ?? (partyQuery ? `待匹配：${partyQuery}` : '-'),

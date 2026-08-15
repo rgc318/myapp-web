@@ -248,6 +248,50 @@ describe('AI draft conflict form helpers', () => {
     expect(payload.warehouse).toBeUndefined();
   });
 
+  it('only marks order item replacement explicit when rows changed or the source draft required it', () => {
+    const draft = {
+      company: 'Demo Company',
+      draftType: 'sales_order',
+      payload: {
+        company: 'Demo Company',
+        customer: 'CUST-1',
+        operation: 'update',
+        order_number: 'SO-001',
+        transaction_date: '2026-08-14',
+        delivery_date: '2026-08-15',
+        update_items_explicit: false,
+        items: [
+          {
+            item_code: 'ITEM-001',
+            price: 10,
+            qty: 1,
+            uom: 'Unit',
+            warehouse: 'Stores - RD',
+          },
+        ],
+      },
+    } as unknown as AiDraft;
+    const values = getAiDraftFormValues(draft);
+
+    expect(
+      buildAiDraftPayload(draft, { ...values, remarks: '只改备注' }),
+    ).toEqual(expect.objectContaining({ update_items_explicit: false }));
+    expect(
+      buildAiDraftPayload(draft, {
+        ...values,
+        items: [{ ...(values.items?.[0] ?? {}), qty: 2 }],
+      }),
+    ).toEqual(expect.objectContaining({ update_items_explicit: true }));
+
+    const extractedDraft = {
+      ...draft,
+      payload: { ...draft.payload, update_items_explicit: true },
+    } as unknown as AiDraft;
+    expect(
+      buildAiDraftPayload(extractedDraft, getAiDraftFormValues(extractedDraft)),
+    ).toEqual(expect.objectContaining({ update_items_explicit: true }));
+  });
+
   it('treats order items as one explicit conflict field and never merges rows silently', () => {
     const baseItems = [
       {

@@ -8,6 +8,7 @@ import {
   InboxOutlined,
   LockOutlined,
   MenuOutlined,
+  PaperClipOutlined,
   RobotOutlined,
   SafetyCertificateOutlined,
   SearchOutlined,
@@ -34,6 +35,7 @@ import {
   Button,
   Drawer,
   Form,
+  Image,
   Input,
   Modal,
   message,
@@ -42,6 +44,7 @@ import {
   Spin,
   Tag,
   Typography,
+  Upload,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -49,6 +52,7 @@ import { RemoteLinkSelect } from '@/components';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import {
   type AiAgentApproval,
+  type AiAttachment,
   type AiBusinessDocumentResult,
   type AiBusinessResultSet,
   type AiChatMessage,
@@ -65,6 +69,7 @@ import {
   type AiWorkspaceCapabilities,
   archiveAiConversation,
   cancelAiRun,
+  discardAiAttachment,
   discardAiDraft,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
@@ -86,7 +91,9 @@ import {
   reviewAiAgentApproval,
   streamAiChatMessage,
   submitAiFeedback,
+  uploadAiImageAttachment,
 } from '@/services/myapp/ai';
+import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { AiDraftEditorModal } from './components/AiDraftEditorModal';
 import { AiDraftVersionList } from './components/AiDraftReview';
 import {
@@ -120,6 +127,21 @@ type ChatRow = AiMessageRow & {
 
 const AI_MESSAGE_PAGE_SIZE = 40;
 const NEW_CONVERSATION_DRAFT_KEY = '__new_ai_conversation__';
+const AI_ATTACHMENT_LIMIT = 4;
+const AI_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
+const AI_ATTACHMENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('图片读取失败'));
+    reader.onload = () => {
+      const value = String(reader.result ?? '');
+      resolve(value.includes(',') ? value.split(',', 2)[1] : value);
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 const EMPTY_MESSAGE_PAGINATION: AiConversationMessagePagination = {
   hasMore: false,
@@ -136,15 +158,6 @@ const BUSINESS_RESULT_CITATION_TYPES = new Set([
   'purchase_order',
   'purchase_invoice',
 ]);
-
-function isDraftScenario(value: AiScenario) {
-  return [
-    'sales_order_draft',
-    'purchase_order_draft',
-    'inventory_adjustment_draft',
-    'product_setup_draft',
-  ].includes(value);
-}
 
 function resolveRunDisplayStatus(
   status: string | null | undefined,
@@ -243,6 +256,7 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
     id: item.name,
     role: item.role,
     content: item.content,
+    attachments: item.attachments,
     citations: item.citations,
     error:
       item.run?.status === 'failed'
@@ -277,6 +291,10 @@ export default function AiPage() {
   }>();
   const { defaultCompany } = useWorkspacePreferences();
   const [draft, setDraft] = useState('');
+  const [pendingAttachments, setPendingAttachments] = useState<AiAttachment[]>(
+    [],
+  );
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
@@ -393,10 +411,60 @@ export default function AiPage() {
         model.displayName === model.modelAlias
           ? model.displayName
           : `${model.displayName} · ${model.modelAlias}`
-      }${model.lastHealthStatus === 'unavailable' ? ' · 不可用' : ''}`,
+      }${model.supportsVision ? ' · 图片输入' : ''}${
+        model.lastHealthStatus === 'unavailable' ? ' · 不可用' : ''
+      }`,
       value: model.modelAlias,
     })),
   ];
+
+  const uploadAttachment = async (file: File) => {
+    if (!AI_ATTACHMENT_TYPES.has(file.type)) {
+      message.error('AI 图片只支持 JPG、PNG 和 WebP。');
+      return Upload.LIST_IGNORE;
+    }
+    if (file.size > AI_ATTACHMENT_MAX_BYTES) {
+      message.error('单张 AI 图片不能超过 20MB。');
+      return Upload.LIST_IGNORE;
+    }
+    if (pendingAttachments.length >= AI_ATTACHMENT_LIMIT) {
+      message.warning(`单条消息最多上传 ${AI_ATTACHMENT_LIMIT} 张图片。`);
+      return Upload.LIST_IGNORE;
+    }
+    setAttachmentUploading(true);
+    try {
+      const attachment = await uploadAiImageAttachment({
+        contentType: file.type,
+        fileContentBase64: await readFileAsBase64(file),
+        filename: file.name,
+      });
+      setPendingAttachments((current) =>
+        current.some((item) => item.attachmentId === attachment.attachmentId)
+          ? current
+          : [...current, attachment].slice(0, AI_ATTACHMENT_LIMIT),
+      );
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : 'AI 图片上传失败',
+      );
+    } finally {
+      setAttachmentUploading(false);
+    }
+    return Upload.LIST_IGNORE;
+  };
+
+  const removePendingAttachment = async (attachment: AiAttachment) => {
+    try {
+      await discardAiAttachment(attachment.attachmentId);
+      setPendingAttachments((current) =>
+        current.filter((item) => item.attachmentId !== attachment.attachmentId),
+      );
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : 'AI 图片删除失败',
+      );
+    }
+  };
 
   const setComposerDraft = useCallback(
     (value: string, targetConversationId?: string | null) => {
@@ -704,22 +772,48 @@ export default function AiPage() {
     modelAliasValue?: string | null,
     retryContext?: { messageId: string; runId: string } | null,
   ) => {
-    const content = (contentValue ?? draft).trim();
+    const rawContent = (contentValue ?? draft).trim();
+    const attachments = retryContext ? [] : [...pendingAttachments];
+    const attachmentIds = attachments.map((item) => item.attachmentId);
+    const content =
+      rawContent ||
+      (attachments.length
+        ? '请分析我上传的图片，并根据明确可见的信息处理；不确定的字段不要猜测。'
+        : '');
     const requestedScenario = scenarioValue ?? scenario;
     const requestedModelAlias =
       modelAliasValue === undefined ? selectedModelAlias : modelAliasValue;
-    if (!content || loading) {
+    if ((!content && !attachments.length) || loading || attachmentUploading) {
       return;
     }
     if (selectedConversationStatus === 'archived' && conversationId) {
       message.warning('已归档会话为只读状态，请新建会话后继续提问。');
       return;
     }
+    const fixedModel = requestedModelAlias
+      ? selectableModels.find(
+          (model) => model.modelAlias === requestedModelAlias,
+        )
+      : null;
+    if (attachments.length && fixedModel && !fixedModel.supportsVision) {
+      message.warning(
+        `模型 ${fixedModel.displayName} 不支持图片输入，请切换为自动模型或多模态模型。`,
+      );
+      return;
+    }
     let resolvedScenario = requestedScenario;
     let requestScenario = requestedScenario;
     if (requestedScenario === 'auto') {
       try {
-        resolvedScenario = await resolveAiScenario(content);
+        resolvedScenario = await resolveAiScenario(
+          attachmentIds.length
+            ? {
+                attachmentIds,
+                content,
+                modelAlias: requestedModelAlias,
+              }
+            : content,
+        );
         requestScenario = [
           'sales_order_draft',
           'purchase_order_draft',
@@ -752,7 +846,10 @@ export default function AiPage() {
       return;
     }
 
-    const userMessage = createMessage('user', content);
+    const userMessage = {
+      ...createMessage('user', rawContent || '已上传图片'),
+      attachments,
+    };
     const assistantMessage: ChatRow = {
       ...createMessage('assistant', ''),
       ...(retryContext ? { id: retryContext.messageId } : {}),
@@ -783,6 +880,7 @@ export default function AiPage() {
     setInspectorOpen(false);
     setInspectedMessageId(null);
     setComposerDraft('', conversationId);
+    setPendingAttachments([]);
     // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
     // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
     setScenario('auto');
@@ -813,10 +911,12 @@ export default function AiPage() {
           startedAt: current?.startedAt ?? Date.now(),
         }));
         const draftPayload = {
+          ...(attachmentIds.length ? { attachmentIds } : {}),
           company: effectiveCompany as string,
           content,
           conversationId,
           modelAlias: requestedModelAlias,
+          retryRunId: retryContext?.runId ?? null,
         };
         const result =
           resolvedScenario === 'sales_order_draft'
@@ -871,6 +971,7 @@ export default function AiPage() {
       const result = await streamAiChatMessage(
         {
           company: effectiveCompany,
+          attachmentIds,
           content,
           conversationId,
           modelAlias: requestedModelAlias,
@@ -1727,7 +1828,25 @@ export default function AiPage() {
         : 'success',
     content:
       item.role === 'user' ? (
-        item.content
+        <Space align="end" orientation="vertical" size={8}>
+          {item.attachments?.length ? (
+            <Image.PreviewGroup>
+              <Space size={6} wrap>
+                {item.attachments.map((attachment) => (
+                  <Image
+                    alt={attachment.filename}
+                    height={88}
+                    key={attachment.attachmentId}
+                    src={resolveMediaUrl(attachment.previewUrl)}
+                    style={{ borderRadius: 8, objectFit: 'cover' }}
+                    width={88}
+                  />
+                ))}
+              </Space>
+            </Image.PreviewGroup>
+          ) : null}
+          {item.content ? <span>{item.content}</span> : null}
+        </Space>
       ) : (
         <AiMessageContent
           citations={item.citations}
@@ -1771,8 +1890,7 @@ export default function AiPage() {
                     retryRequest.content,
                     retryRequest.scenario,
                     selectedModelAlias,
-                    retryRequest.runId &&
-                      !isDraftScenario(retryRequest.scenario)
+                    retryRequest.runId
                       ? {
                           messageId: retryRequest.messageId,
                           runId: retryRequest.runId,
@@ -2145,6 +2263,87 @@ export default function AiPage() {
                     type="info"
                   />
                 ) : null}
+                <Space
+                  align="start"
+                  orientation="vertical"
+                  size={8}
+                  style={{ marginBottom: 8, width: '100%' }}
+                >
+                  {pendingAttachments.length ? (
+                    <Image.PreviewGroup>
+                      <Space size={8} wrap>
+                        {pendingAttachments.map((attachment) => (
+                          <div
+                            key={attachment.attachmentId}
+                            style={{ position: 'relative' }}
+                          >
+                            <Image
+                              alt={attachment.filename}
+                              height={72}
+                              src={resolveMediaUrl(attachment.previewUrl)}
+                              style={{ borderRadius: 8, objectFit: 'cover' }}
+                              width={72}
+                            />
+                            <Button
+                              aria-label={`删除 ${attachment.filename}`}
+                              danger
+                              disabled={loading}
+                              onClick={() =>
+                                void removePendingAttachment(attachment)
+                              }
+                              shape="circle"
+                              size="small"
+                              style={{
+                                position: 'absolute',
+                                right: -6,
+                                top: -6,
+                              }}
+                            >
+                              ×
+                            </Button>
+                          </div>
+                        ))}
+                      </Space>
+                    </Image.PreviewGroup>
+                  ) : null}
+                  <Space wrap>
+                    <Upload
+                      accept="image/jpeg,image/png,image/webp"
+                      beforeUpload={uploadAttachment}
+                      disabled={
+                        loading ||
+                        attachmentUploading ||
+                        pendingAttachments.length >= AI_ATTACHMENT_LIMIT
+                      }
+                      multiple
+                      showUploadList={false}
+                    >
+                      <Button
+                        icon={<PaperClipOutlined />}
+                        loading={attachmentUploading}
+                        size="small"
+                      >
+                        添加图片
+                      </Button>
+                    </Upload>
+                    {pendingAttachments.length ? (
+                      <Typography.Text type="secondary">
+                        {pendingAttachments.length}/{AI_ATTACHMENT_LIMIT} ·
+                        保留完整画面供 AI 识别
+                      </Typography.Text>
+                    ) : null}
+                    {pendingAttachments.length && !draft.trim() ? (
+                      <Button
+                        disabled={loading || attachmentUploading}
+                        onClick={() => void submit()}
+                        size="small"
+                        type="primary"
+                      >
+                        发送图片
+                      </Button>
+                    ) : null}
+                  </Space>
+                </Space>
                 <Sender
                   autoSize={{ minRows: 2, maxRows: 7 }}
                   disabled={
@@ -2323,8 +2522,7 @@ export default function AiPage() {
                         retryRequest.content,
                         retryRequest.scenario,
                         selectedModelAlias,
-                        retryRequest.runId &&
-                          !isDraftScenario(retryRequest.scenario)
+                        retryRequest.runId
                           ? {
                               messageId: retryRequest.messageId,
                               runId: retryRequest.runId,
