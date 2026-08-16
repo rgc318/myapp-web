@@ -2,6 +2,7 @@ import { callGatewayMethod } from './api-client';
 import { buildMyAppApiUrl } from './api-base';
 import { readObject, toNumber, toStringList } from './api-utils';
 import { getMyAppAuthHeaders } from './auth-storage';
+import { resolveMediaUrl } from './media-url';
 import { runGatewayMutation } from './mutation';
 import {
   getPurchaseInvoiceDetail,
@@ -1130,6 +1131,27 @@ export async function uploadAiImageAttachment(payload: {
     },
   );
   return mapAiAttachment(result.data);
+}
+
+export async function fetchAiAttachmentPreview(
+  previewUrl: string,
+): Promise<Blob> {
+  const resolvedUrl = resolveMediaUrl(previewUrl);
+  if (!resolvedUrl) {
+    throw new Error('AI 图片预览地址为空');
+  }
+
+  const response = await fetch(resolvedUrl, {
+    credentials: 'include',
+    headers: {
+      Accept: 'image/*',
+      ...(getMyAppAuthHeaders() ?? {}),
+    },
+  });
+  if (!response.ok) {
+    throw new Error('AI 图片预览加载失败');
+  }
+  return response.blob();
 }
 
 export async function discardAiAttachment(attachmentId: string): Promise<void> {

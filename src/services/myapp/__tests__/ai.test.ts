@@ -3,6 +3,7 @@ import {
   AiDraftVersionConflictError,
   cancelAiRun,
   executeAiDraft,
+  fetchAiAttachmentPreview,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
   getAiConversation,
@@ -42,6 +43,28 @@ describe('AI domain service', () => {
   beforeEach(() => {
     mockedCallGatewayMethod.mockReset();
     mockedRunGatewayMutation.mockReset();
+    window.localStorage.clear();
+  });
+
+  it('loads private AI image previews with the current JWT header', async () => {
+    window.localStorage.setItem('myapp-web.access-token', 'access-token');
+    const previewBlob = new Blob(['image'], { type: 'image/webp' });
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      blob: async () => previewBlob,
+      ok: true,
+    } as Response);
+
+    await expect(
+      fetchAiAttachmentPreview('/private/files/ai-input.webp'),
+    ).resolves.toBe(previewBlob);
+    expect(fetchMock).toHaveBeenCalledWith('/private/files/ai-input.webp', {
+      credentials: 'include',
+      headers: {
+        Accept: 'image/*',
+        Authorization: 'Bearer access-token',
+      },
+    });
+    fetchMock.mockRestore();
   });
 
   it('executes the confirmed draft with a deterministic version idempotency key', async () => {

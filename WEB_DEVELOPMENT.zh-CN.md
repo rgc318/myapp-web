@@ -1578,6 +1578,7 @@ Web 用户模块使用 `src/services/myapp/users.ts` 作为领域服务，不在
 AI Web 的信息架构、组件选型、状态与数据流、权限边界、异常恢复和验收门禁统一记录在 `AI_WEB_FRONTEND_DESIGN.zh-CN.md`。本节保留当前实现约定，新增或调整 AI 页面时必须同步核对该设计文档和后端 `AI_TECH_DESIGN.zh-CN.md`。
 
 - `/ai` 使用 Ant Design Pro 官方 `@ant-design/x` 组件体系实现企业 AI 工作台：`Conversations` 管理活跃/归档会话，`Bubble` 展示消息，`Sender` 负责发送和停止生成，`Welcome` / `Prompts` 提供能力入口，`Sources` / `Actions` 展示业务来源和反馈。
+- AI 图片输入复用 `Sender` 的 `header`、`prefix`、`suffix` 和 `onPasteFile`：附件入口、待发送缩略图、计数和图片-only 发送都保持在同一个输入器内，同时支持选择、剪贴板粘贴和拖拽。AI Attachment 为私有文件，缩略图通过携带 JWT 的 fetch 转为 Blob URL；页面不得直接用 `/private/files/...` 作为 `<img src>`。
 - AI 消息正文使用 `@ant-design/x-markdown`；商品、订单、报表和草稿事实继续由结构化 citation 组件展示，不从 Markdown 或模型文本猜测业务字段。Markdown 正文保持适合阅读的最大行宽，长 URL/连续字符允许换行，代码块和宽表格只在自身区域横向滚动，不得撑开消息气泡或工作台。
 - 单据查询使用版本化 `business-result-set-v1`：`src/services/myapp/ai.ts` 把结果集元数据和逐单据 citation 映射为 `AiBusinessResultSet`，页面按类型使用 `Tabs + ProTable` 展示，不再同时重复渲染业务来源列表、逐条卡片和 Markdown 明细清单。
 - 单据 citation 在模型首 Token 前已经到达时，页面必须立即展示表格并提示“业务结果已返回，正在生成摘要”；模型摘要放在结构化结果之后。

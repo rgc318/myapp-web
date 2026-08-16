@@ -43,6 +43,7 @@ import {
   Space,
   Spin,
   Tag,
+  Tooltip,
   Typography,
   Upload,
 } from 'antd';
@@ -93,7 +94,7 @@ import {
   submitAiFeedback,
   uploadAiImageAttachment,
 } from '@/services/myapp/ai';
-import { resolveMediaUrl } from '@/services/myapp/media-url';
+import { AiAttachmentPreview } from './components/AiAttachmentPreview';
 import { AiDraftEditorModal } from './components/AiDraftEditorModal';
 import { AiDraftVersionList } from './components/AiDraftReview';
 import {
@@ -295,6 +296,7 @@ export default function AiPage() {
     [],
   );
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [attachmentDragActive, setAttachmentDragActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
@@ -383,6 +385,8 @@ export default function AiPage() {
     null,
   );
   const streamAbortRef = useRef<AbortController | null>(null);
+  const attachmentUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingAttachmentsRef = useRef<AiAttachment[]>([]);
   const approvalRefreshSequenceRef = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
   const draftByConversationRef = useRef<Record<string, string>>({});
@@ -418,47 +422,91 @@ export default function AiPage() {
     })),
   ];
 
-  const uploadAttachment = async (file: File) => {
-    if (!AI_ATTACHMENT_TYPES.has(file.type)) {
-      message.error('AI 图片只支持 JPG、PNG 和 WebP。');
-      return Upload.LIST_IGNORE;
+  const enqueueAttachmentFiles = (input: FileList | File[]) => {
+    const files = Array.from(input);
+    if (!files.length) return;
+    if (loading) {
+      message.warning('请等待当前回答结束后再添加图片。');
+      return;
     }
-    if (file.size > AI_ATTACHMENT_MAX_BYTES) {
-      message.error('单张 AI 图片不能超过 20MB。');
-      return Upload.LIST_IGNORE;
+    if (selectedConversationStatus === 'archived' && conversationId) {
+      message.warning('归档会话不能继续添加图片，请先新建会话。');
+      return;
     }
-    if (pendingAttachments.length >= AI_ATTACHMENT_LIMIT) {
-      message.warning(`单条消息最多上传 ${AI_ATTACHMENT_LIMIT} 张图片。`);
-      return Upload.LIST_IGNORE;
-    }
-    setAttachmentUploading(true);
-    try {
-      const attachment = await uploadAiImageAttachment({
-        contentType: file.type,
-        fileContentBase64: await readFileAsBase64(file),
-        filename: file.name,
+
+    const supportedFiles = files.filter((file) => {
+      if (!AI_ATTACHMENT_TYPES.has(file.type)) {
+        message.error(
+          `${file.name || '该文件'} 不是支持的 JPG、PNG 或 WebP 图片。`,
+        );
+        return false;
+      }
+      if (file.size > AI_ATTACHMENT_MAX_BYTES) {
+        message.error(`${file.name || '该图片'} 超过 20MB，无法上传。`);
+        return false;
+      }
+      return true;
+    });
+    if (!supportedFiles.length) return;
+
+    attachmentUploadQueueRef.current = attachmentUploadQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        setAttachmentUploading(true);
+        try {
+          for (const file of supportedFiles) {
+            if (pendingAttachmentsRef.current.length >= AI_ATTACHMENT_LIMIT) {
+              message.warning(
+                `单条消息最多上传 ${AI_ATTACHMENT_LIMIT} 张图片。`,
+              );
+              break;
+            }
+            try {
+              const attachment = await uploadAiImageAttachment({
+                contentType: file.type,
+                fileContentBase64: await readFileAsBase64(file),
+                filename: file.name || `粘贴图片-${Date.now()}.png`,
+              });
+              const current = pendingAttachmentsRef.current;
+              if (
+                !current.some(
+                  (item) => item.attachmentId === attachment.attachmentId,
+                )
+              ) {
+                const next = [...current, attachment].slice(
+                  0,
+                  AI_ATTACHMENT_LIMIT,
+                );
+                pendingAttachmentsRef.current = next;
+                setPendingAttachments(next);
+              }
+            } catch (caught) {
+              message.error(
+                caught instanceof Error ? caught.message : 'AI 图片上传失败',
+              );
+            }
+          }
+        } finally {
+          setAttachmentUploading(false);
+        }
       });
-      setPendingAttachments((current) =>
-        current.some((item) => item.attachmentId === attachment.attachmentId)
-          ? current
-          : [...current, attachment].slice(0, AI_ATTACHMENT_LIMIT),
-      );
-    } catch (caught) {
-      message.error(
-        caught instanceof Error ? caught.message : 'AI 图片上传失败',
-      );
-    } finally {
-      setAttachmentUploading(false);
-    }
+  };
+
+  const uploadAttachment = (file: File) => {
+    enqueueAttachmentFiles([file]);
     return Upload.LIST_IGNORE;
   };
 
   const removePendingAttachment = async (attachment: AiAttachment) => {
     try {
       await discardAiAttachment(attachment.attachmentId);
-      setPendingAttachments((current) =>
-        current.filter((item) => item.attachmentId !== attachment.attachmentId),
-      );
+      setPendingAttachments((current) => {
+        const next = current.filter(
+          (item) => item.attachmentId !== attachment.attachmentId,
+        );
+        pendingAttachmentsRef.current = next;
+        return next;
+      });
     } catch (caught) {
       message.error(
         caught instanceof Error ? caught.message : 'AI 图片删除失败',
@@ -495,6 +543,10 @@ export default function AiPage() {
   useEffect(() => {
     activeConversationIdRef.current = conversationId;
   }, [conversationId]);
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
 
   useEffect(() => {
     const pending = pendingPrependScrollRef.current;
@@ -880,6 +932,7 @@ export default function AiPage() {
     setInspectorOpen(false);
     setInspectedMessageId(null);
     setComposerDraft('', conversationId);
+    pendingAttachmentsRef.current = [];
     setPendingAttachments([]);
     // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
     // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
@@ -1833,13 +1886,10 @@ export default function AiPage() {
             <Image.PreviewGroup>
               <Space size={6} wrap>
                 {item.attachments.map((attachment) => (
-                  <Image
-                    alt={attachment.filename}
-                    height={88}
+                  <AiAttachmentPreview
+                    attachment={attachment}
                     key={attachment.attachmentId}
-                    src={resolveMediaUrl(attachment.previewUrl)}
-                    style={{ borderRadius: 8, objectFit: 'cover' }}
-                    width={88}
+                    size={88}
                   />
                 ))}
               </Space>
@@ -2196,7 +2246,31 @@ export default function AiPage() {
             )}
 
             <div className={styles.composer}>
-              <div className={styles.composerInner}>
+              <div
+                className={`${styles.composerInner}${
+                  attachmentDragActive ? ` ${styles.composerDragging}` : ''
+                }`}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  if (!loading) setAttachmentDragActive(true);
+                }}
+                onDragLeave={(event) => {
+                  if (
+                    !event.currentTarget.contains(event.relatedTarget as Node)
+                  ) {
+                    setAttachmentDragActive(false);
+                  }
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'copy';
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setAttachmentDragActive(false);
+                  enqueueAttachmentFiles(event.dataTransfer.files);
+                }}
+              >
                 {activeApproval ? (
                   <Alert
                     action={
@@ -2263,50 +2337,67 @@ export default function AiPage() {
                     type="info"
                   />
                 ) : null}
-                <Space
-                  align="start"
-                  orientation="vertical"
-                  size={8}
-                  style={{ marginBottom: 8, width: '100%' }}
-                >
-                  {pendingAttachments.length ? (
-                    <Image.PreviewGroup>
-                      <Space size={8} wrap>
-                        {pendingAttachments.map((attachment) => (
-                          <div
-                            key={attachment.attachmentId}
-                            style={{ position: 'relative' }}
-                          >
-                            <Image
-                              alt={attachment.filename}
-                              height={72}
-                              src={resolveMediaUrl(attachment.previewUrl)}
-                              style={{ borderRadius: 8, objectFit: 'cover' }}
-                              width={72}
-                            />
-                            <Button
-                              aria-label={`删除 ${attachment.filename}`}
-                              danger
-                              disabled={loading}
-                              onClick={() =>
-                                void removePendingAttachment(attachment)
-                              }
-                              shape="circle"
-                              size="small"
-                              style={{
-                                position: 'absolute',
-                                right: -6,
-                                top: -6,
-                              }}
-                            >
-                              ×
-                            </Button>
-                          </div>
-                        ))}
-                      </Space>
-                    </Image.PreviewGroup>
-                  ) : null}
-                  <Space wrap>
+                <Sender
+                  autoSize={{ minRows: 2, maxRows: 7 }}
+                  disabled={
+                    (selectedConversationStatus === 'archived' &&
+                      Boolean(conversationId)) ||
+                    Boolean(activeApproval)
+                  }
+                  loading={loading}
+                  onCancel={stopGeneration}
+                  onChange={(value) => setComposerDraft(value, conversationId)}
+                  onPaste={(event) => {
+                    const files = event.clipboardData?.files;
+                    const text = event.clipboardData?.getData('text/plain');
+                    if (text && files?.length) enqueueAttachmentFiles(files);
+                  }}
+                  onPasteFile={(files) => enqueueAttachmentFiles(files)}
+                  onSubmit={(value) => void submit(value)}
+                  header={
+                    <Sender.Header
+                      closable={false}
+                      open={
+                        pendingAttachments.length > 0 || attachmentUploading
+                      }
+                    >
+                      <div className={styles.attachmentHeader}>
+                        {pendingAttachments.length ? (
+                          <Image.PreviewGroup>
+                            <div className={styles.attachmentGrid}>
+                              {pendingAttachments.map((attachment) => (
+                                <AiAttachmentPreview
+                                  attachment={attachment}
+                                  disabled={loading || attachmentUploading}
+                                  key={attachment.attachmentId}
+                                  onRemove={() =>
+                                    void removePendingAttachment(attachment)
+                                  }
+                                  size={76}
+                                />
+                              ))}
+                            </div>
+                          </Image.PreviewGroup>
+                        ) : null}
+                        <div className={styles.attachmentMeta}>
+                          {attachmentUploading ? <Spin size="small" /> : null}
+                          <Typography.Text type="secondary">
+                            {attachmentUploading
+                              ? '正在安全上传图片…'
+                              : `${pendingAttachments.length}/${AI_ATTACHMENT_LIMIT} 张 · 保留完整画面供 AI 识别`}
+                          </Typography.Text>
+                        </div>
+                      </div>
+                    </Sender.Header>
+                  }
+                  placeholder={
+                    selectedConversationStatus === 'archived' && conversationId
+                      ? '归档会话为只读状态'
+                      : activeApproval
+                        ? '请先处理当前 Run 的工具审批'
+                        : '输入业务问题；Enter 发送，Shift+Enter 换行'
+                  }
+                  prefix={
                     <Upload
                       accept="image/jpeg,image/png,image/webp"
                       beforeUpload={uploadAttachment}
@@ -2318,52 +2409,43 @@ export default function AiPage() {
                       multiple
                       showUploadList={false}
                     >
-                      <Button
-                        icon={<PaperClipOutlined />}
-                        loading={attachmentUploading}
-                        size="small"
-                      >
-                        添加图片
-                      </Button>
+                      <Tooltip title="添加图片，也可以直接粘贴或拖入">
+                        <Button
+                          aria-label="添加图片"
+                          icon={<PaperClipOutlined />}
+                          loading={attachmentUploading}
+                          shape="circle"
+                          type="text"
+                        />
+                      </Tooltip>
                     </Upload>
-                    {pendingAttachments.length ? (
-                      <Typography.Text type="secondary">
-                        {pendingAttachments.length}/{AI_ATTACHMENT_LIMIT} ·
-                        保留完整画面供 AI 识别
-                      </Typography.Text>
-                    ) : null}
-                    {pendingAttachments.length && !draft.trim() ? (
-                      <Button
-                        disabled={loading || attachmentUploading}
-                        onClick={() => void submit()}
-                        size="small"
-                        type="primary"
-                      >
-                        发送图片
-                      </Button>
-                    ) : null}
-                  </Space>
-                </Space>
-                <Sender
-                  autoSize={{ minRows: 2, maxRows: 7 }}
-                  disabled={
-                    (selectedConversationStatus === 'archived' &&
-                      Boolean(conversationId)) ||
-                    Boolean(activeApproval)
                   }
-                  loading={loading}
-                  onCancel={stopGeneration}
-                  onChange={(value) => setComposerDraft(value, conversationId)}
-                  onSubmit={(value) => void submit(value)}
-                  placeholder={
-                    selectedConversationStatus === 'archived' && conversationId
-                      ? '归档会话为只读状态'
-                      : activeApproval
-                        ? '请先处理当前 Run 的工具审批'
-                        : '输入业务问题；Enter 发送，Shift+Enter 换行'
+                  suffix={(_, { components }) =>
+                    loading ? (
+                      <components.LoadingButton />
+                    ) : (
+                      <components.SendButton
+                        disabled={
+                          attachmentUploading ||
+                          (!draft.trim() && !pendingAttachments.length)
+                        }
+                      />
+                    )
                   }
                   value={draft}
                 />
+                <Typography.Text
+                  className={styles.composerHint}
+                  type="secondary"
+                >
+                  支持粘贴、拖入或选择最多 {AI_ATTACHMENT_LIMIT} 张图片
+                </Typography.Text>
+                {attachmentDragActive ? (
+                  <div className={styles.dropOverlay}>
+                    <PaperClipOutlined />
+                    松开即可添加图片
+                  </div>
+                ) : null}
               </div>
             </div>
           </main>

@@ -22,6 +22,73 @@ jest.mock('@umijs/max', () => ({
 
 jest.mock('@ant-design/x', () => {
   const React = jest.requireActual('react');
+  const Sender = ({
+    disabled,
+    header,
+    loading,
+    onCancel,
+    onChange,
+    onPaste,
+    onPasteFile,
+    onSubmit,
+    prefix,
+    suffix,
+    value,
+  }: any) => {
+    const components = {
+      LoadingButton: () =>
+        React.createElement(
+          'button',
+          { onClick: onCancel, type: 'button' },
+          '停止生成',
+        ),
+      SendButton: ({ disabled: sendDisabled }: any) =>
+        React.createElement(
+          'button',
+          {
+            disabled: disabled || sendDisabled,
+            onClick: () => onSubmit(value),
+            type: 'button',
+          },
+          '发送',
+        ),
+    };
+    const suffixNode =
+      typeof suffix === 'function' ? suffix(null, { components }) : suffix;
+    return React.createElement(
+      'div',
+      null,
+      header,
+      prefix,
+      React.createElement('input', {
+        'aria-label': 'AI 输入',
+        disabled,
+        onChange: (event: any) => onChange(event.target.value),
+        onPaste: (event: any) => {
+          const files = event.clipboardData?.files;
+          const text = event.clipboardData?.getData('text/plain');
+          if (!text && files?.length) onPasteFile?.(files);
+          onPaste?.(event);
+        },
+        value,
+      }),
+      suffixNode ??
+        React.createElement(
+          'button',
+          { disabled, onClick: () => onSubmit(value), type: 'button' },
+          '发送',
+        ),
+      loading && !suffixNode
+        ? React.createElement(
+            'button',
+            { onClick: onCancel, type: 'button' },
+            '停止生成',
+          )
+        : null,
+    );
+  };
+  Sender.Header = ({ children, open }: any) =>
+    open ? React.createElement('div', null, children) : null;
   return {
     Bubble: {
       List: ({ items }: any) =>
@@ -87,29 +154,7 @@ jest.mock('@ant-design/x', () => {
           ),
         ),
       ),
-    Sender: ({ disabled, loading, onCancel, onChange, onSubmit, value }: any) =>
-      React.createElement(
-        'div',
-        null,
-        React.createElement('input', {
-          'aria-label': 'AI 输入',
-          disabled,
-          onChange: (event: any) => onChange(event.target.value),
-          value,
-        }),
-        React.createElement(
-          'button',
-          { disabled, onClick: () => onSubmit(value), type: 'button' },
-          '发送',
-        ),
-        loading
-          ? React.createElement(
-              'button',
-              { onClick: onCancel, type: 'button' },
-              '停止生成',
-            )
-          : null,
-      ),
+    Sender,
     Welcome: () => React.createElement('div', null, 'AI 欢迎'),
     XProvider: ({ children }: any) =>
       React.createElement(React.Fragment, null, children),
@@ -240,8 +285,10 @@ jest.mock('./styles', () => ({
 jest.mock('@/services/myapp/ai', () => ({
   archiveAiConversation: jest.fn(),
   cancelAiRun: jest.fn(),
+  discardAiAttachment: jest.fn(),
   discardAiDraft: jest.fn(),
   executeAiDraft: jest.fn(),
+  fetchAiAttachmentPreview: jest.fn().mockResolvedValue(new Blob(['image'])),
   generateAiInventoryAdjustmentDraft: jest.fn(),
   generateAiProductSetupDraft: jest.fn(),
   generateAiPurchaseOrderDraft: jest.fn(),
@@ -295,6 +342,7 @@ jest.mock('@/services/myapp/ai', () => ({
   streamAiChatMessage: jest.fn(),
   submitAiFeedback: jest.fn(),
   updateAiDraft: jest.fn(),
+  uploadAiImageAttachment: jest.fn(),
 }));
 
 const {
@@ -311,6 +359,7 @@ const {
   resetAiConversationContext,
   reviewAiAgentApproval,
   streamAiChatMessage,
+  uploadAiImageAttachment,
 } = jest.requireMock('@/services/myapp/ai');
 
 const buildWaitingApprovalResult = () => ({
@@ -445,16 +494,31 @@ describe('AI workspace page', () => {
       status: 'empty',
       updatedAt: '2026-07-26 12:00:00',
     });
-    resolveAiScenario.mockImplementation(async (content: string) => {
-      if (content.includes('销售订单')) return 'order_query';
-      if (
-        content.includes('商品') ||
-        content.includes('蓝色包装') ||
-        content.includes('入库')
-      ) {
-        return 'product_search';
-      }
-      return 'general';
+    resolveAiScenario.mockImplementation(
+      async (value: string | { content: string }) => {
+        const content = typeof value === 'string' ? value : value.content;
+        if (content.includes('销售订单')) return 'order_query';
+        if (
+          content.includes('商品') ||
+          content.includes('蓝色包装') ||
+          content.includes('入库')
+        ) {
+          return 'product_search';
+        }
+        return 'general';
+      },
+    );
+    uploadAiImageAttachment.mockResolvedValue({
+      attachmentId: 'AI-ATT-CLIPBOARD',
+      contentType: 'image/png',
+      filename: 'clipboard.png',
+      fileSize: 5,
+      height: 1,
+      previewUrl: '/private/files/clipboard.webp',
+      retentionUntil: '2026-08-17 12:00:00',
+      sha256: 'sha256',
+      status: 'uploaded',
+      width: 1,
     });
     generateAiProductSetupDraft.mockResolvedValue({
       conversationId: 'AI-CONV-DRAFT',
@@ -634,6 +698,46 @@ describe('AI workspace page', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('uploads a pasted image inside the sender and allows image-only submit', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    const imageFile = new File(['image'], 'clipboard.png', {
+      type: 'image/png',
+    });
+    fireEvent.paste(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      clipboardData: {
+        files: [imageFile],
+        getData: () => '',
+      },
+    });
+
+    await waitFor(() => {
+      expect(uploadAiImageAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contentType: 'image/png',
+          filename: 'clipboard.png',
+        }),
+      );
+    });
+    expect(await screen.findByLabelText('clipboard.png')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '添加图片' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+
+    await waitFor(() => {
+      expect(streamAiChatMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachmentIds: ['AI-ATT-CLIPBOARD'],
+          company: 'Demo Company',
+          content:
+            '请分析我上传的图片，并根据明确可见的信息处理；不确定的字段不要猜测。',
+        }),
+        expect.any(Function),
+        expect.any(AbortSignal),
+      );
+    });
   });
 
   it('cancels the durable run before aborting the local stream', async () => {

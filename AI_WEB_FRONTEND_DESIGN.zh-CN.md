@@ -522,8 +522,8 @@ git diff --check
 
 ## 18. 多模态图片交互
 
-- Sender 支持 JPG、PNG、WebP，单张来源图片最多 20MB、单条消息最多 4 张；上传成功后展示缩略图，图片保持完整画面，不经过商品封面裁剪器。
-- 图片先调用 `upload_ai_image_attachment_v1` 私有暂存，发送时 Chat、SSE、场景识别和四类草稿只传 `attachment_ids`。未提交附件可删除；会话历史从服务端安全元数据恢复缩略图。
+- Sender 支持 JPG、PNG、WebP，单张来源图片最多 20MB、单条消息最多 4 张；回形针入口、待发送缩略图和图片计数都位于 Sender 内部，并支持文件选择、系统剪贴板直接粘贴和拖拽投放。只有图片而没有文字时仍使用 Sender 的同一个发送按钮，不额外暴露页面级“发送图片”动作。
+- 图片先调用 `upload_ai_image_attachment_v1` 私有暂存，发送时 Chat、SSE、场景识别和四类草稿只传 `attachment_ids`。未提交附件可删除；会话历史从服务端安全元数据恢复缩略图。由于 Web 使用 JWT Bearer 且 AI 图片是 Frappe 私有文件，预览必须通过带当前 JWT 的 `fetch` 读取 Blob 后生成临时 Object URL，不能把 `/private/files/...` 直接交给 `<img>`，也不能把 Token 放入 URL。
 - 自动场景识别会把附件交给视觉意图模型。商品实物/包装可进入商品建档草稿，严格订单表格可进入销售或采购草稿；不确定时保持通用对话。
 - 固定模型 `supportsVision=false` 时发送前阻止；自动模式由 Runtime Policy 选择已经通过视觉探测的模型。
 - 商品草稿展示新增/完善选择和疑似重复候选。新增时来源首图可成为暂存封面；完善现有商品时来源图不进入图片字段。编辑器支持条码和规格。

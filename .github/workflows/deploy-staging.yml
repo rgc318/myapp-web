@@ -90,6 +90,11 @@ jobs:
               previous_image_id="$(docker container inspect --format '{{.Image}}' "${CONTAINER_NAME}")"
             fi
 
+            echo "Filesystem capacity before deployment:"
+            df -h / /var/lib/docker 2>/dev/null || df -h /
+            echo "Docker storage before deployment:"
+            docker system df
+
             echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             docker network inspect "${DOCKER_NETWORK}" >/dev/null
             docker pull "${image}"

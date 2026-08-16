@@ -1,6 +1,23 @@
 import { createStyles } from 'antd-style';
 
 export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
+  attachmentGrid: css`
+    display: flex;
+    flex-wrap: wrap;
+    gap: ${token.marginSM}px;
+  `,
+  attachmentHeader: css`
+    display: flex;
+    flex-direction: column;
+    gap: ${token.marginXS}px;
+    padding: ${token.paddingXS}px ${token.paddingXS}px 0;
+  `,
+  attachmentMeta: css`
+    align-items: center;
+    display: flex;
+    gap: ${token.marginXS}px;
+    min-height: ${token.controlHeightSM}px;
+  `,
   answerSummary: css`
     border-top: 1px solid ${token.colorBorderSecondary};
     display: flex;
@@ -36,6 +53,7 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
   composerInner: css`
     margin: 0 auto;
     max-width: 920px;
+    position: relative;
 
     .ant-sender {
       background: ${token.colorBgContainer};
@@ -49,6 +67,19 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
       border-color: ${token.colorPrimary};
       box-shadow: 0 14px 42px color-mix(in srgb, ${token.colorPrimary} 18%, transparent);
     }
+  `,
+  composerDragging: css`
+    .ant-sender {
+      border-color: ${token.colorPrimary};
+      box-shadow: 0 14px 42px color-mix(in srgb, ${token.colorPrimary} 18%, transparent);
+    }
+  `,
+  composerHint: css`
+    display: block;
+    font-size: ${token.fontSizeSM}px;
+    margin-top: ${token.marginXS}px;
+    padding-inline: ${token.paddingSM}px;
+    text-align: center;
   `,
   conversationItem: css`
     && {
@@ -108,6 +139,23 @@ export const useAiWorkspaceStyles = createStyles(({ css, token }) => ({
     display: flex;
     flex-direction: column;
     gap: ${token.marginMD}px;
+  `,
+  dropOverlay: css`
+    align-items: center;
+    backdrop-filter: blur(4px);
+    background: color-mix(in srgb, ${token.colorPrimaryBg} 86%, transparent);
+    border: 2px dashed ${token.colorPrimary};
+    border-radius: 20px;
+    color: ${token.colorPrimary};
+    display: flex;
+    font-size: ${token.fontSizeLG}px;
+    font-weight: ${token.fontWeightStrong};
+    gap: ${token.marginSM}px;
+    inset: 0;
+    justify-content: center;
+    pointer-events: none;
+    position: absolute;
+    z-index: 10;
   `,
   emptyState: css`
     align-items: center;
