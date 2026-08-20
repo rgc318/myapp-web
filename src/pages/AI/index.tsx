@@ -127,6 +127,7 @@ type ChatRow = AiMessageRow & {
 };
 
 const AI_MESSAGE_PAGE_SIZE = 40;
+const AI_MODEL_CONTEXT_MESSAGE_LIMIT = 20;
 const NEW_CONVERSATION_DRAFT_KEY = '__new_ai_conversation__';
 const AI_ATTACHMENT_LIMIT = 4;
 const AI_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
@@ -342,6 +343,7 @@ export default function AiPage() {
   const [approvalActionId, setApprovalActionId] = useState<string | null>(null);
   const [retryRequest, setRetryRequest] = useState<{
     content: string;
+    hasAttachments: boolean;
     messageId: string;
     runId: string | null;
     scenario: AiScenario;
@@ -387,6 +389,9 @@ export default function AiPage() {
   const streamAbortRef = useRef<AbortController | null>(null);
   const attachmentUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingAttachmentsRef = useRef<AiAttachment[]>([]);
+  const pendingAttachmentsByConversationRef = useRef<
+    Record<string, AiAttachment[]>
+  >({});
   const approvalRefreshSequenceRef = useRef(0);
   const activeConversationIdRef = useRef<string | null>(null);
   const draftByConversationRef = useRef<Record<string, string>>({});
@@ -422,6 +427,28 @@ export default function AiPage() {
     })),
   ];
 
+  const setComposerAttachments = useCallback(
+    (value: AiAttachment[], targetConversationId?: string | null) => {
+      const resolvedConversationId =
+        targetConversationId === undefined
+          ? activeConversationIdRef.current
+          : targetConversationId;
+      const key = getConversationDraftKey(resolvedConversationId);
+      pendingAttachmentsByConversationRef.current[key] = value;
+      if (key === getConversationDraftKey(activeConversationIdRef.current)) {
+        pendingAttachmentsRef.current = value;
+        setPendingAttachments(value);
+      }
+    },
+    [],
+  );
+
+  const rememberCurrentComposerAttachments = useCallback(() => {
+    pendingAttachmentsByConversationRef.current[
+      getConversationDraftKey(activeConversationIdRef.current)
+    ] = pendingAttachmentsRef.current;
+  }, []);
+
   const enqueueAttachmentFiles = (input: FileList | File[]) => {
     const files = Array.from(input);
     if (!files.length) return;
@@ -449,13 +476,18 @@ export default function AiPage() {
     });
     if (!supportedFiles.length) return;
 
+    const targetConversationId = activeConversationIdRef.current;
+    const targetKey = getConversationDraftKey(targetConversationId);
+
     attachmentUploadQueueRef.current = attachmentUploadQueueRef.current
       .catch(() => undefined)
       .then(async () => {
         setAttachmentUploading(true);
         try {
           for (const file of supportedFiles) {
-            if (pendingAttachmentsRef.current.length >= AI_ATTACHMENT_LIMIT) {
+            const targetAttachments =
+              pendingAttachmentsByConversationRef.current[targetKey] ?? [];
+            if (targetAttachments.length >= AI_ATTACHMENT_LIMIT) {
               message.warning(
                 `单条消息最多上传 ${AI_ATTACHMENT_LIMIT} 张图片。`,
               );
@@ -467,7 +499,8 @@ export default function AiPage() {
                 fileContentBase64: await readFileAsBase64(file),
                 filename: file.name || `粘贴图片-${Date.now()}.png`,
               });
-              const current = pendingAttachmentsRef.current;
+              const current =
+                pendingAttachmentsByConversationRef.current[targetKey] ?? [];
               if (
                 !current.some(
                   (item) => item.attachmentId === attachment.attachmentId,
@@ -477,8 +510,7 @@ export default function AiPage() {
                   0,
                   AI_ATTACHMENT_LIMIT,
                 );
-                pendingAttachmentsRef.current = next;
-                setPendingAttachments(next);
+                setComposerAttachments(next, targetConversationId);
               }
             } catch (caught) {
               message.error(
@@ -500,13 +532,11 @@ export default function AiPage() {
   const removePendingAttachment = async (attachment: AiAttachment) => {
     try {
       await discardAiAttachment(attachment.attachmentId);
-      setPendingAttachments((current) => {
-        const next = current.filter(
+      setComposerAttachments(
+        pendingAttachmentsRef.current.filter(
           (item) => item.attachmentId !== attachment.attachmentId,
-        );
-        pendingAttachmentsRef.current = next;
-        return next;
-      });
+        ),
+      );
     } catch (caught) {
       message.error(
         caught instanceof Error ? caught.message : 'AI 图片删除失败',
@@ -643,6 +673,7 @@ export default function AiPage() {
     }
     setConversationLoading(true);
     rememberCurrentComposerDraft();
+    rememberCurrentComposerAttachments();
     setInspectorOpen(false);
     setInspectedMessageId(null);
     try {
@@ -657,6 +688,12 @@ export default function AiPage() {
         draftByConversationRef.current[
           getConversationDraftKey(result.conversation.name)
         ] ?? '',
+        result.conversation.name,
+      );
+      setComposerAttachments(
+        pendingAttachmentsByConversationRef.current[
+          getConversationDraftKey(result.conversation.name)
+        ] ?? [],
         result.conversation.name,
       );
       setConversationCompany(result.conversation.company);
@@ -713,6 +750,7 @@ export default function AiPage() {
           failedRequestMessage
           ? {
               content: failedRequestMessage.content,
+              hasAttachments: Boolean(failedRequestMessage.attachments?.length),
               messageId: latestRunMessage.name,
               runId: latestRunMessage.runId,
               scenario: latestRunMessage.scenario ?? 'auto',
@@ -822,11 +860,26 @@ export default function AiPage() {
     contentValue?: string,
     scenarioValue?: AiScenario,
     modelAliasValue?: string | null,
-    retryContext?: { messageId: string; runId: string } | null,
+    retryContext?: {
+      hasAttachments: boolean;
+      messageId: string;
+      runId: string;
+    } | null,
   ) => {
     const rawContent = (contentValue ?? draft).trim();
     const attachments = retryContext ? [] : [...pendingAttachments];
     const attachmentIds = attachments.map((item) => item.attachmentId);
+    const contextStartSequence = conversationContext?.contextStartSequence ?? 1;
+    const hasConversationImageContext = messages
+      .slice(-AI_MODEL_CONTEXT_MESSAGE_LIMIT)
+      .some(
+        (item) =>
+          (item.sequence ?? contextStartSequence) >= contextStartSequence &&
+          Boolean(item.attachments?.length),
+      );
+    const hasImageInput =
+      (retryContext?.hasAttachments ?? attachments.length > 0) ||
+      hasConversationImageContext;
     const content =
       rawContent ||
       (attachments.length
@@ -847,7 +900,7 @@ export default function AiPage() {
           (model) => model.modelAlias === requestedModelAlias,
         )
       : null;
-    if (attachments.length && fixedModel && !fixedModel.supportsVision) {
+    if (hasImageInput && fixedModel && !fixedModel.supportsVision) {
       message.warning(
         `模型 ${fixedModel.displayName} 不支持图片输入，请切换为自动模型或多模态模型。`,
       );
@@ -932,8 +985,7 @@ export default function AiPage() {
     setInspectorOpen(false);
     setInspectedMessageId(null);
     setComposerDraft('', conversationId);
-    pendingAttachmentsRef.current = [];
-    setPendingAttachments([]);
+    setComposerAttachments([], conversationId);
     // 显式场景只约束当前这一次请求。下一条消息重新回到自动识别，
     // 避免订单查询或草稿模式在同一打开会话中持续污染后续意图。
     setScenario('auto');
@@ -1307,6 +1359,7 @@ export default function AiPage() {
         setRunProgress(null);
         setRetryRequest({
           content,
+          hasAttachments: hasImageInput,
           messageId: assistantMessage.id,
           runId: null,
           scenario: resolvedScenario,
@@ -1337,6 +1390,7 @@ export default function AiPage() {
         setRunErrorCode(errorCode);
         setRetryRequest({
           content,
+          hasAttachments: hasImageInput,
           messageId: assistantMessage.id,
           runId: failedRunId ?? null,
           scenario: resolvedScenario,
@@ -1598,6 +1652,7 @@ export default function AiPage() {
 
   const resetConversation = () => {
     rememberCurrentComposerDraft();
+    rememberCurrentComposerAttachments();
     setConversationId(null);
     activeConversationIdRef.current = null;
     setSelectedConversationStatus(null);
@@ -1621,6 +1676,11 @@ export default function AiPage() {
     setInspectedMessageId(null);
     setComposerDraft(
       draftByConversationRef.current[NEW_CONVERSATION_DRAFT_KEY] ?? '',
+      null,
+    );
+    setComposerAttachments(
+      pendingAttachmentsByConversationRef.current[NEW_CONVERSATION_DRAFT_KEY] ??
+        [],
       null,
     );
     setScenario('auto');
@@ -1942,6 +2002,7 @@ export default function AiPage() {
                     selectedModelAlias,
                     retryRequest.runId
                       ? {
+                          hasAttachments: retryRequest.hasAttachments,
                           messageId: retryRequest.messageId,
                           runId: retryRequest.runId,
                         }
@@ -2606,6 +2667,7 @@ export default function AiPage() {
                         selectedModelAlias,
                         retryRequest.runId
                           ? {
+                              hasAttachments: retryRequest.hasAttachments,
                               messageId: retryRequest.messageId,
                               runId: retryRequest.runId,
                             }
