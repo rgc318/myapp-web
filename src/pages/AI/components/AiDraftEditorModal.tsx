@@ -190,7 +190,7 @@ export function AiDraftEditorModal({
   const company = Form.useWatch('company', form);
   const adjustmentType = Form.useWatch('adjustmentType', form);
   const selectedBrand = Form.useWatch('brand', form);
-  const inventoryItemCode = Form.useWatch('itemCode', form);
+  const selectedItemCode = Form.useWatch('itemCode', form);
   const selectedItemGroup = Form.useWatch('itemGroup', form);
   const openingQty = Form.useWatch('openingQty', form);
   const productOperation = Form.useWatch('operation', form);
@@ -201,6 +201,16 @@ export function AiDraftEditorModal({
   const hasOpeningStock = Number(openingQty ?? 0) > 0;
   const isProductUpdate =
     draft?.draftType === 'product_setup' && productOperation === 'update';
+  const productDraftState =
+    draft?.draftType === 'product_setup'
+      ? objectValue(draft.payload._state)
+      : {};
+  const productTargetEntity = objectValue(productDraftState.entity);
+  const productTargetResolved = Boolean(
+    productTargetEntity.name ||
+      (draft?.validation.readyForHandoff && draft.payload.item_code),
+  );
+  const needsProductTargetSelection = isProductUpdate && !productTargetResolved;
   const busy = saving || executing;
 
   const inventorySourceItem =
@@ -718,8 +728,45 @@ export function AiDraftEditorModal({
                   >
                     <Input />
                   </Form.Item>
-                  <Form.Item label="商品编码" name="itemCode">
-                    <Input disabled={isProductUpdate} />
+                  <Form.Item
+                    extra={
+                      needsProductTargetSelection
+                        ? selectedItemCode
+                          ? `已选择目标商品 ${selectedItemCode}；保存后系统会重新读取商品并校验权限与当前版本。`
+                          : '当前草稿尚未绑定现有商品，请搜索并选择要完善的目标商品。'
+                        : isProductUpdate
+                          ? '商品编码是本次完善操作的固定目标，不能在已绑定后直接修改。'
+                          : undefined
+                    }
+                    label={
+                      needsProductTargetSelection ? '选择现有商品' : '商品编码'
+                    }
+                    name="itemCode"
+                    rules={
+                      isProductUpdate
+                        ? [
+                            {
+                              message: '请选择要完善的现有商品',
+                              required: true,
+                            },
+                          ]
+                        : undefined
+                    }
+                  >
+                    {needsProductTargetSelection ? (
+                      <RemoteLinkSelect
+                        doctype="Item"
+                        filters={{ disabled: 0 }}
+                        initialQuery={
+                          typeof draft.payload.item_name === 'string'
+                            ? draft.payload.item_name
+                            : undefined
+                        }
+                        placeholder="按商品编码或名称搜索并选择"
+                      />
+                    ) : (
+                      <Input disabled={isProductUpdate} />
+                    )}
                   </Form.Item>
                   <Form.Item label="条码" name="barcode">
                     <Input maxLength={140} />
@@ -941,8 +988,8 @@ export function AiDraftEditorModal({
                 <Form.Item
                   extra={
                     unresolvedInventoryItemQuery
-                      ? inventoryItemCode
-                        ? `已选择商品 ${inventoryItemCode}；保存草稿后会重新校验原搜索词“${unresolvedInventoryItemQuery}”。`
+                      ? selectedItemCode
+                        ? `已选择商品 ${selectedItemCode}；保存草稿后会重新校验原搜索词“${unresolvedInventoryItemQuery}”。`
                         : `AI 只识别到搜索词“${unresolvedInventoryItemQuery}”，尚未匹配商品编码。请搜索并选择具体商品。`
                       : undefined
                   }

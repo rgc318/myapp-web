@@ -1985,6 +1985,22 @@ export default function AiPage() {
           onOpenBusinessDocument={setBusinessDocument}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
           onOpenProduct={setProductCitation}
+          onPrepareProductUpdate={(citation) => {
+            const itemCode = String(citation.id ?? '').trim();
+            if (!itemCode) return;
+            if (selectedConversationStatus === 'archived') {
+              message.info('归档会话只读，请新建会话后再完善商品。');
+              return;
+            }
+            setComposerDraft(
+              `修改商品 ${itemCode}：${draft.trim() ? `\n${draft}` : ''}`,
+              conversationId,
+            );
+            setScenario('product_setup_draft');
+            message.info(
+              `已选择商品 ${itemCode}，请补充需要修改的内容后发送。`,
+            );
+          }}
           onRefreshBusinessResult={
             loading && index === messages.length - 1
               ? undefined

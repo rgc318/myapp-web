@@ -56,6 +56,7 @@ type Props = {
   onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
   onOpenProduct: (citation: AiCitation) => void;
+  onPrepareProductUpdate: (citation: AiCitation) => void;
   onRefreshBusinessResult?: (resultSet: AiBusinessResultSet) => Promise<void>;
   onRetry?: () => void;
   onViewDiagnostics?: () => void;
@@ -120,6 +121,7 @@ function CitationCard({
   onHandoffDraft,
   onOpenDraftHistory,
   onOpenProduct,
+  onPrepareProductUpdate,
 }: Pick<
   Props,
   | 'onDiscardDraft'
@@ -127,6 +129,7 @@ function CitationCard({
   | 'onHandoffDraft'
   | 'onOpenDraftHistory'
   | 'onOpenProduct'
+  | 'onPrepareProductUpdate'
 > & { citation: AiCitation }) {
   const draft = resolveAiDraftCitation(citation);
   const validation = draft?.validation;
@@ -148,13 +151,21 @@ function CitationCard({
       title={citation.label}
       extra={
         citation.type === 'product' ? (
-          <Button
-            onClick={() => onOpenProduct(citation)}
-            size="small"
-            type="link"
-          >
-            当前页查看
-          </Button>
+          <Space size={4}>
+            <Button
+              onClick={() => onPrepareProductUpdate(citation)}
+              size="small"
+            >
+              完善此商品
+            </Button>
+            <Button
+              onClick={() => onOpenProduct(citation)}
+              size="small"
+              type="link"
+            >
+              当前页查看
+            </Button>
+          </Space>
         ) : citation.href ? (
           <Button href={citation.href} size="small" type="link">
             查看详情
@@ -339,6 +350,7 @@ export function AiMessageContent({
   onOpenBusinessDocument,
   onOpenDraftHistory,
   onOpenProduct,
+  onPrepareProductUpdate,
   onRefreshBusinessResult,
   onRetry,
   onViewDiagnostics,
@@ -464,6 +476,7 @@ export function AiMessageContent({
               onHandoffDraft={onHandoffDraft}
               onOpenDraftHistory={onOpenDraftHistory}
               onOpenProduct={onOpenProduct}
+              onPrepareProductUpdate={onPrepareProductUpdate}
             />
           ))}
         </div>

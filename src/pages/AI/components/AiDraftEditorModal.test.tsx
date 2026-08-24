@@ -186,6 +186,94 @@ describe('AiDraftEditorModal', () => {
     ).toBe(true);
   });
 
+  it('lets an unresolved product update draft select its existing target', async () => {
+    const unresolvedDraft = {
+      ...draft,
+      payload: {
+        _state: {
+          entity: { doctype: 'Item', modified: null, name: null },
+          operation: 'update',
+        },
+        company: 'Demo Company',
+        currency: 'CNY',
+        item_code: null,
+        item_name: '可口可乐 5000ml',
+        operation: 'update',
+        specification: '500ml',
+        standard_buying_rate: 50,
+        standard_selling_rate: 52,
+        stock_uom: 'Unit',
+      },
+      validation: {
+        errors: ['未找到唯一的现有商品，请补充准确商品名称或编码。'],
+        readyForHandoff: false,
+        warnings: [],
+      },
+    };
+    const resolvedDraft = {
+      ...unresolvedDraft,
+      payload: {
+        ...unresolvedDraft.payload,
+        _state: {
+          entity: {
+            doctype: 'Item',
+            modified: '2026-08-21 20:00:00',
+            name: 'ITEM-COLA-5000ML',
+          },
+          operation: 'update',
+        },
+        item_code: 'ITEM-COLA-5000ML',
+      },
+      validation: { errors: [], readyForHandoff: true, warnings: [] },
+      version: 3,
+    };
+    mockedGet.mockResolvedValue(unresolvedDraft);
+    mockedUpdate.mockResolvedValue(resolvedDraft);
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    const target = await screen.findByLabelText('Item');
+    expect(target.getAttribute('data-initial-query')).toBe('可口可乐 5000ml');
+    expect(
+      screen.getByText(
+        '当前草稿尚未绑定现有商品，请搜索并选择要完善的目标商品。',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        '尚未绑定要完善的现有商品，请在“选择现有商品”中搜索并选择目标商品。',
+      ),
+    ).toBeTruthy();
+
+    fireEvent.change(target, { target: { value: 'ITEM-COLA-5000ML' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+
+    await waitFor(() => {
+      expect(mockedUpdate).toHaveBeenCalledWith(
+        'AI-DRAFT-1',
+        2,
+        expect.objectContaining({
+          item_code: 'ITEM-COLA-5000ML',
+          operation: 'update',
+        }),
+      );
+    });
+    expect(
+      (screen.getByDisplayValue('ITEM-COLA-5000ML') as HTMLInputElement)
+        .disabled,
+    ).toBe(true);
+  });
+
   it('saves the latest form version and executes it without closing the editor', async () => {
     const updated = {
       ...draft,

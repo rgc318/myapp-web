@@ -400,6 +400,20 @@ export function getAiDraftFormFieldIssues(
         issues.push({ message: error, name: mapping.name });
       }
     }
+    if (
+      payload.operation === 'update' &&
+      !textValue(payload.item_code) &&
+      matchingValidationError(draft, [
+        '未找到唯一的现有商品',
+        '商品名称匹配到多条',
+      ])
+    ) {
+      const targetIssue = issues.find((issue) => issue.name === 'itemCode');
+      if (targetIssue) {
+        targetIssue.message =
+          '尚未绑定要完善的现有商品，请在“选择现有商品”中搜索并选择目标商品。';
+      }
+    }
     const itemGroupQuery = unresolvedQuery(
       payload,
       'item_group',
