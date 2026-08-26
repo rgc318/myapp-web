@@ -910,15 +910,13 @@ export default function AiPage() {
     let requestScenario = requestedScenario;
     if (requestedScenario === 'auto') {
       try {
-        resolvedScenario = await resolveAiScenario(
-          attachmentIds.length
-            ? {
-                attachmentIds,
-                content,
-                modelAlias: requestedModelAlias,
-              }
-            : content,
-        );
+        resolvedScenario = await resolveAiScenario({
+          ...(attachmentIds.length ? { attachmentIds } : {}),
+          company: effectiveCompany,
+          content,
+          conversationId,
+          modelAlias: requestedModelAlias,
+        });
         requestScenario = [
           'sales_order_draft',
           'purchase_order_draft',

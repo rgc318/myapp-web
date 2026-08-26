@@ -1797,7 +1797,12 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith('给迪莫添加10个库存');
+      expect(resolveAiScenario).toHaveBeenCalledWith({
+        company: 'Demo Company',
+        content: '给迪莫添加10个库存',
+        conversationId: null,
+        modelAlias: 'opencode-glm-5.2',
+      });
       expect(generateAiInventoryAdjustmentDraft).toHaveBeenCalledWith({
         company: 'Demo Company',
         content: '给迪莫添加10个库存',
@@ -1828,7 +1833,12 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith('完善迪莫商品资料');
+      expect(resolveAiScenario).toHaveBeenCalledWith({
+        company: 'Demo Company',
+        content: '完善迪莫商品资料',
+        conversationId: null,
+        modelAlias: 'opencode-glm-5.2',
+      });
       expect(generateAiProductSetupDraft).toHaveBeenCalledWith({
         company: 'Demo Company',
         content: '完善迪莫商品资料',
@@ -2010,9 +2020,12 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith(
-        '查询一下煌星是否已经正常入库',
-      );
+      expect(resolveAiScenario).toHaveBeenCalledWith({
+        company: 'Demo Company',
+        content: '查询一下煌星是否已经正常入库',
+        conversationId: 'AI-CONV-DRAFT',
+        modelAlias: null,
+      });
       expect(streamAiChatMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           content: '查询一下煌星是否已经正常入库',

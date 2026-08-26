@@ -661,9 +661,14 @@ describe('AI domain service', () => {
         raw: {},
       });
 
-    await expect(resolveAiScenario('新增商品传承结晶')).resolves.toBe(
-      'product_setup_draft',
-    );
+    await expect(
+      resolveAiScenario({
+        company: 'rgc (Demo)',
+        content: '新增商品传承结晶',
+        conversationId: 'AI-CONV-PRODUCT',
+        modelAlias: 'gpt-5.5',
+      }),
+    ).resolves.toBe('product_setup_draft');
     const result = await generateAiProductSetupDraft({
       company: 'rgc (Demo)',
       content: '新增商品传承结晶',
@@ -671,6 +676,16 @@ describe('AI domain service', () => {
       modelAlias: 'gpt-5.5',
     });
 
+    expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
+      1,
+      'resolve_ai_scenario_v1',
+      {
+        company: 'rgc (Demo)',
+        content: '新增商品传承结晶',
+        conversation_id: 'AI-CONV-PRODUCT',
+        model_alias: 'gpt-5.5',
+      },
+    );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       2,
       'generate_ai_product_setup_draft_v1',

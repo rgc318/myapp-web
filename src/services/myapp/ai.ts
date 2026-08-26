@@ -1402,7 +1402,9 @@ export async function resolveAiScenario(
     | string
     | {
         attachmentIds?: string[];
+        company?: string | null;
         content: string;
+        conversationId?: string | null;
         modelAlias?: string | null;
       },
 ): Promise<AiScenario> {
@@ -1413,6 +1415,10 @@ export async function resolveAiScenario(
       content: payload.content,
       ...(payload.attachmentIds?.length
         ? { attachment_ids: payload.attachmentIds }
+        : {}),
+      ...(payload.company ? { company: payload.company } : {}),
+      ...(payload.conversationId
+        ? { conversation_id: payload.conversationId }
         : {}),
       ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
     },
