@@ -36,6 +36,7 @@ export function RemoteLinkSelect({
   onChange?: (value: string) => void;
 }) {
   const [fetching, setFetching] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [options, setOptions] = useState<LinkOption[]>([]);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -55,6 +56,7 @@ export function RemoteLinkSelect({
 
   useEffect(() => {
     requestRef.current += 1;
+    setLoadError(null);
     setOptions([]);
   }, [doctype, extraFieldsKey, filtersKey, initialQuery, limit]);
 
@@ -62,6 +64,7 @@ export function RemoteLinkSelect({
     const requestId = requestRef.current + 1;
     requestRef.current = requestId;
     setFetching(true);
+    setLoadError(null);
     try {
       const nextOptions = await searchLinkOptions(
         doctype,
@@ -72,6 +75,13 @@ export function RemoteLinkSelect({
       );
       if (requestId === requestRef.current) {
         setOptions(nextOptions);
+      }
+    } catch (error) {
+      if (requestId === requestRef.current) {
+        setOptions([]);
+        setLoadError(
+          error instanceof Error ? error.message : '选项搜索失败，请稍后重试',
+        );
       }
     } finally {
       if (requestId === requestRef.current) {
@@ -112,6 +122,7 @@ export function RemoteLinkSelect({
       disabled={disabled}
       filterOption={false}
       loading={fetching}
+      notFoundContent={fetching ? '正在搜索…' : (loadError ?? '暂无匹配选项')}
       onChange={(nextValue) => onChange?.(nextValue ?? '')}
       onFocus={loadInitialOptions}
       onOpenChange={(open) => {

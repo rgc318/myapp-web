@@ -178,6 +178,33 @@ describe('AiDraftCompactSummary', () => {
     expect(screen.getByText('盘点盘盈')).toBeTruthy();
   });
 
+  it('keeps the requested inventory delta visible while product matching is ambiguous', () => {
+    renderSummary(
+      buildDraft('inventory_adjustment', {
+        adjustment_type: 'increase',
+        items: [
+          {
+            candidates: [
+              { item_code: 'COKE-1', item_name: '可口可乐' },
+              { item_code: 'PEPSI-1', item_name: '百事可乐' },
+            ],
+            item_code: null,
+            item_query: '可乐',
+            qty: 500,
+            uom: 'Box',
+            uom_display: '箱',
+          },
+        ],
+        warehouse: 'Stores - RD',
+      }),
+    );
+
+    expect(screen.getByText('待匹配：可乐（2 个候选）')).toBeTruthy();
+    expect(
+      screen.getByText('增加 500 箱（选择商品后计算目标库存）'),
+    ).toBeTruthy();
+  });
+
   it('shows unresolved draft queries as pending matches instead of empty values', () => {
     const { rerender } = renderSummary(
       buildDraft('sales_order', {

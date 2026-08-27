@@ -11,15 +11,18 @@ import { AiDraftEditorModal } from './AiDraftEditorModal';
 
 jest.mock('@/components', () => {
   const React = jest.requireActual('react');
+  const remoteInput = (props: any, label: string) =>
+    React.createElement('input', {
+      'aria-label': label,
+      'data-candidate-count': String(props.initialCandidates?.length ?? 0),
+      'data-initial-query': props.initialQuery ?? '',
+      onChange: (event: any) => props.onChange?.(event.target.value),
+      placeholder: props.placeholder,
+      value: props.value ?? '',
+    });
   return {
-    RemoteLinkSelect: (props: any) =>
-      React.createElement('input', {
-        'aria-label': props.doctype,
-        'data-initial-query': props.initialQuery ?? '',
-        onChange: (event: any) => props.onChange?.(event.target.value),
-        placeholder: props.placeholder,
-        value: props.value ?? '',
-      }),
+    RemoteLinkSelect: (props: any) => remoteInput(props, props.doctype),
+    RemoteProductSelect: (props: any) => remoteInput(props, 'Item'),
   };
 });
 jest.mock('@/components/CurrencySelect', () => {
@@ -839,6 +842,10 @@ describe('AiDraftEditorModal', () => {
         company: 'Demo Company',
         items: [
           {
+            candidates: [
+              { item_code: 'GEM-001', item_name: '圣晶石 A' },
+              { item_code: 'GEM-002', item_name: '圣晶石 B' },
+            ],
             item_code: null,
             item_query: '圣晶石',
             qty: 10,
@@ -874,9 +881,10 @@ describe('AiDraftEditorModal', () => {
 
     const itemInput = await screen.findByLabelText('Item');
     expect((itemInput as HTMLInputElement).value).toBe('');
+    expect(itemInput.getAttribute('data-candidate-count')).toBe('2');
     expect(
       screen.getByText(
-        'AI 只识别到搜索词“圣晶石”，尚未匹配商品编码。请搜索并选择具体商品。',
+        'AI 识别到搜索词“圣晶石”，后端找到 2 个候选，请从下拉列表中选择具体商品。',
       ),
     ).toBeTruthy();
     expect(

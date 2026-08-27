@@ -33,6 +33,7 @@ import {
 } from 'antd';
 import { useMemo, useRef, useState } from 'react';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
+import { RemoteProductSelect } from '@/components/RemoteProductSelect';
 import {
   type AiDataTask,
   analyzeAiProductData,
@@ -608,7 +609,7 @@ export default function AiDataTasksPage() {
             name="targetName"
             rules={[{ message: '请选择目标商品', required: true }]}
           >
-            <RemoteLinkSelect doctype="Item" placeholder="搜索商品编码或名称" />
+            <RemoteProductSelect placeholder="搜索商品编码、名称、昵称或条码" />
           </Form.Item>
           <Form.Item
             label="建议修改字段"

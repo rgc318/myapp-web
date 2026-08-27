@@ -14,7 +14,11 @@ import {
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { RemoteLinkSelect } from '@/components';
+import {
+  RemoteLinkSelect,
+  type RemoteProductCandidate,
+  RemoteProductSelect,
+} from '@/components';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { UomSelect } from '@/components/UomSelect';
@@ -83,6 +87,28 @@ function unresolvedSelectionQuery(
     return '';
   }
   return typeof payload[queryKey] === 'string' ? payload[queryKey].trim() : '';
+}
+
+function productCandidates(value: unknown): RemoteProductCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(objectValue)
+    .map((candidate) => ({
+      brand: typeof candidate.brand === 'string' ? candidate.brand : undefined,
+      itemCode:
+        typeof candidate.item_code === 'string'
+          ? candidate.item_code.trim()
+          : '',
+      itemName:
+        typeof candidate.item_name === 'string'
+          ? candidate.item_name
+          : undefined,
+      specification:
+        typeof candidate.specification === 'string'
+          ? candidate.specification
+          : undefined,
+    }))
+    .filter((candidate) => candidate.itemCode);
 }
 
 function ProductUpdateState({ draft }: { draft: AiDraft }) {
@@ -228,6 +254,9 @@ export function AiDraftEditorModal({
     draft?.draftType === 'inventory_adjustment'
       ? unresolvedSelectionQuery(draft.payload, 'warehouse', 'warehouse_query')
       : '';
+  const inventoryProductCandidates = productCandidates(
+    inventorySourceItem.candidates,
+  );
   const unresolvedProductItemGroupQuery =
     draft?.draftType === 'product_setup'
       ? unresolvedSelectionQuery(
@@ -754,9 +783,11 @@ export function AiDraftEditorModal({
                     }
                   >
                     {needsProductTargetSelection ? (
-                      <RemoteLinkSelect
-                        doctype="Item"
-                        filters={{ disabled: 0 }}
+                      <RemoteProductSelect
+                        company={company}
+                        initialCandidates={productCandidates(
+                          draft.payload.duplicate_candidates,
+                        )}
                         initialQuery={
                           typeof draft.payload.item_name === 'string'
                             ? draft.payload.item_name
@@ -990,22 +1021,26 @@ export function AiDraftEditorModal({
                     unresolvedInventoryItemQuery
                       ? selectedItemCode
                         ? `已选择商品 ${selectedItemCode}；保存草稿后会重新校验原搜索词“${unresolvedInventoryItemQuery}”。`
-                        : `AI 只识别到搜索词“${unresolvedInventoryItemQuery}”，尚未匹配商品编码。请搜索并选择具体商品。`
+                        : inventoryProductCandidates.length
+                          ? `AI 识别到搜索词“${unresolvedInventoryItemQuery}”，后端找到 ${inventoryProductCandidates.length} 个候选，请从下拉列表中选择具体商品。`
+                          : `AI 只识别到搜索词“${unresolvedInventoryItemQuery}”，尚未匹配商品编码。请搜索并选择具体商品。`
                       : undefined
                   }
                   label="商品"
                   name="itemCode"
                   rules={[{ message: '请选择具体商品', required: true }]}
                 >
-                  <RemoteLinkSelect
-                    doctype="Item"
-                    filters={{ disabled: 0, is_stock_item: 1 }}
+                  <RemoteProductSelect
+                    company={company}
+                    initialCandidates={inventoryProductCandidates}
                     initialQuery={unresolvedInventoryItemQuery || undefined}
+                    itemContext="inventory"
                     placeholder={
                       unresolvedInventoryItemQuery
                         ? `搜索并选择“${unresolvedInventoryItemQuery}”对应的商品`
                         : '搜索并选择商品'
                     }
+                    warehouse={selectedWarehouse}
                   />
                 </Form.Item>
                 <Form.Item
@@ -1207,6 +1242,9 @@ export function AiDraftEditorModal({
                           'warehouse_query',
                         );
                         const selectedLine = orderItems?.[field.name];
+                        const lineCandidates = productCandidates(
+                          sourceRow.candidates,
+                        );
                         return (
                           <ProCard
                             key={field.key}
@@ -1230,7 +1268,9 @@ export function AiDraftEditorModal({
                                   itemQuery
                                     ? selectedLine?.itemCode
                                       ? `已选择商品 ${selectedLine.itemCode}；保存后会重新校验。`
-                                      : `AI 只识别到搜索词“${itemQuery}”，请搜索并选择具体商品。`
+                                      : lineCandidates.length
+                                        ? `AI 识别到搜索词“${itemQuery}”，后端找到 ${lineCandidates.length} 个候选，请从下拉列表中选择。`
+                                        : `AI 只识别到搜索词“${itemQuery}”，请搜索并选择具体商品。`
                                     : undefined
                                 }
                                 name={[field.name, 'itemCode']}
@@ -1241,10 +1281,13 @@ export function AiDraftEditorModal({
                                   },
                                 ]}
                               >
-                                <RemoteLinkSelect
-                                  doctype="Item"
-                                  filters={{ disabled: 0 }}
+                                <RemoteProductSelect
+                                  company={company}
+                                  initialCandidates={lineCandidates}
                                   initialQuery={itemQuery || undefined}
+                                  itemContext={
+                                    isPurchaseOrder ? 'purchase' : 'sales'
+                                  }
                                   placeholder={
                                     itemQuery
                                       ? `搜索并选择“${itemQuery}”对应的商品`

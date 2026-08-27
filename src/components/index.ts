@@ -22,6 +22,10 @@ import { ProductImage } from './ProductImage';
 import { ProductSelect } from './ProductSelect';
 import { PurchaseOrderLinesTable } from './PurchaseOrderLinesTable';
 import { RemoteLinkSelect } from './RemoteLinkSelect';
+import {
+  type RemoteProductCandidate,
+  RemoteProductSelect,
+} from './RemoteProductSelect';
 import { Question, SelectLang } from './RightContent';
 import { AvatarDropdown, AvatarName } from './RightContent/AvatarDropdown';
 import { SalesOrderLinesTable } from './SalesOrderLinesTable';
@@ -41,6 +45,8 @@ export {
   PrintDocumentButton,
   ProductImage,
   ProductSelect,
+  type RemoteProductCandidate,
+  RemoteProductSelect,
   PurchaseRollbackGuide,
   PurchaseOrderLinesTable,
   Question,

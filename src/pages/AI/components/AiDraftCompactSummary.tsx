@@ -266,10 +266,15 @@ function inventorySummaryItems(draft: AiDraft): SummaryItem[] {
   const itemName =
     optionalText(row.item_name) ?? (itemQuery ? `待匹配：${itemQuery}` : '-');
   const itemCode = optionalText(row.item_code);
+  const candidateCount = Array.isArray(row.candidates)
+    ? row.candidates.length
+    : 0;
   const stockUom = displayUom(
     optionalText(row.stock_uom) ?? optionalText(row.uom),
     optionalText(row.stock_uom_display) ?? optionalText(row.uom_display),
   );
+  const requestedUom = displayUom(row.uom, row.uom_display);
+  const requestedQty = finiteNumber(row.qty);
   const currentQty = finiteNumber(row.current_stock_qty);
   const targetQty = finiteNumber(row.target_stock_qty);
   const deltaQty = finiteNumber(row.qty_delta);
@@ -277,12 +282,27 @@ function inventorySummaryItems(draft: AiDraft): SummaryItem[] {
     deltaQty === null
       ? '-'
       : `${deltaQty > 0 ? '+' : ''}${formatConvertedQty(deltaQty)} ${stockUom}`;
+  const adjustmentType = optionalText(payload.adjustment_type);
+  const pendingChangeLabel =
+    requestedQty === null
+      ? null
+      : adjustmentType === 'increase'
+        ? `增加 ${formatConvertedQty(requestedQty)} ${requestedUom}（选择商品后计算目标库存）`
+        : adjustmentType === 'decrease'
+          ? `减少 ${formatConvertedQty(requestedQty)} ${requestedUom}（选择商品后计算目标库存）`
+          : `目标 ${formatConvertedQty(requestedQty)} ${requestedUom}（选择商品后计算库存换算）`;
+  const stockChange =
+    currentQty !== null || targetQty !== null || deltaQty !== null
+      ? `${formatQty(currentQty)} → ${formatQty(targetQty)} ${stockUom}（差异 ${deltaLabel}）`
+      : (pendingChangeLabel ?? `- → - ${stockUom}（差异 -）`);
 
   return [
     {
       key: 'product',
       label: '商品',
-      value: itemCode ? `${itemName}（${itemCode}）` : itemName,
+      value: itemCode
+        ? `${itemName}（${itemCode}）`
+        : `${itemName}${candidateCount ? `（${candidateCount} 个候选）` : ''}`,
     },
     {
       key: 'warehouse',
@@ -293,7 +313,7 @@ function inventorySummaryItems(draft: AiDraft): SummaryItem[] {
     {
       key: 'stock-change',
       label: '库存变化',
-      value: `${formatQty(currentQty)} → ${formatQty(targetQty)} ${stockUom}（差异 ${deltaLabel}）`,
+      value: stockChange,
     },
     {
       key: 'valuation',
