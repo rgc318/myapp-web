@@ -19,6 +19,10 @@ export default {
       target: process.env.MYAPP_WEB_PROXY_TARGET || 'http://localhost:8080',
       changeOrigin: true,
     },
+    '/private/files/': {
+      target: process.env.MYAPP_WEB_PROXY_TARGET || 'http://localhost:8080',
+      changeOrigin: true,
+    },
   },
   /**
    * @name 详细的代理配置
@@ -36,6 +40,11 @@ export default {
       changeOrigin: true,
       pathRewrite: { '^': '' },
     },
+    '/private/files/': {
+      target: process.env.MYAPP_WEB_PROXY_TARGET || 'http://localhost:8080',
+      changeOrigin: true,
+      pathRewrite: { '^': '' },
+    },
   },
   pre: {
     '/api/method/': {
@@ -44,6 +53,11 @@ export default {
       pathRewrite: { '^': '' },
     },
     '/files/': {
+      target: process.env.MYAPP_WEB_PROXY_TARGET || 'http://localhost:8080',
+      changeOrigin: true,
+      pathRewrite: { '^': '' },
+    },
+    '/private/files/': {
       target: process.env.MYAPP_WEB_PROXY_TARGET || 'http://localhost:8080',
       changeOrigin: true,
       pathRewrite: { '^': '' },

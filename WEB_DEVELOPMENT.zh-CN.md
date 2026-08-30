@@ -71,7 +71,7 @@
 开发环境建议：
 
 - 固定端口优先使用 `npm run start:dev -- --port 8001`。
-- Frappe 文件服务返回的 `/files/...` 需要通过 dev proxy 转发到后端；`config/proxy.ts` 已为 `dev/test/pre` 配置 `/files/`。修改 proxy 后必须重启 dev server。
+- Frappe 文件服务返回的公开 `/files/...` 和私有 `/private/files/...` 都需要通过 dev proxy 转发到后端；`config/proxy.ts` 已为 `dev/test/pre` 配置这两类路径。修改 proxy 后必须重启 dev server。
 - 不要同时启动多个 Umi dev server 指向同一个工作区；并发 dev/build 容易造成 `.umi`、chunk manifest 和浏览器缓存不一致。
 - 如果出现旧 chunk 或 `.umi/exports` 解析问题，先停止多余 dev server，再执行：
 
