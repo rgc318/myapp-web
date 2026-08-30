@@ -914,6 +914,7 @@ export default function AiPage() {
     }
     let resolvedScenario = requestedScenario;
     let requestScenario = requestedScenario;
+    let scenarioResolutionId: string | null = null;
     const userMessage = {
       ...createMessage('user', rawContent || '已上传图片'),
       attachments,
@@ -976,7 +977,7 @@ export default function AiPage() {
 
     try {
       if (requestedScenario === 'auto') {
-        resolvedScenario = await resolveAiScenario({
+        const resolution = await resolveAiScenario({
           ...(attachmentIds.length ? { attachmentIds } : {}),
           company: effectiveCompany,
           content,
@@ -984,6 +985,8 @@ export default function AiPage() {
           modelAlias: requestedModelAlias,
           signal: abortController.signal,
         });
+        resolvedScenario = resolution.scenario;
+        scenarioResolutionId = resolution.resolutionId;
         if (abortController.signal.aborted) {
           throw new DOMException('Aborted', 'AbortError');
         }
@@ -1095,6 +1098,7 @@ export default function AiPage() {
           modelAlias: requestedModelAlias,
           retryRunId: retryContext?.runId ?? null,
           scenario: requestScenario,
+          scenarioResolutionId,
         },
         (event) => {
           if (event.type === 'run_started') {

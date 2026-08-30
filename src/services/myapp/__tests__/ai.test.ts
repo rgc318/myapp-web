@@ -639,7 +639,10 @@ describe('AI domain service', () => {
   it('resolves product creation and maps a product setup draft', async () => {
     mockedCallGatewayMethod
       .mockResolvedValueOnce({
-        data: { scenario: 'product_setup_draft' },
+        data: {
+          resolution_id: 'AI-RESOLUTION-PRODUCT',
+          scenario: 'product_setup_draft',
+        },
         meta: {},
         raw: {},
       })
@@ -668,7 +671,10 @@ describe('AI domain service', () => {
         conversationId: 'AI-CONV-PRODUCT',
         modelAlias: 'gpt-5.5',
       }),
-    ).resolves.toBe('product_setup_draft');
+    ).resolves.toEqual({
+      resolutionId: 'AI-RESOLUTION-PRODUCT',
+      scenario: 'product_setup_draft',
+    });
     const result = await generateAiProductSetupDraft({
       company: 'rgc (Demo)',
       content: '新增商品传承结晶',
@@ -703,7 +709,7 @@ describe('AI domain service', () => {
   it('forwards an abort signal while resolving the automatic scenario', async () => {
     const controller = new AbortController();
     mockedCallGatewayMethod.mockResolvedValue({
-      data: { scenario: 'general' },
+      data: { resolution_id: 'AI-RESOLUTION-GENERAL', scenario: 'general' },
       meta: {},
       raw: {},
     });
@@ -942,6 +948,7 @@ describe('AI domain service', () => {
         content: '你好',
         modelAlias: 'opencode-glm-5.2',
         retryRunId: 'AI-RUN-FAILED',
+        scenarioResolutionId: 'AI-RESOLUTION-GENERAL',
       },
       (event) => events.push(event.type),
     );
@@ -963,6 +970,7 @@ describe('AI domain service', () => {
       model_alias: 'opencode-glm-5.2',
       retry_run_id: 'AI-RUN-FAILED',
       scenario: 'auto',
+      scenario_resolution_id: 'AI-RESOLUTION-GENERAL',
     });
     fetchMock.mockRestore();
   });

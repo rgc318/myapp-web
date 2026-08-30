@@ -36,6 +36,11 @@ export type AiScenario =
   | 'inventory_adjustment_draft'
   | 'product_setup_draft';
 
+export type AiScenarioResolution = {
+  resolutionId: string | null;
+  scenario: AiScenario;
+};
+
 export type AiSelectableModel = {
   capability: string;
   displayName: string;
@@ -1408,7 +1413,7 @@ export async function resolveAiScenario(
         modelAlias?: string | null;
         signal?: AbortSignal;
       },
-): Promise<AiScenario> {
+): Promise<AiScenarioResolution> {
   const payload = typeof input === 'string' ? { content: input } : input;
   const gatewayPayload = {
     content: payload.content,
@@ -1431,8 +1436,10 @@ export async function resolveAiScenario(
         'resolve_ai_scenario_v1',
         gatewayPayload,
       );
-  const scenario = String(readObject(result.data).scenario ?? 'general');
-  return scenario as AiScenario;
+  const data = readObject(result.data);
+  const scenario = String(data.scenario ?? 'general') as AiScenario;
+  const resolutionId = String(data.resolution_id ?? '').trim() || null;
+  return { resolutionId, scenario };
 }
 
 export async function generateAiProductSetupDraft(payload: {
@@ -1583,6 +1590,7 @@ export async function streamAiChatMessage(
     company?: string | null;
     modelAlias?: string | null;
     retryRunId?: string | null;
+    scenarioResolutionId?: string | null;
   },
   onEvent: (event: AiEvent) => void,
   signal?: AbortSignal,
@@ -1612,6 +1620,9 @@ export async function streamAiChatMessage(
           ...(payload.company ? { company: payload.company } : {}),
           ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
           ...(payload.retryRunId ? { retry_run_id: payload.retryRunId } : {}),
+          ...(payload.scenarioResolutionId
+            ? { scenario_resolution_id: payload.scenarioResolutionId }
+            : {}),
         }),
         signal,
       },

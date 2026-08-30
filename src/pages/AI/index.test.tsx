@@ -497,15 +497,23 @@ describe('AI workspace page', () => {
     resolveAiScenario.mockImplementation(
       async (value: string | { content: string }) => {
         const content = typeof value === 'string' ? value : value.content;
-        if (content.includes('销售订单')) return 'order_query';
+        if (content.includes('销售订单')) {
+          return {
+            resolutionId: 'AI-RESOLUTION-ORDER',
+            scenario: 'order_query',
+          };
+        }
         if (
           content.includes('商品') ||
           content.includes('蓝色包装') ||
           content.includes('入库')
         ) {
-          return 'product_search';
+          return {
+            resolutionId: 'AI-RESOLUTION-PRODUCT',
+            scenario: 'product_search',
+          };
         }
-        return 'general';
+        return { resolutionId: 'AI-RESOLUTION-GENERAL', scenario: 'general' };
       },
     );
     uploadAiImageAttachment.mockResolvedValue({
@@ -701,7 +709,12 @@ describe('AI workspace page', () => {
   });
 
   it('renders the user message immediately while auto routing is pending', async () => {
-    let finishRouting: ((scenario: string) => void) | undefined;
+    let finishRouting:
+      | ((resolution: {
+          resolutionId: string | null;
+          scenario: string;
+        }) => void)
+      | undefined;
     resolveAiScenario.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -725,7 +738,10 @@ describe('AI workspace page', () => {
     expect(screen.getByRole('button', { name: '停止生成' })).toBeTruthy();
 
     await act(async () => {
-      finishRouting?.('general');
+      finishRouting?.({
+        resolutionId: 'AI-RESOLUTION-PENDING',
+        scenario: 'general',
+      });
     });
     await waitFor(() => expect(streamAiChatMessage).toHaveBeenCalledTimes(1));
   });
@@ -1835,7 +1851,10 @@ describe('AI workspace page', () => {
   });
 
   it('auto-routes an inventory addition request to the validated draft endpoint', async () => {
-    resolveAiScenario.mockResolvedValueOnce('inventory_adjustment_draft');
+    resolveAiScenario.mockResolvedValueOnce({
+      resolutionId: 'AI-RESOLUTION-INVENTORY',
+      scenario: 'inventory_adjustment_draft',
+    });
     render(React.createElement(App, null, React.createElement(AiPage)));
 
     await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
@@ -1874,7 +1893,10 @@ describe('AI workspace page', () => {
   });
 
   it('auto-routes a product completion request to the validated draft endpoint', async () => {
-    resolveAiScenario.mockResolvedValueOnce('product_setup_draft');
+    resolveAiScenario.mockResolvedValueOnce({
+      resolutionId: 'AI-RESOLUTION-PRODUCT-DRAFT',
+      scenario: 'product_setup_draft',
+    });
     render(React.createElement(App, null, React.createElement(AiPage)));
 
     await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
