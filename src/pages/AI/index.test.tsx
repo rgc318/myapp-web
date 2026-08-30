@@ -700,6 +700,36 @@ describe('AI workspace page', () => {
     expect(screen.getByText('只读模式')).toBeTruthy();
   });
 
+  it('renders the user message immediately while auto routing is pending', async () => {
+    let finishRouting: ((scenario: string) => void) | undefined;
+    resolveAiScenario.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRouting = resolve;
+        }),
+    );
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    const composer = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'AI 输入',
+    });
+    fireEvent.change(composer, { target: { value: '你好' } });
+    const sendButton = screen.getByRole('button', { name: '发送' });
+    fireEvent.click(sendButton);
+    fireEvent.click(sendButton);
+
+    expect(await screen.findByText('你好')).toBeTruthy();
+    expect(composer.value).toBe('');
+    expect(resolveAiScenario).toHaveBeenCalledTimes(1);
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: '停止生成' })).toBeTruthy();
+
+    await act(async () => {
+      finishRouting?.('general');
+    });
+    await waitFor(() => expect(streamAiChatMessage).toHaveBeenCalledTimes(1));
+  });
+
   it('uploads a pasted image inside the sender and allows image-only submit', async () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 

@@ -387,6 +387,7 @@ export default function AiPage() {
     null,
   );
   const streamAbortRef = useRef<AbortController | null>(null);
+  const submitInFlightRef = useRef(false);
   const attachmentUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingAttachmentsRef = useRef<AiAttachment[]>([]);
   const pendingAttachmentsByConversationRef = useRef<
@@ -888,7 +889,12 @@ export default function AiPage() {
     const requestedScenario = scenarioValue ?? scenario;
     const requestedModelAlias =
       modelAliasValue === undefined ? selectedModelAlias : modelAliasValue;
-    if ((!content && !attachments.length) || loading || attachmentUploading) {
+    if (
+      (!content && !attachments.length) ||
+      submitInFlightRef.current ||
+      loading ||
+      attachmentUploading
+    ) {
       return;
     }
     if (selectedConversationStatus === 'archived' && conversationId) {
@@ -908,47 +914,6 @@ export default function AiPage() {
     }
     let resolvedScenario = requestedScenario;
     let requestScenario = requestedScenario;
-    if (requestedScenario === 'auto') {
-      try {
-        resolvedScenario = await resolveAiScenario({
-          ...(attachmentIds.length ? { attachmentIds } : {}),
-          company: effectiveCompany,
-          content,
-          conversationId,
-          modelAlias: requestedModelAlias,
-        });
-        requestScenario = [
-          'sales_order_draft',
-          'purchase_order_draft',
-          'inventory_adjustment_draft',
-          'product_setup_draft',
-        ].includes(resolvedScenario)
-          ? resolvedScenario
-          : 'auto';
-      } catch (caught) {
-        message.error(
-          caught instanceof Error ? caught.message : 'AI 场景识别失败',
-        );
-        return;
-      }
-    }
-    if (
-      [
-        'product_search',
-        'order_query',
-        'report_summary',
-        'auto',
-        'sales_order_draft',
-        'purchase_order_draft',
-        'inventory_adjustment_draft',
-        'product_setup_draft',
-      ].includes(resolvedScenario) &&
-      !effectiveCompany
-    ) {
-      message.warning('请先在工作偏好中选择默认公司。');
-      return;
-    }
-
     const userMessage = {
       ...createMessage('user', rawContent || '已上传图片'),
       attachments,
@@ -961,7 +926,7 @@ export default function AiPage() {
       runStream: { deltaCount: 0, streamedChars: 0 },
       runTools: [],
       runWarnings: [],
-      scenario: resolvedScenario,
+      scenario: requestedScenario,
       modelAlias: requestedModelAlias,
       modelSelection: requestedModelAlias ? 'fixed' : 'auto',
       requestedModelDisplay:
@@ -973,6 +938,8 @@ export default function AiPage() {
           (model) => model.modelAlias === requestedModelAlias,
         )?.displayName ?? null,
     };
+
+    submitInFlightRef.current = true;
     setMessages((current) =>
       retryContext
         ? current.map((item) =>
@@ -994,14 +961,58 @@ export default function AiPage() {
     setRunWarnings([]);
     setToolProgress([]);
     setRunProgress({
-      message: '正在准备当前账号的业务查询上下文',
-      phase: 'preparing',
+      message:
+        requestedScenario === 'auto'
+          ? '正在识别业务场景'
+          : '正在准备当前账号的业务查询上下文',
+      phase: requestedScenario === 'auto' ? 'routing' : 'preparing',
       startedAt: Date.now(),
     });
     setRetryRequest(null);
     setRunStatus('running');
     setLoading(true);
+
     try {
+      if (requestedScenario === 'auto') {
+        resolvedScenario = await resolveAiScenario({
+          ...(attachmentIds.length ? { attachmentIds } : {}),
+          company: effectiveCompany,
+          content,
+          conversationId,
+          modelAlias: requestedModelAlias,
+        });
+        requestScenario = [
+          'sales_order_draft',
+          'purchase_order_draft',
+          'inventory_adjustment_draft',
+          'product_setup_draft',
+        ].includes(resolvedScenario)
+          ? resolvedScenario
+          : 'auto';
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? { ...item, scenario: resolvedScenario }
+              : item,
+          ),
+        );
+      }
+      if (
+        [
+          'product_search',
+          'order_query',
+          'report_summary',
+          'auto',
+          'sales_order_draft',
+          'purchase_order_draft',
+          'inventory_adjustment_draft',
+          'product_setup_draft',
+        ].includes(resolvedScenario) &&
+        !effectiveCompany
+      ) {
+        throw new Error('请先在工作偏好中选择默认公司。');
+      }
+
       if (
         resolvedScenario === 'sales_order_draft' ||
         resolvedScenario === 'purchase_order_draft' ||
@@ -1415,6 +1426,7 @@ export default function AiPage() {
       }
     } finally {
       streamAbortRef.current = null;
+      submitInFlightRef.current = false;
       setLoading(false);
     }
   };
