@@ -971,6 +971,8 @@ export default function AiPage() {
     setRetryRequest(null);
     setRunStatus('running');
     setLoading(true);
+    const abortController = new AbortController();
+    streamAbortRef.current = abortController;
 
     try {
       if (requestedScenario === 'auto') {
@@ -980,7 +982,11 @@ export default function AiPage() {
           content,
           conversationId,
           modelAlias: requestedModelAlias,
+          signal: abortController.signal,
         });
+        if (abortController.signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
         requestScenario = [
           'sales_order_draft',
           'purchase_order_draft',
@@ -1080,8 +1086,6 @@ export default function AiPage() {
         await refreshConversations();
         return;
       }
-      const abortController = new AbortController();
-      streamAbortRef.current = abortController;
       const result = await streamAiChatMessage(
         {
           company: effectiveCompany,

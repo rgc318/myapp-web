@@ -16,6 +16,7 @@ export type GatewayEnvelope<T = unknown, M = Record<string, unknown>> = {
 export type GatewayCallOptions = {
   idempotencyKey?: string;
   method?: 'GET' | 'POST';
+  signal?: AbortSignal;
   skipErrorHandler?: boolean;
 };
 
@@ -90,6 +91,7 @@ export async function callFrappeMethod<T = unknown>(
       data: payload,
       headers,
       method: options?.method ?? 'POST',
+      signal: options?.signal,
       skipErrorHandler: options?.skipErrorHandler ?? true,
     },
   );
@@ -151,6 +153,9 @@ export async function callGatewayMethod<
       raw: envelope,
     };
   } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw error;
+    }
     if (error instanceof MyAppApiError) {
       throw error;
     }

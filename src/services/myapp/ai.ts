@@ -1406,23 +1406,31 @@ export async function resolveAiScenario(
         content: string;
         conversationId?: string | null;
         modelAlias?: string | null;
+        signal?: AbortSignal;
       },
 ): Promise<AiScenario> {
   const payload = typeof input === 'string' ? { content: input } : input;
-  const result = await callGatewayMethod<Record<string, unknown>>(
-    'resolve_ai_scenario_v1',
-    {
-      content: payload.content,
-      ...(payload.attachmentIds?.length
-        ? { attachment_ids: payload.attachmentIds }
-        : {}),
-      ...(payload.company ? { company: payload.company } : {}),
-      ...(payload.conversationId
-        ? { conversation_id: payload.conversationId }
-        : {}),
-      ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
-    },
-  );
+  const gatewayPayload = {
+    content: payload.content,
+    ...(payload.attachmentIds?.length
+      ? { attachment_ids: payload.attachmentIds }
+      : {}),
+    ...(payload.company ? { company: payload.company } : {}),
+    ...(payload.conversationId
+      ? { conversation_id: payload.conversationId }
+      : {}),
+    ...(payload.modelAlias ? { model_alias: payload.modelAlias } : {}),
+  };
+  const result = payload.signal
+    ? await callGatewayMethod<Record<string, unknown>>(
+        'resolve_ai_scenario_v1',
+        gatewayPayload,
+        { signal: payload.signal },
+      )
+    : await callGatewayMethod<Record<string, unknown>>(
+        'resolve_ai_scenario_v1',
+        gatewayPayload,
+      );
   const scenario = String(readObject(result.data).scenario ?? 'general');
   return scenario as AiScenario;
 }

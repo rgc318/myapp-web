@@ -730,6 +730,32 @@ describe('AI workspace page', () => {
     await waitFor(() => expect(streamAiChatMessage).toHaveBeenCalledTimes(1));
   });
 
+  it('cancels automatic routing before the formal chat starts', async () => {
+    let observedSignal: AbortSignal | undefined;
+    resolveAiScenario.mockImplementationOnce(
+      async (value: { signal?: AbortSignal }) => {
+        observedSignal = value.signal;
+        return await new Promise((_resolve, reject) => {
+          value.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      },
+    );
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '你好' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(observedSignal).toBeDefined());
+    fireEvent.click(await screen.findByRole('button', { name: '停止生成' }));
+
+    await waitFor(() => expect(observedSignal?.aborted).toBe(true));
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
+    expect(cancelAiRun).not.toHaveBeenCalled();
+  });
+
   it('uploads a pasted image inside the sender and allows image-only submit', async () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 
@@ -1827,12 +1853,15 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith({
-        company: 'Demo Company',
-        content: '给迪莫添加10个库存',
-        conversationId: null,
-        modelAlias: 'opencode-glm-5.2',
-      });
+      expect(resolveAiScenario).toHaveBeenCalledWith(
+        expect.objectContaining({
+          company: 'Demo Company',
+          content: '给迪莫添加10个库存',
+          conversationId: null,
+          modelAlias: 'opencode-glm-5.2',
+          signal: expect.any(AbortSignal),
+        }),
+      );
       expect(generateAiInventoryAdjustmentDraft).toHaveBeenCalledWith({
         company: 'Demo Company',
         content: '给迪莫添加10个库存',
@@ -1863,12 +1892,15 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith({
-        company: 'Demo Company',
-        content: '完善迪莫商品资料',
-        conversationId: null,
-        modelAlias: 'opencode-glm-5.2',
-      });
+      expect(resolveAiScenario).toHaveBeenCalledWith(
+        expect.objectContaining({
+          company: 'Demo Company',
+          content: '完善迪莫商品资料',
+          conversationId: null,
+          modelAlias: 'opencode-glm-5.2',
+          signal: expect.any(AbortSignal),
+        }),
+      );
       expect(generateAiProductSetupDraft).toHaveBeenCalledWith({
         company: 'Demo Company',
         content: '完善迪莫商品资料',
@@ -2050,12 +2082,15 @@ describe('AI workspace page', () => {
     fireEvent.click(screen.getByRole('button', { name: '发送' }));
 
     await waitFor(() => {
-      expect(resolveAiScenario).toHaveBeenCalledWith({
-        company: 'Demo Company',
-        content: '查询一下煌星是否已经正常入库',
-        conversationId: 'AI-CONV-DRAFT',
-        modelAlias: null,
-      });
+      expect(resolveAiScenario).toHaveBeenCalledWith(
+        expect.objectContaining({
+          company: 'Demo Company',
+          content: '查询一下煌星是否已经正常入库',
+          conversationId: 'AI-CONV-DRAFT',
+          modelAlias: null,
+          signal: expect.any(AbortSignal),
+        }),
+      );
       expect(streamAiChatMessage).toHaveBeenCalledWith(
         expect.objectContaining({
           content: '查询一下煌星是否已经正常入库',

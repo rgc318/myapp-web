@@ -700,6 +700,27 @@ describe('AI domain service', () => {
     expect(result.draft.validation.readyForHandoff).toBe(false);
   });
 
+  it('forwards an abort signal while resolving the automatic scenario', async () => {
+    const controller = new AbortController();
+    mockedCallGatewayMethod.mockResolvedValue({
+      data: { scenario: 'general' },
+      meta: {},
+      raw: {},
+    });
+
+    await resolveAiScenario({
+      company: 'rgc (Demo)',
+      content: '你好',
+      signal: controller.signal,
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'resolve_ai_scenario_v1',
+      { company: 'rgc (Demo)', content: '你好' },
+      { signal: controller.signal },
+    );
+  });
+
   it('maps the current user draft center with filters and pagination', async () => {
     mockedCallGatewayMethod.mockResolvedValue({
       data: {
