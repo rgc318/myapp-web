@@ -40,6 +40,7 @@ export type ProductPriceEntry = {
   currency: string;
   priceList: string;
   rate: number | null;
+  uom?: string | null;
 };
 
 export type ProductBarcode = {
@@ -47,6 +48,7 @@ export type ProductBarcode = {
   idx: number;
   isPrimary: boolean;
   name: string | null;
+  uom?: string | null;
 };
 
 export type ProductSummary = {
@@ -387,6 +389,7 @@ function mapProductBarcodes(value: unknown, primaryBarcode: unknown) {
       if (!barcode) {
         return null;
       }
+      const uom = toOptionalText(row.uom);
       return {
         barcode,
         idx: Number(row.idx ?? index + 1),
@@ -395,12 +398,20 @@ function mapProductBarcodes(value: unknown, primaryBarcode: unknown) {
           Number(row.is_primary ?? 0) === 1 ||
           barcode === primaryText,
         name: toOptionalText(row.name) ?? null,
+        ...(uom ? { uom } : {}),
       };
     })
     .filter((entry): entry is ProductBarcode => Boolean(entry));
 
   if (!mapped.length && primaryText) {
-    return [{ barcode: primaryText, idx: 1, isPrimary: true, name: null }];
+    return [
+      {
+        barcode: primaryText,
+        idx: 1,
+        isPrimary: true,
+        name: null,
+      },
+    ];
   }
 
   return mapped;
@@ -537,10 +548,12 @@ function mapPriceEntries(value: unknown): ProductPriceEntry[] {
       if (!priceList) {
         return null;
       }
+      const uom = toOptionalText(row.uom);
       return {
         currency: String(row.currency ?? ''),
         priceList,
         rate: toOptionalNumber(row.rate ?? row.price_list_rate),
+        ...(uom ? { uom } : {}),
       };
     })
     .filter((entry): entry is ProductPriceEntry => Boolean(entry));
@@ -878,6 +891,7 @@ function productSavePayload(
     currency: string | undefined;
     price_list: string;
     rate: number;
+    uom: string | undefined;
   };
   const hasOwn = (key: keyof SaveProductPayload) =>
     Object.prototype.hasOwnProperty.call(payload, key);
@@ -895,6 +909,7 @@ function productSavePayload(
           currency: toOptionalText(payload.currency),
           price_list: 'Standard Selling',
           rate: payload.standardSellingRate,
+          uom: toOptionalText(payload.stockUom),
         },
     payload.wholesaleRate === undefined || payload.wholesaleRate === null
       ? null
@@ -902,6 +917,7 @@ function productSavePayload(
           currency: toOptionalText(payload.currency),
           price_list: 'Wholesale',
           rate: payload.wholesaleRate,
+          uom: toOptionalText(payload.wholesaleDefaultUom ?? payload.stockUom),
         },
     payload.retailRate === undefined || payload.retailRate === null
       ? null
@@ -909,6 +925,7 @@ function productSavePayload(
           currency: toOptionalText(payload.currency),
           price_list: 'Retail',
           rate: payload.retailRate,
+          uom: toOptionalText(payload.retailDefaultUom ?? payload.stockUom),
         },
   ].filter((entry): entry is PricePayloadEntry => Boolean(entry));
   const buyingPrices =
@@ -919,6 +936,7 @@ function productSavePayload(
             currency: toOptionalText(payload.currency),
             price_list: 'Standard Buying',
             rate: payload.standardBuyingRate,
+            uom: toOptionalText(payload.stockUom),
           },
         ];
   const stockUom = toOptionalText(payload.stockUom);
@@ -1049,14 +1067,15 @@ export async function bulkUpdateProducts(
 export async function addProductBarcode(
   itemCode: string,
   barcode: string,
-  options: { setPrimary?: boolean } = {},
+  options: { setPrimary?: boolean; uom?: string | null } = {},
 ) {
   return runGatewayMutation<ProductSummary>('add_product_barcode_v2', {
-    payload: {
+    payload: compactPayload({
       barcode,
       item_code: itemCode,
       set_primary: options.setPrimary ? 1 : 0,
-    },
+      uom: toOptionalText(options.uom),
+    }),
     successMessage: '条码已新增',
     transform: (raw) => mapProduct(readObject(raw)),
   });

@@ -18,6 +18,7 @@ import {
   Modal,
   message,
   Popconfirm,
+  Select,
   Skeleton,
   Space,
   Switch,
@@ -53,6 +54,7 @@ import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
 type ProductFormValues = SaveProductPayload;
 type BarcodeFormValues = {
   barcode: string;
+  uom: string;
 };
 type ProductQualityIssue = {
   action?: 'edit' | 'inventory';
@@ -326,6 +328,12 @@ function PriceEntriesTable({
           title: '价格表',
         },
         {
+          dataIndex: 'uom',
+          title: '计价单位',
+          width: 120,
+          render: (value) => productUomDisplay(value),
+        },
+        {
           dataIndex: 'currency',
           title: '币种',
           width: 90,
@@ -342,7 +350,9 @@ function PriceEntriesTable({
       dataSource={rows}
       locale={{ emptyText: '暂无价格记录' }}
       pagination={false}
-      rowKey={(record) => record.priceList}
+      rowKey={(record) =>
+        `${record.priceList}:${record.uom ?? ''}:${record.currency}`
+      }
       size="small"
       title={() => title}
     />
@@ -354,11 +364,13 @@ function BarcodeTable({
   onDelete,
   onSetPrimary,
   rows,
+  uomDisplays,
 }: {
   loading?: string;
   onDelete: (record: ProductBarcode) => void;
   onSetPrimary: (record: ProductBarcode) => void;
   rows: ProductBarcode[];
+  uomDisplays: Record<string, string>;
 }) {
   const columns: ProColumns<ProductBarcode>[] = [
     {
@@ -366,6 +378,15 @@ function BarcodeTable({
       title: '条码',
       copyable: true,
       ellipsis: true,
+    },
+    {
+      dataIndex: 'uom',
+      title: '对应单位',
+      width: 120,
+      render: (value) => {
+        const uom = typeof value === 'string' ? value : '';
+        return productUomDisplay(uom, uomDisplays[uom] || null);
+      },
     },
     {
       dataIndex: 'isPrimary',
@@ -528,7 +549,7 @@ const ProductDetailPage: React.FC = () => {
     }
     setBarcodeSubmitting('add');
     try {
-      await addProductBarcode(data.itemCode, barcode);
+      await addProductBarcode(data.itemCode, barcode, { uom: values.uom });
       barcodeForm.resetFields();
       refresh();
     } catch (caught) {
@@ -850,6 +871,20 @@ const ProductDetailPage: React.FC = () => {
                       />
                     </Space.Compact>
                   </Form.Item>
+                  <Form.Item
+                    initialValue={data.stockUom}
+                    name="uom"
+                    rules={[{ required: true, message: '请选择条码对应单位' }]}
+                  >
+                    <Select
+                      options={data.allUoms.map((uom) => ({
+                        label: productUomDisplay(uom, data.allUomDisplays[uom]),
+                        value: uom,
+                      }))}
+                      placeholder="条码对应单位"
+                      style={{ width: 160 }}
+                    />
+                  </Form.Item>
                   <Form.Item>
                     <Button
                       htmlType="submit"
@@ -866,6 +901,7 @@ const ProductDetailPage: React.FC = () => {
                   onDelete={handleDeleteBarcode}
                   onSetPrimary={handleSetPrimaryBarcode}
                   rows={data.barcodes}
+                  uomDisplays={data.allUomDisplays}
                 />
               </Space>
             </ProCard>
@@ -1053,28 +1089,28 @@ const ProductDetailPage: React.FC = () => {
           />
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
-              label="标准售价"
+              label="标准售价（库存单位）"
               name="standardSellingRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="标准采购价"
+              label="标准采购价（库存单位）"
               name="standardBuyingRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="批发价"
+              label="批发价（批发默认单位）"
               name="wholesaleRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="零售价"
+              label="零售价（零售默认单位）"
               name="retailRate"
               style={{ minWidth: 160 }}
             >

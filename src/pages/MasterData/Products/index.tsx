@@ -1576,28 +1576,28 @@ const ProductsPage: React.FC = () => {
           />
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
-              label="标准售价"
+              label="标准售价（库存单位）"
               name="standardSellingRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="标准采购价"
+              label="标准采购价（库存单位）"
               name="standardBuyingRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="批发价"
+              label="批发价（批发默认单位）"
               name="wholesaleRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="零售价"
+              label="零售价（零售默认单位）"
               name="retailRate"
               style={{ minWidth: 160 }}
             >

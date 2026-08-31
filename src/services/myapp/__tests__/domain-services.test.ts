@@ -2969,7 +2969,12 @@ describe('myapp domain services', () => {
         barcode: 'BAR-001',
         brand: 'Brand A',
         buying_prices: [
-          { currency: 'CNY', price_list: 'Standard Buying', rate: 8 },
+          {
+            currency: 'CNY',
+            price_list: 'Standard Buying',
+            rate: 8,
+            uom: 'Nos',
+          },
         ],
         currency: 'CNY',
         company: 'rgc (Demo)',
@@ -2980,9 +2985,14 @@ describe('myapp domain services', () => {
         item_name: '新品',
         retail_default_uom: 'Nos',
         selling_prices: [
-          { currency: 'CNY', price_list: 'Standard Selling', rate: 12 },
-          { currency: 'CNY', price_list: 'Wholesale', rate: 10 },
-          { currency: 'CNY', price_list: 'Retail', rate: 14 },
+          {
+            currency: 'CNY',
+            price_list: 'Standard Selling',
+            rate: 12,
+            uom: 'Nos',
+          },
+          { currency: 'CNY', price_list: 'Wholesale', rate: 10, uom: 'Box' },
+          { currency: 'CNY', price_list: 'Retail', rate: 14, uom: 'Nos' },
         ],
         standard_rate: 12,
         stock_uom: 'Nos',
@@ -3005,7 +3015,12 @@ describe('myapp domain services', () => {
         barcode: '',
         brand: '',
         buying_prices: [
-          { currency: 'CNY', price_list: 'Standard Buying', rate: 9 },
+          {
+            currency: 'CNY',
+            price_list: 'Standard Buying',
+            rate: 9,
+            uom: 'Nos',
+          },
         ],
         currency: 'CNY',
         description: '',
@@ -3015,9 +3030,14 @@ describe('myapp domain services', () => {
         item_name: '新品2',
         retail_default_uom: 'Nos',
         selling_prices: [
-          { currency: 'CNY', price_list: 'Standard Selling', rate: 13 },
-          { currency: 'CNY', price_list: 'Wholesale', rate: 11 },
-          { currency: 'CNY', price_list: 'Retail', rate: 15 },
+          {
+            currency: 'CNY',
+            price_list: 'Standard Selling',
+            rate: 13,
+            uom: 'Nos',
+          },
+          { currency: 'CNY', price_list: 'Wholesale', rate: 11, uom: 'Box' },
+          { currency: 'CNY', price_list: 'Retail', rate: 15, uom: 'Nos' },
         ],
         standard_rate: 13,
         stock_uom: 'Nos',
@@ -3114,14 +3134,22 @@ describe('myapp domain services', () => {
       data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
     });
 
-    await addProductBarcode('ITEM-001', 'BAR-002', { setPrimary: true });
+    await addProductBarcode('ITEM-001', 'BAR-002', {
+      setPrimary: true,
+      uom: 'Box',
+    });
     await setPrimaryProductBarcode('ITEM-001', 'BAR-002');
     await deleteProductBarcode('ITEM-001', 'BAR-002');
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
       'add_product_barcode_v2',
-      { barcode: 'BAR-002', item_code: 'ITEM-001', set_primary: 1 },
+      {
+        barcode: 'BAR-002',
+        item_code: 'ITEM-001',
+        set_primary: 1,
+        uom: 'Box',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
