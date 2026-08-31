@@ -54,8 +54,8 @@ docker run -d \
 - `STAGING_SSH_PORT`
 - `STAGING_SSH_USER`
 - `STAGING_SSH_PRIVATE_KEY`
-- `GHCR_USERNAME`
-- `GHCR_TOKEN`
+
+部署 workflow 声明 `packages: read`，使用当前 Run 的短期 `GITHUB_TOKEN` 拉取同仓库发布的 Web 镜像，不依赖长期 GHCR PAT。镜像构建继续使用同仓库 `GITHUB_TOKEN` 的 `packages: write` 权限。
 
 当前服务器建议值：
 
