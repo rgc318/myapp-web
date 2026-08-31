@@ -12,6 +12,7 @@ import {
 } from '../pending-confirmations';
 import {
   addProductBarcode,
+  assessProductUomMigration,
   bulkSetProductsDisabled,
   bulkUpdateProducts,
   createCustomer,
@@ -20,6 +21,7 @@ import {
   createSupplier,
   createUom,
   deleteProductBarcode,
+  executeProductUomMigration,
   getProductDetail,
   listProducts,
   listUoms,
@@ -1117,6 +1119,138 @@ describe('myapp domain services', () => {
       { barcode: 'BAR-001', idx: 1, isPrimary: true, name: 'ROW-1' },
       { barcode: 'BAR-002', idx: 2, isPrimary: false, name: 'ROW-2' },
     ]);
+  });
+
+  it('maps product UOM migration assessment without guessing mappings', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        alternatives: [],
+        barcodes: [],
+        blockers: [],
+        can_execute: 1,
+        history: { stock_ledger_entry_count: 2 },
+        inventory: {
+          bins: [
+            {
+              actual_qty: 0,
+              company: 'rgc (Demo)',
+              ordered_qty: 0,
+              projected_qty: 0,
+              reserved_qty: 0,
+              warehouse: 'Stores - RD',
+            },
+          ],
+          total_actual_qty: 0,
+          total_committed_qty: 0,
+        },
+        open_transactions: {
+          purchase_order_count: 0,
+          sales_order_count: 0,
+        },
+        prices: [
+          {
+            currency: 'CNY',
+            name: 'PRICE-1',
+            price_list: 'Wholesale',
+            rate: 99,
+            uom: 'Wrong UOM',
+          },
+        ],
+        source: {
+          disabled: 0,
+          item_code: 'ITEM-OLD',
+          item_name: '测试商品',
+          modified: '2026-08-31 12:00:00',
+          stock_uom: 'Wrong UOM',
+          stock_uom_display: '错误单位',
+          uom_conversions: [
+            { conversion_factor: 1, uom: 'Wrong UOM' },
+          ],
+        },
+        warnings: [
+          { code: 'HISTORY_PRESERVED', message: '保留历史流水' },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await assessProductUomMigration('ITEM-OLD');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'assess_product_uom_migration_v1',
+      { item_code: 'ITEM-OLD' },
+    );
+    expect(result.canExecute).toBe(true);
+    expect(result.history.stockLedgerEntryCount).toBe(2);
+    expect(result.prices).toEqual([
+      {
+        currency: 'CNY',
+        name: 'PRICE-1',
+        priceList: 'Wholesale',
+        rate: 99,
+        uom: 'Wrong UOM',
+      },
+    ]);
+  });
+
+  it('submits explicit product UOM migration mappings', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        alternative: {
+          alternative_item_code: 'ITEM-NEW',
+          item_code: 'ITEM-OLD',
+          name: 'ALT-1',
+        },
+        history_preserved: 1,
+        moved_barcodes: [],
+        new_item: {
+          item_code: 'ITEM-NEW',
+          item_name: '测试商品',
+          stock_uom: 'Nos',
+        },
+        source_disabled: 1,
+        source_item_code: 'ITEM-OLD',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await executeProductUomMigration({
+      barcodeMappings: [],
+      confirmDisableSource: true,
+      confirmHistoryPreserved: true,
+      itemCode: 'ITEM-OLD',
+      newItemCode: 'ITEM-NEW',
+      newItemName: '测试商品',
+      priceMappings: [
+        { action: 'copy', sourceName: 'PRICE-1', targetUom: 'Box' },
+      ],
+      sourceModified: '2026-08-31 12:00:00',
+      stockUom: 'Nos',
+      uomConversions: [
+        { conversionFactor: 1, uom: 'Nos' },
+        { conversionFactor: 24, uom: 'Box' },
+      ],
+      wholesaleDefaultUom: 'Box',
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'execute_product_uom_migration_v1',
+      expect.objectContaining({
+        confirm_disable_source: 1,
+        confirm_history_preserved: 1,
+        item_code: 'ITEM-OLD',
+        new_item_code: 'ITEM-NEW',
+        price_mappings: [
+          { action: 'copy', source_name: 'PRICE-1', target_uom: 'Box' },
+        ],
+        stock_uom: 'Nos',
+      }),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(result.data.newItem.itemCode).toBe('ITEM-NEW');
+    expect(result.data.historyPreserved).toBe(true);
   });
 
   it('maps inventory stock summary rows', async () => {

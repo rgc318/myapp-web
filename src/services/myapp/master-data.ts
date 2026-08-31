@@ -51,6 +51,89 @@ export type ProductBarcode = {
   uom?: string | null;
 };
 
+export type ProductUomMigrationIssue = {
+  code: string;
+  message: string;
+};
+
+export type ProductUomMigrationPrice = ProductPriceEntry & {
+  name: string;
+};
+
+export type ProductUomMigrationAssessment = {
+  alternatives: {
+    alternativeItemCode: string;
+    name: string;
+    twoWay: boolean;
+  }[];
+  barcodes: ProductBarcode[];
+  blockers: ProductUomMigrationIssue[];
+  canExecute: boolean;
+  history: {
+    latestStockLedgerEntry: {
+      postingDate: string | null;
+      postingTime: string | null;
+      voucherNo: string | null;
+      voucherType: string | null;
+    } | null;
+    stockLedgerEntryCount: number;
+  };
+  inventory: {
+    bins: {
+      actualQty: number | null;
+      committedQty: number | null;
+      company: string;
+      projectedQty: number | null;
+      warehouse: string;
+    }[];
+    totalActualQty: number | null;
+    totalCommittedQty: number | null;
+  };
+  openTransactions: {
+    purchaseOrderCount: number;
+    salesOrderCount: number;
+  };
+  prices: ProductUomMigrationPrice[];
+  source: {
+    disabled: boolean;
+    itemCode: string;
+    itemName: string;
+    modified: string;
+    retailDefaultUom: string | null;
+    stockUom: string;
+    stockUomDisplay: string | null;
+    uomConversions: ProductSummary['uomConversions'];
+    wholesaleDefaultUom: string | null;
+  };
+  warnings: ProductUomMigrationIssue[];
+};
+
+export type ExecuteProductUomMigrationPayload = {
+  barcodeMappings: {
+    action: 'move' | 'keep';
+    sourceName: string;
+    targetUom?: string | null;
+  }[];
+  confirmDisableSource: boolean;
+  confirmHistoryPreserved: boolean;
+  itemCode: string;
+  newItemCode: string;
+  newItemName?: string | null;
+  priceMappings: {
+    action: 'copy' | 'skip';
+    sourceName: string;
+    targetUom?: string | null;
+  }[];
+  retailDefaultUom?: string | null;
+  sourceModified: string;
+  stockUom: string;
+  uomConversions: {
+    conversionFactor?: number | null;
+    uom?: string | null;
+  }[];
+  wholesaleDefaultUom?: string | null;
+};
+
 export type ProductSummary = {
   allUomDisplays: Record<string, string>;
   allUoms: string[];
@@ -373,6 +456,139 @@ function mapProduct(row: Record<string, any>): ProductSummary {
     globalWarehouseStockDetails: mapWarehouseStockDetails(
       row.global_warehouse_stock_details,
     ),
+  };
+}
+
+function mapProductUomMigrationAssessment(
+  value: unknown,
+): ProductUomMigrationAssessment {
+  const row = readObject(value);
+  const source = readObject(row.source);
+  const inventory = readObject(row.inventory);
+  const history = readObject(row.history);
+  const latestStockLedgerEntry = readObject(
+    history.latest_stock_ledger_entry,
+  );
+  const openTransactions = readObject(row.open_transactions);
+  const committedBinFields = [
+    'reserved_qty',
+    'reserved_stock',
+    'reserved_qty_for_production',
+    'reserved_qty_for_sub_contract',
+    'reserved_qty_for_production_plan',
+    'ordered_qty',
+    'planned_qty',
+    'indented_qty',
+  ];
+  const mapIssues = (input: unknown) =>
+    (Array.isArray(input) ? input : [])
+      .map((entry): ProductUomMigrationIssue | null => {
+        const issue = readObject(entry);
+        const code = toOptionalText(issue.code);
+        const issueMessage = toOptionalText(issue.message);
+        return code && issueMessage ? { code, message: issueMessage } : null;
+      })
+      .filter((entry): entry is ProductUomMigrationIssue => Boolean(entry));
+
+  return {
+    alternatives: (Array.isArray(row.alternatives) ? row.alternatives : [])
+      .map((entry) => {
+        const alternative = readObject(entry);
+        const name = toOptionalText(alternative.name);
+        const alternativeItemCode = toOptionalText(
+          alternative.alternative_item_code,
+        );
+        return name && alternativeItemCode
+          ? {
+              alternativeItemCode,
+              name,
+              twoWay: Boolean(alternative.two_way),
+            }
+          : null;
+      })
+      .filter(
+        (
+          entry,
+        ): entry is ProductUomMigrationAssessment['alternatives'][number] =>
+          Boolean(entry),
+      ),
+    barcodes: mapProductBarcodes(row.barcodes, null),
+    blockers: mapIssues(row.blockers),
+    canExecute: Boolean(row.can_execute),
+    history: {
+      latestStockLedgerEntry: Object.keys(latestStockLedgerEntry).length
+        ? {
+            postingDate:
+              toOptionalText(latestStockLedgerEntry.posting_date) ?? null,
+            postingTime:
+              toOptionalText(latestStockLedgerEntry.posting_time) ?? null,
+            voucherNo:
+              toOptionalText(latestStockLedgerEntry.voucher_no) ?? null,
+            voucherType:
+              toOptionalText(latestStockLedgerEntry.voucher_type) ?? null,
+          }
+        : null,
+      stockLedgerEntryCount: Number(history.stock_ledger_entry_count ?? 0),
+    },
+    inventory: {
+      bins: (Array.isArray(inventory.bins) ? inventory.bins : [])
+        .map((entry): ProductUomMigrationAssessment['inventory']['bins'][number] | null => {
+          const bin = readObject(entry);
+          const warehouse = toOptionalText(bin.warehouse);
+          if (!warehouse) return null;
+          return {
+            actualQty: toOptionalNumber(bin.actual_qty),
+            committedQty: committedBinFields.reduce(
+              (total, fieldname) =>
+                total + Math.abs(toOptionalNumber(bin[fieldname]) ?? 0),
+              0,
+            ),
+            company: toOptionalText(bin.company) ?? '',
+            projectedQty: toOptionalNumber(bin.projected_qty),
+            warehouse,
+          };
+        })
+        .filter(
+          (
+            entry,
+          ): entry is ProductUomMigrationAssessment['inventory']['bins'][number] =>
+            Boolean(entry),
+        ),
+      totalActualQty: toOptionalNumber(inventory.total_actual_qty),
+      totalCommittedQty: toOptionalNumber(inventory.total_committed_qty),
+    },
+    openTransactions: {
+      purchaseOrderCount: Number(openTransactions.purchase_order_count ?? 0),
+      salesOrderCount: Number(openTransactions.sales_order_count ?? 0),
+    },
+    prices: (Array.isArray(row.prices) ? row.prices : [])
+      .map((entry): ProductUomMigrationPrice | null => {
+        const price = readObject(entry);
+        const name = toOptionalText(price.name);
+        const priceList = toOptionalText(price.price_list);
+        if (!name || !priceList) return null;
+        return {
+          currency: toOptionalText(price.currency) ?? '',
+          name,
+          priceList,
+          rate: toOptionalNumber(price.rate),
+          uom: toOptionalText(price.uom),
+        };
+      })
+      .filter((entry): entry is ProductUomMigrationPrice => Boolean(entry)),
+    source: {
+      disabled: Boolean(source.disabled),
+      itemCode: toOptionalText(source.item_code) ?? '',
+      itemName: toOptionalText(source.item_name) ?? '',
+      modified: toOptionalText(source.modified) ?? '',
+      retailDefaultUom: toOptionalText(source.retail_default_uom) ?? null,
+      stockUom: toOptionalText(source.stock_uom) ?? '',
+      stockUomDisplay: toOptionalText(source.stock_uom_display) ?? null,
+      uomConversions: mapUomConversions(source.uom_conversions),
+      wholesaleDefaultUom:
+        toOptionalText(source.wholesale_default_uom) ?? null,
+    },
+    warnings: mapIssues(row.warnings),
   };
 }
 
@@ -881,6 +1097,81 @@ export async function getProductDetail(
     }),
   );
   return result.data ? mapProduct(readObject(result.data)) : null;
+}
+
+export async function assessProductUomMigration(itemCode: string) {
+  const result = await callGatewayMethod<unknown>(
+    'assess_product_uom_migration_v1',
+    { item_code: itemCode },
+  );
+  return mapProductUomMigrationAssessment(result.data);
+}
+
+export async function executeProductUomMigration(
+  payload: ExecuteProductUomMigrationPayload,
+) {
+  return runGatewayMutation<{
+    alternative: {
+      alternativeItemCode: string;
+      itemCode: string;
+      name: string;
+    };
+    historyPreserved: boolean;
+    movedBarcodes: string[];
+    newItem: ProductSummary;
+    sourceDisabled: boolean;
+    sourceItemCode: string;
+  }>('execute_product_uom_migration_v1', {
+    payload: definedPayload({
+      barcode_mappings: payload.barcodeMappings.map((mapping) => ({
+        action: mapping.action,
+        source_name: mapping.sourceName,
+        target_uom: toOptionalText(mapping.targetUom),
+      })),
+      confirm_disable_source: payload.confirmDisableSource ? 1 : 0,
+      confirm_history_preserved: payload.confirmHistoryPreserved ? 1 : 0,
+      item_code: payload.itemCode,
+      new_item_code: payload.newItemCode,
+      new_item_name: toOptionalText(payload.newItemName),
+      price_mappings: payload.priceMappings.map((mapping) => ({
+        action: mapping.action,
+        source_name: mapping.sourceName,
+        target_uom: toOptionalText(mapping.targetUom),
+      })),
+      retail_default_uom: toOptionalText(payload.retailDefaultUom),
+      source_modified: payload.sourceModified,
+      stock_uom: payload.stockUom,
+      uom_conversions: payload.uomConversions
+        .map((entry) => ({
+          conversion_factor: entry.conversionFactor ?? undefined,
+          uom: toOptionalText(entry.uom),
+        }))
+        .filter((entry) => entry.uom),
+      wholesale_default_uom: toOptionalText(payload.wholesaleDefaultUom),
+    }),
+    successMessage: '商品单位迁移已完成',
+    transform: (raw) => {
+      const row = readObject(raw);
+      const alternative = readObject(row.alternative);
+      return {
+        alternative: {
+          alternativeItemCode:
+            toOptionalText(alternative.alternative_item_code) ?? '',
+          itemCode: toOptionalText(alternative.item_code) ?? '',
+          name: toOptionalText(alternative.name) ?? '',
+        },
+        historyPreserved: Boolean(row.history_preserved),
+        movedBarcodes: Array.isArray(row.moved_barcodes)
+          ? row.moved_barcodes
+              .map((value) => toOptionalText(value))
+              .filter((value): value is string => Boolean(value))
+          : [],
+        newItem: mapProduct(readObject(row.new_item)),
+        sourceDisabled: Boolean(row.source_disabled),
+        sourceItemCode: toOptionalText(row.source_item_code) ?? '',
+      };
+    },
+  });
 }
 
 function productSavePayload(

@@ -50,6 +50,7 @@ import {
   updateProduct,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { ProductUomMigrationModal } from './ProductUomMigrationModal';
 
 type ProductFormValues = SaveProductPayload;
 type BarcodeFormValues = {
@@ -463,6 +464,7 @@ const ProductDetailPage: React.FC = () => {
   const company = query.get('company') || undefined;
   const warehouse = query.get('warehouse') || undefined;
   const [editOpen, setEditOpen] = useState(false);
+  const [uomMigrationOpen, setUomMigrationOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toggling, setToggling] = useState(false);
   const [barcodeSubmitting, setBarcodeSubmitting] = useState<string>();
@@ -603,6 +605,14 @@ const ProductDetailPage: React.FC = () => {
         </Button>,
         <Button disabled={!data} key="edit" onClick={openEdit} type="primary">
           编辑商品
+        </Button>,
+        <Button
+          danger
+          disabled={!data}
+          key="uom-migration"
+          onClick={() => setUomMigrationOpen(true)}
+        >
+          单位错误迁移
         </Button>,
         data ? (
           <Popconfirm
@@ -1137,6 +1147,17 @@ const ProductDetailPage: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+      <ProductUomMigrationModal
+        itemCode={data?.itemCode || itemCode}
+        onClose={() => setUomMigrationOpen(false)}
+        onCompleted={(newItemCode) => {
+          setUomMigrationOpen(false);
+          history.push(
+            `/master-data/products/${encodeURIComponent(newItemCode)}`,
+          );
+        }}
+        open={uomMigrationOpen}
+      />
     </PageContainer>
   );
 };
