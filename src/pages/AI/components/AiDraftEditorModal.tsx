@@ -1164,7 +1164,11 @@ export function AiDraftEditorModal({
                   <Select
                     disabled={!inventoryUomOptions.length}
                     options={inventoryUomOptions}
-                    placeholder="商品单位尚未加载"
+                    placeholder={
+                      inventoryItemMatchesSource
+                        ? '商品单位尚未加载'
+                        : '保存草稿后加载该商品单位'
+                    }
                   />
                 </Form.Item>
                 <Form.Item

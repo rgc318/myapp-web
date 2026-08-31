@@ -62,9 +62,13 @@ export function formatDisplayUom(uom: string | null | undefined) {
       return '件';
     case 'BOX':
     case 'BOXES':
+      return '箱';
     case 'CASE':
     case 'CASES':
-      return '箱';
+      return '箱装';
+    case 'CARTON':
+    case 'CARTONS':
+      return '纸箱';
     case 'BOTTLE':
     case 'BOTTLES':
       return '瓶';
@@ -118,6 +122,12 @@ export function resolveDisplayUom(
   const normalizedUom = typeof uom === 'string' ? uom.trim() : '';
   const normalizedDisplayName =
     typeof displayName === 'string' ? displayName.trim() : '';
+
+  if (
+    ['CASE', 'CASES', 'CARTON', 'CARTONS'].includes(normalizedUom.toUpperCase())
+  ) {
+    return formatDisplayUom(normalizedUom);
+  }
 
   if (
     normalizedDisplayName &&

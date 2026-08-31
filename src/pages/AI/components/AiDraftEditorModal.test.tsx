@@ -895,6 +895,13 @@ describe('AiDraftEditorModal', () => {
     expect(
       screen.getAllByText('库存调整必须填写盘点差异或业务原因。').length,
     ).toBeGreaterThan(1);
+    const unresolvedUomSelect = screen.getByRole('combobox', { name: '单位' });
+    expect((unresolvedUomSelect as HTMLInputElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        '更换商品后先保存草稿，系统会重新读取该商品的单位换算并提供可选单位。',
+      ),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
 
@@ -904,6 +911,58 @@ describe('AiDraftEditorModal', () => {
       ),
     ).toBeTruthy();
     expect(mockedExecute).not.toHaveBeenCalled();
+  });
+
+  it('only offers UOMs returned for the uniquely resolved inventory item', async () => {
+    const inventoryDraft = {
+      ...draft,
+      draftType: 'inventory_adjustment' as const,
+      payload: {
+        adjustment_type: 'increase',
+        company: 'Demo Company',
+        items: [
+          {
+            available_uoms: [
+              { conversion_factor: 24, uom: 'Box', uom_display: '箱' },
+              { conversion_factor: 1, uom: 'Nos', uom_display: '件' },
+            ],
+            item_code: 'ITEM-001',
+            item_name: '测试饮料',
+            qty: 2,
+            stock_uom: 'Nos',
+            stock_uom_display: '件',
+            uom: 'Box',
+          },
+        ],
+        posting_date: '2026-08-03',
+        reason: '盘点差异',
+        warehouse: 'Stores - RD',
+      },
+      title: '库存调整草稿',
+    };
+    mockedGet.mockResolvedValue(inventoryDraft);
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: inventoryDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    const uomSelect = await screen.findByRole('combobox', { name: '单位' });
+    expect((uomSelect as HTMLInputElement).disabled).toBe(false);
+    fireEvent.mouseDown(uomSelect);
+    expect(
+      (await screen.findAllByText('箱（1 箱 = 24 件）')).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText('件')).toBeTruthy();
+    expect(screen.queryByText(/纸箱/)).toBeNull();
+    expect(screen.queryByText(/箱装/)).toBeNull();
   });
 
   it.each([
