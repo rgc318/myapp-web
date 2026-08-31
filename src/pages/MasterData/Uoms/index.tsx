@@ -1,6 +1,7 @@
 import type { ActionType, ProColumns } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
 import {
+  Alert,
   Button,
   Form,
   Input,
@@ -37,6 +38,7 @@ const UomsPage: React.FC = () => {
     setEditingUom(null);
     form.resetFields();
     form.setFieldsValue({
+      businessSelectable: true,
       enabled: true,
       mustBeWholeNumber: false,
     });
@@ -46,6 +48,7 @@ const UomsPage: React.FC = () => {
   const openEditModal = (record: UomSummary) => {
     setEditingUom(record);
     form.setFieldsValue({
+      businessSelectable: record.businessSelectable,
       description: record.description,
       enabled: record.enabled,
       mustBeWholeNumber: record.mustBeWholeNumber,
@@ -62,6 +65,7 @@ const UomsPage: React.FC = () => {
     try {
       if (editingUom) {
         await updateUom(editingUom.name, {
+          businessSelectable: values.businessSelectable,
           description: values.description,
           enabled: values.enabled,
           mustBeWholeNumber: values.mustBeWholeNumber,
@@ -113,6 +117,17 @@ const UomsPage: React.FC = () => {
       },
     },
     {
+      title: '业务目录',
+      dataIndex: 'businessFilter',
+      hideInTable: true,
+      initialValue: 'all',
+      valueEnum: {
+        all: { text: '全部' },
+        selectable: { text: '业务可选' },
+        systemOnly: { text: '仅系统保留' },
+      },
+    },
+    {
       title: '单位',
       dataIndex: 'name',
       search: false,
@@ -137,6 +152,18 @@ const UomsPage: React.FC = () => {
       search: false,
       ellipsis: true,
       renderText: (value) => value || '-',
+    },
+    {
+      title: '业务可选',
+      dataIndex: 'businessSelectable',
+      search: false,
+      width: 110,
+      render: (_, record) =>
+        record.businessSelectable ? (
+          <Tag color="green">可选</Tag>
+        ) : (
+          <Tag>系统保留</Tag>
+        ),
     },
     {
       title: '整数单位',
@@ -204,7 +231,14 @@ const UomsPage: React.FC = () => {
           const current = Number(params.current ?? 1);
           const pageSize = Number(params.pageSize ?? PAGE_SIZE);
           const enabledFilter = String(params.enabledFilter ?? 'all');
+          const businessFilter = String(params.businessFilter ?? 'all');
           const result = await listUoms({
+            businessSelectable:
+              businessFilter === 'selectable'
+                ? 1
+                : businessFilter === 'systemOnly'
+                  ? 0
+                  : undefined,
             enabled:
               enabledFilter === 'enabled'
                 ? 1
@@ -237,6 +271,12 @@ const UomsPage: React.FC = () => {
         open={modalOpen}
         title={editingUom ? `编辑单位 ${editingUom.name}` : '新增单位'}
       >
+        <Alert
+          showIcon
+          style={{ marginBottom: 16 }}
+          type="info"
+          message="“启用”表示系统主数据可继续使用；“业务可选”决定该单位是否出现在商品建档和普通交易下拉。科学或历史单位可保留启用，但关闭业务可选。"
+        />
         <Form<UomFormValues>
           form={form}
           layout="vertical"
@@ -259,6 +299,13 @@ const UomsPage: React.FC = () => {
             />
           </Form.Item>
           <Space size={32}>
+            <Form.Item
+              label="业务可选"
+              name="businessSelectable"
+              valuePropName="checked"
+            >
+              <Switch />
+            </Form.Item>
             <Form.Item label="启用" name="enabled" valuePropName="checked">
               <Switch />
             </Form.Item>

@@ -19,6 +19,7 @@ async function loadCachedUoms(query: string) {
   }
 
   const request = listUoms({
+    businessSelectable: true,
     enabled: 1,
     limit: 100,
     searchKey: query,

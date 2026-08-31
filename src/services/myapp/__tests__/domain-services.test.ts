@@ -2463,6 +2463,7 @@ describe('myapp domain services', () => {
             description: '整箱包装单位',
             display_name: '箱',
             enabled: '1',
+            business_selectable: '1',
             must_be_whole_number: '0',
             name: 'Box',
             symbol: '箱',
@@ -2475,10 +2476,15 @@ describe('myapp domain services', () => {
       raw: {},
     });
 
-    const result = await listUoms({ enabled: 1, searchKey: 'Box' });
+    const result = await listUoms({
+      businessSelectable: true,
+      enabled: 1,
+      searchKey: 'Box',
+    });
 
     expect(result.items[0]).toMatchObject({
       description: '整箱包装单位',
+      businessSelectable: true,
       disabled: false,
       displayName: '箱',
       enabled: true,
@@ -2488,6 +2494,7 @@ describe('myapp domain services', () => {
       uomName: 'Box',
     });
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith('list_uoms_v2', {
+      business_selectable: 1,
       enabled: 1,
       limit: 80,
       search_key: 'Box',
@@ -2501,6 +2508,7 @@ describe('myapp domain services', () => {
     });
 
     await createUom({
+      businessSelectable: true,
       description: '整箱包装单位',
       enabled: true,
       mustBeWholeNumber: true,
@@ -2508,6 +2516,7 @@ describe('myapp domain services', () => {
       uomName: 'Box',
     });
     await updateUom('Box', {
+      businessSelectable: false,
       description: '',
       enabled: false,
       mustBeWholeNumber: false,
@@ -2519,6 +2528,7 @@ describe('myapp domain services', () => {
       1,
       'create_uom_v2',
       {
+        business_selectable: 1,
         description: '整箱包装单位',
         enabled: 1,
         must_be_whole_number: 1,
@@ -2531,6 +2541,7 @@ describe('myapp domain services', () => {
       2,
       'update_uom_v2',
       {
+        business_selectable: 0,
         description: '',
         enabled: 0,
         must_be_whole_number: 0,

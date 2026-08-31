@@ -222,6 +222,7 @@ export type SavePartyPayload = {
 };
 
 export type UomSummary = {
+  businessSelectable: boolean;
   description: string | null;
   disabled: boolean;
   displayName: string;
@@ -256,6 +257,7 @@ export type WarehouseSummary = {
 };
 
 export type SaveUomPayload = {
+  businessSelectable?: boolean;
   description?: string | null;
   enabled?: boolean;
   mustBeWholeNumber?: boolean;
@@ -694,6 +696,7 @@ function mapUom(row: Record<string, any>): UomSummary {
       : uomName || name;
 
   return {
+    businessSelectable: Boolean(toOptionalNumber(row.business_selectable)),
     description:
       typeof row.description === 'string' && row.description.trim()
         ? row.description
@@ -1246,7 +1249,11 @@ function mapMutationUom(raw: unknown) {
   return mapUom(readObject(raw));
 }
 
-export async function listUoms(options: ListOptions = {}) {
+export type UomListOptions = ListOptions & {
+  businessSelectable?: boolean | 0 | 1;
+};
+
+export async function listUoms(options: UomListOptions = {}) {
   const enabled =
     options.enabled === undefined && options.disabled !== undefined
       ? options.disabled
@@ -1256,6 +1263,12 @@ export async function listUoms(options: ListOptions = {}) {
   const result = await callGatewayMethod<unknown>(
     'list_uoms_v2',
     compactPayload({
+      business_selectable:
+        options.businessSelectable === undefined
+          ? undefined
+          : options.businessSelectable
+            ? 1
+            : 0,
       enabled,
       limit: options.limit ?? 80,
       search_key: toOptionalText(options.searchKey),
@@ -1276,6 +1289,7 @@ export async function listUoms(options: ListOptions = {}) {
 export async function createUom(payload: SaveUomPayload) {
   return runGatewayMutation<UomSummary>('create_uom_v2', {
     payload: compactPayload({
+      business_selectable: payload.businessSelectable === false ? 0 : 1,
       description: toOptionalText(payload.description),
       enabled: payload.enabled === false ? 0 : 1,
       must_be_whole_number: payload.mustBeWholeNumber ? 1 : 0,
@@ -1292,6 +1306,9 @@ export async function updateUom(
   payload: Omit<SaveUomPayload, 'uomName'>,
 ) {
   const updatePayload: Record<string, unknown> = { uom };
+  if (payload.businessSelectable !== undefined) {
+    updatePayload.business_selectable = payload.businessSelectable ? 1 : 0;
+  }
   if (payload.description !== undefined) {
     updatePayload.description = payload.description ?? '';
   }
