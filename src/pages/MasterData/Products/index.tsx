@@ -34,6 +34,7 @@ import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductImage } from '@/components/ProductImage';
+import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
 import { toOptionalText } from '@/services/myapp/api-utils';
@@ -802,6 +803,28 @@ const ProductsPage: React.FC = () => {
             : Number(payload.retail_rate),
         stockUom:
           typeof payload.stock_uom === 'string' ? payload.stock_uom : 'Nos',
+        uomConversions: Array.isArray(payload.uom_conversions)
+          ? payload.uom_conversions
+              .map((entry) => {
+                const row =
+                  entry && typeof entry === 'object'
+                    ? (entry as Record<string, unknown>)
+                    : {};
+                return {
+                  conversionFactor: Number(row.conversion_factor ?? 0),
+                  uom: typeof row.uom === 'string' ? row.uom : undefined,
+                };
+              })
+              .filter((entry) => entry.uom)
+          : [
+              {
+                conversionFactor: 1,
+                uom:
+                  typeof payload.stock_uom === 'string'
+                    ? payload.stock_uom
+                    : 'Nos',
+              },
+            ],
         valuationRate:
           payload.valuation_rate === null ||
           payload.valuation_rate === undefined
@@ -845,6 +868,7 @@ const ProductsPage: React.FC = () => {
       disabled: false,
       barcode,
       stockUom: 'Nos',
+      uomConversions: [{ conversionFactor: 1, uom: 'Nos' }],
     });
     setModalOpen(true);
   };
@@ -902,6 +926,10 @@ const ProductsPage: React.FC = () => {
         undefined,
       retailRate: record.priceSummary?.retailRate ?? undefined,
       stockUom: record.stockUom,
+      uomConversions: record.uomConversions.map((entry) => ({
+        conversionFactor: entry.conversionFactor,
+        uom: entry.uom,
+      })),
       valuationRate: record.priceSummary?.valuationRate ?? undefined,
       wholesaleDefaultUom: record.wholesaleDefaultUom ?? record.stockUom,
       wholesaleRate: record.priceSummary?.wholesaleRate ?? undefined,
@@ -1540,34 +1568,12 @@ const ProductsPage: React.FC = () => {
               </Form.Item>
             </Space>
           ) : null}
-          <Space size={16} style={{ width: '100%' }}>
-            <Form.Item
-              label="库存单位"
-              name="stockUom"
-              rules={[{ required: true, message: '请选择库存单位' }]}
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect displayValue={editingProduct?.stockUomDisplay} />
-            </Form.Item>
-            <Form.Item
-              label="批发默认单位"
-              name="wholesaleDefaultUom"
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect
-                displayValue={editingProduct?.wholesaleDefaultUomDisplay}
-              />
-            </Form.Item>
-            <Form.Item
-              label="零售默认单位"
-              name="retailDefaultUom"
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect
-                displayValue={editingProduct?.retailDefaultUomDisplay}
-              />
-            </Form.Item>
-          </Space>
+          <ProductUomFields
+            form={form}
+            lockStockUom={Boolean(editingProduct)}
+            stockUomDisplay={editingProduct?.stockUomDisplay}
+            uomDisplays={editingProduct?.allUomDisplays}
+          />
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
               label="标准售价"

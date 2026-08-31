@@ -156,6 +156,7 @@ export type InventoryStockMutationResult = {
   sourceQtyBefore?: number;
   sourceWarehouse?: string;
   stockEntry: string | null;
+  stockReconciliation: string | null;
   stockQty?: number;
   stockUom: string;
   targetStockQty?: number;
@@ -383,6 +384,10 @@ function mapInventoryStockMutationResult(
     stockEntry:
       typeof row.stock_entry === 'string' && row.stock_entry
         ? row.stock_entry
+        : null,
+    stockReconciliation:
+      typeof row.stock_reconciliation === 'string' && row.stock_reconciliation
+        ? row.stock_reconciliation
         : null,
     stockQty: row.stock_qty === undefined ? undefined : toNumber(row.stock_qty),
     stockUom: String(row.stock_uom ?? ''),

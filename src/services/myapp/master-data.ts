@@ -123,6 +123,10 @@ export type SaveProductPayload = {
   standardBuyingRate?: number | null;
   standardSellingRate?: number | null;
   stockUom?: string | null;
+  uomConversions?: {
+    conversionFactor?: number | null;
+    uom?: string | null;
+  }[];
   valuationRate?: number | null;
   warehouse?: string | null;
   warehouseStockQty?: number | null;
@@ -915,6 +919,12 @@ function productSavePayload(
           },
         ];
   const stockUom = toOptionalText(payload.stockUom);
+  const uomConversions = payload.uomConversions
+    ?.map((entry) => ({
+      conversion_factor: entry.conversionFactor ?? undefined,
+      uom: toOptionalText(entry.uom),
+    }))
+    .filter((entry) => entry.uom);
 
   return definedPayload({
     barcode: optionalTextField('barcode'),
@@ -934,9 +944,11 @@ function productSavePayload(
     selling_prices: sellingPrices.length ? sellingPrices : undefined,
     standard_rate: payload.standardSellingRate ?? undefined,
     stock_uom: stockUom,
-    uom_conversions: stockUom
-      ? [{ conversion_factor: 1, uom: stockUom }]
-      : undefined,
+    uom_conversions:
+      uomConversions ??
+      (options.includeEmptyFields && stockUom
+        ? [{ conversion_factor: 1, uom: stockUom }]
+        : undefined),
     valuation_rate: payload.valuationRate ?? undefined,
     warehouse: toOptionalText(payload.warehouse),
     warehouse_stock_qty: payload.warehouseStockQty ?? undefined,

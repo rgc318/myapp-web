@@ -29,8 +29,8 @@ import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductImage } from '@/components/ProductImage';
+import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
-import { UomSelect } from '@/components/UomSelect';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -475,6 +475,10 @@ const ProductDetailPage: React.FC = () => {
         undefined,
       retailRate: data.priceSummary?.retailRate ?? undefined,
       stockUom: data.stockUom,
+      uomConversions: data.uomConversions.map((entry) => ({
+        conversionFactor: entry.conversionFactor,
+        uom: entry.uom,
+      })),
       valuationRate: data.priceSummary?.valuationRate ?? undefined,
       wholesaleDefaultUom: data.wholesaleDefaultUom ?? data.stockUom,
       wholesaleRate: data.priceSummary?.wholesaleRate ?? undefined,
@@ -1041,30 +1045,12 @@ const ProductDetailPage: React.FC = () => {
               </Space.Compact>
             </Form.Item>
           </Space>
-          <Space size={16} style={{ width: '100%' }}>
-            <Form.Item
-              label="库存单位"
-              name="stockUom"
-              rules={[{ required: true, message: '请选择库存单位' }]}
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect displayValue={data?.stockUomDisplay} />
-            </Form.Item>
-            <Form.Item
-              label="批发默认单位"
-              name="wholesaleDefaultUom"
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect displayValue={data?.wholesaleDefaultUomDisplay} />
-            </Form.Item>
-            <Form.Item
-              label="零售默认单位"
-              name="retailDefaultUom"
-              style={{ minWidth: 200 }}
-            >
-              <UomSelect displayValue={data?.retailDefaultUomDisplay} />
-            </Form.Item>
-          </Space>
+          <ProductUomFields
+            form={form}
+            lockStockUom
+            stockUomDisplay={data?.stockUomDisplay}
+            uomDisplays={data?.allUomDisplays}
+          />
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
               label="标准售价"

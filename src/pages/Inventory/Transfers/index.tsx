@@ -8,18 +8,23 @@ import {
   Input,
   InputNumber,
   message,
+  Select,
   Space,
   Statistic,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
-import { ProductSelect, RemoteLinkSelect, UomSelect } from '@/components';
+import { ProductSelect, RemoteLinkSelect } from '@/components';
 import { ProductImage } from '@/components/ProductImage';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { transferInventoryStock } from '@/services/myapp/inventory';
 import type { ProductSummary } from '@/services/myapp/master-data';
 import { resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  convertQtyToStockQty,
+  getConversionFactorToStockUnit,
+} from '@/utils/uom-conversion';
 
 type FormValues = {
   company?: string;
@@ -49,6 +54,8 @@ const InventoryTransferPage: React.FC = () => {
   const company = Form.useWatch('company', form) || defaultCompany;
   const sourceWarehouse =
     Form.useWatch('sourceWarehouse', form) || defaultWarehouse;
+  const qty = Form.useWatch('qty', form);
+  const selectedUom = Form.useWatch('uom', form);
 
   React.useEffect(() => {
     form.setFieldsValue({
@@ -110,6 +117,38 @@ const InventoryTransferPage: React.FC = () => {
         selectedProduct.stockUomDisplay,
       )
     : '';
+  const uomOptions = React.useMemo(() => {
+    if (!selectedProduct) return [];
+    const names = selectedProduct.allUoms?.length
+      ? selectedProduct.allUoms
+      : [selectedProduct.stockUom];
+    return names.map((uom) => {
+      const display = resolveDisplayUom(
+        uom,
+        selectedProduct.allUomDisplays?.[uom],
+      );
+      const factor = getConversionFactorToStockUnit({
+        stockUom: selectedProduct.stockUom,
+        uom,
+        uomConversions: selectedProduct.uomConversions,
+      });
+      return {
+        label:
+          factor && factor !== 1
+            ? `${display}（1 ${display} = ${formatQty(factor)} ${stockUomDisplay}）`
+            : display,
+        value: uom,
+      };
+    });
+  }, [selectedProduct, stockUomDisplay]);
+  const transferStockQty = selectedProduct
+    ? convertQtyToStockQty({
+        qty: Number(qty ?? 0),
+        stockUom: selectedProduct.stockUom,
+        uom: selectedUom,
+        uomConversions: selectedProduct.uomConversions,
+      })
+    : null;
 
   return (
     <PageContainer
@@ -239,12 +278,24 @@ const InventoryTransferPage: React.FC = () => {
               rules={[{ required: true, message: '请选择单位' }]}
               style={{ minWidth: 180 }}
             >
-              <UomSelect />
+              <Select
+                disabled={!selectedProduct}
+                options={uomOptions}
+                placeholder="请先选择商品"
+              />
             </Form.Item>
             <Form.Item label="备注" name="remarks" style={{ minWidth: 360 }}>
               <Input placeholder="转仓原因或操作说明" />
             </Form.Item>
           </Space>
+          {selectedProduct && transferStockQty !== null ? (
+            <Alert
+              showIcon
+              style={{ marginBottom: 16 }}
+              type="warning"
+              message={`换算预览：${formatQty(Number(qty ?? 0))} ${resolveDisplayUom(selectedUom, selectedProduct.allUomDisplays?.[selectedUom || ''])} = ${formatQty(transferStockQty)} ${stockUomDisplay}；转出仓当前 ${formatQty(selectedProduct.warehouseStockQty ?? selectedProduct.stockQty)} ${stockUomDisplay}`}
+            />
+          ) : null}
           <Space>
             <Button loading={submitting} type="primary" htmlType="submit">
               提交转仓

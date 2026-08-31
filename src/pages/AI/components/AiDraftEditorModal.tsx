@@ -215,6 +215,8 @@ export function AiDraftEditorModal({
   const onLoadedRef = useRef(onLoaded);
   const company = Form.useWatch('company', form);
   const adjustmentType = Form.useWatch('adjustmentType', form);
+  const inventoryQuantity = Form.useWatch('quantity', form);
+  const inventoryUom = Form.useWatch('uom', form);
   const selectedBrand = Form.useWatch('brand', form);
   const selectedItemCode = Form.useWatch('itemCode', form);
   const selectedItemGroup = Form.useWatch('itemGroup', form);
@@ -257,6 +259,59 @@ export function AiDraftEditorModal({
   const inventoryProductCandidates = productCandidates(
     inventorySourceItem.candidates,
   );
+  const inventoryItemMatchesSource =
+    Boolean(selectedItemCode) &&
+    selectedItemCode === inventorySourceItem.item_code;
+  const inventoryStockUomDisplay = String(
+    inventorySourceItem.stock_uom_display ??
+      inventorySourceItem.stock_uom ??
+      '',
+  ).trim();
+  const inventoryUomOptions =
+    inventoryItemMatchesSource &&
+    Array.isArray(inventorySourceItem.available_uoms)
+      ? inventorySourceItem.available_uoms
+          .map(objectValue)
+          .map((row) => {
+            const uom = typeof row.uom === 'string' ? row.uom.trim() : '';
+            const display =
+              typeof row.uom_display === 'string' && row.uom_display.trim()
+                ? row.uom_display.trim()
+                : uom;
+            const factor = Number(row.conversion_factor ?? 0);
+            return {
+              label:
+                factor > 0 && factor !== 1 && inventoryStockUomDisplay
+                  ? `${display}（1 ${display} = ${factor} ${inventoryStockUomDisplay}）`
+                  : display,
+              value: uom,
+            };
+          })
+          .filter((option) => option.value)
+      : [];
+  const selectedInventoryUom = Array.isArray(inventorySourceItem.available_uoms)
+    ? inventorySourceItem.available_uoms
+        .map(objectValue)
+        .find((row) => row.uom === inventoryUom)
+    : undefined;
+  const inventoryConversionFactor = Number(
+    selectedInventoryUom?.conversion_factor ?? 0,
+  );
+  const inventoryInputStockQty =
+    Number.isFinite(Number(inventoryQuantity)) && inventoryConversionFactor > 0
+      ? Number(inventoryQuantity) * inventoryConversionFactor
+      : null;
+  const inventoryCurrentStockQty = Number(
+    inventorySourceItem.current_stock_qty ?? 0,
+  );
+  const inventoryTargetStockQty =
+    inventoryInputStockQty === null
+      ? null
+      : adjustmentType === 'increase'
+        ? inventoryCurrentStockQty + inventoryInputStockQty
+        : adjustmentType === 'decrease'
+          ? inventoryCurrentStockQty - inventoryInputStockQty
+          : inventoryInputStockQty;
   const unresolvedProductItemGroupQuery =
     draft?.draftType === 'product_setup'
       ? unresolvedSelectionQuery(
@@ -1041,6 +1096,7 @@ export function AiDraftEditorModal({
                         : '搜索并选择商品'
                     }
                     warehouse={selectedWarehouse}
+                    onChange={() => form.setFieldValue('uom', undefined)}
                   />
                 </Form.Item>
                 <Form.Item
@@ -1056,6 +1112,13 @@ export function AiDraftEditorModal({
                     ]}
                   />
                 </Form.Item>
+                {inventoryTargetStockQty !== null ? (
+                  <Alert
+                    showIcon
+                    type="warning"
+                    message={`换算预览：${Number(inventoryQuantity ?? 0)} ${selectedInventoryUom?.uom_display ?? inventoryUom ?? ''} = ${inventoryInputStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}；当前 ${inventoryCurrentStockQty}，执行后 ${inventoryTargetStockQty}`}
+                  />
+                ) : null}
                 <Form.Item
                   label="数量"
                   name="quantity"
@@ -1079,8 +1142,30 @@ export function AiDraftEditorModal({
                     style={{ width: '100%' }}
                   />
                 </Form.Item>
-                <Form.Item label="单位" name="uom">
-                  <UomSelect />
+                <Form.Item
+                  extra={
+                    inventoryItemMatchesSource
+                      ? '库存草稿只能使用当前商品已配置的单位；如需新增包装单位，请先维护商品单位换算。'
+                      : '更换商品后先保存草稿，系统会重新读取该商品的单位换算并提供可选单位。'
+                  }
+                  label="单位"
+                  name="uom"
+                  rules={
+                    inventoryUomOptions.length
+                      ? [
+                          {
+                            message: '请选择商品已配置的单位',
+                            required: true,
+                          },
+                        ]
+                      : undefined
+                  }
+                >
+                  <Select
+                    disabled={!inventoryUomOptions.length}
+                    options={inventoryUomOptions}
+                    placeholder="商品单位尚未加载"
+                  />
                 </Form.Item>
                 <Form.Item
                   label="调整原因"
@@ -1245,6 +1330,24 @@ export function AiDraftEditorModal({
                         const lineCandidates = productCandidates(
                           sourceRow.candidates,
                         );
+                        const lineItemMatchesSource =
+                          Boolean(selectedLine?.itemCode) &&
+                          selectedLine?.itemCode === sourceRow.item_code;
+                        const lineUomOptions =
+                          lineItemMatchesSource &&
+                          Array.isArray(sourceRow.available_uoms)
+                            ? sourceRow.available_uoms
+                                .map(objectValue)
+                                .map((row) => ({
+                                  label:
+                                    typeof row.uom_display === 'string' &&
+                                    row.uom_display.trim()
+                                      ? row.uom_display.trim()
+                                      : String(row.uom ?? ''),
+                                  value: String(row.uom ?? '').trim(),
+                                }))
+                                .filter((option) => option.value)
+                            : [];
                         return (
                           <ProCard
                             key={field.key}
@@ -1293,6 +1396,12 @@ export function AiDraftEditorModal({
                                       ? `搜索并选择“${itemQuery}”对应的商品`
                                       : '商品'
                                   }
+                                  onChange={() =>
+                                    form.setFieldValue(
+                                      ['items', field.name, 'uom'],
+                                      undefined,
+                                    )
+                                  }
                                 />
                               </Form.Item>
                               <Form.Item
@@ -1305,8 +1414,29 @@ export function AiDraftEditorModal({
                                   style={{ width: '100%' }}
                                 />
                               </Form.Item>
-                              <Form.Item name={[field.name, 'uom']}>
-                                <UomSelect placeholder="单位" />
+                              <Form.Item
+                                extra={
+                                  lineItemMatchesSource
+                                    ? undefined
+                                    : '更换商品后先保存草稿，系统会重新读取该商品的可用单位。'
+                                }
+                                name={[field.name, 'uom']}
+                                rules={
+                                  lineUomOptions.length
+                                    ? [
+                                        {
+                                          message: '请选择商品已配置的单位',
+                                          required: true,
+                                        },
+                                      ]
+                                    : undefined
+                                }
+                              >
+                                <Select
+                                  disabled={!lineUomOptions.length}
+                                  options={lineUomOptions}
+                                  placeholder="商品单位"
+                                />
                               </Form.Item>
                               <Form.Item
                                 extra={

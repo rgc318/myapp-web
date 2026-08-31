@@ -1007,7 +1007,7 @@ Web 端已建立打印领域 service、通用单张打印组件、独立预览�
 - `/inventory/stock/:itemCode` 已接入 `get_product_detail_v2` 和 `list_stock_ledger_entries_v1`，展示单个商品的库存摘要、仓库库存、单位换算和最近库存流水。
 - `/inventory/alerts` 已接入 `list_inventory_stock_summary_v1`，支持低库存、无库存、负库存筛选，展示库存预警汇总和明细。
 - `/inventory/adjustments` 已接入库存目标数量调整，支持选择商品、公司、仓库、过账日期、目标数量、单位和估值价。
-- `/inventory/adjustments` 底层调用 `reconcile_inventory_stock_v1`，由后端统一 UOM 换算并创建正式 `Stock Entry` 调整单据，写操作走 `runGatewayMutation` 和 `Idempotency-Key`。
+- `/inventory/adjustments` 底层调用 `reconcile_inventory_stock_v1`，单位选择只来自当前商品 `all_uoms`，提交前显示输入单位、换算系数、库存基准数量和差异预览；后端创建正式 `Stock Reconciliation`，与批量盘点保持一致，写操作走 `runGatewayMutation` 和 `Idempotency-Key`。
 - `/inventory/transfers` 已接入 `transfer_inventory_stock_v1`，支持同公司仓库之间按商品单位转仓，由后端统一 UOM 换算并创建正式 `Stock Entry` 转移单据。
 - `/inventory/ledger` 已接入 `list_stock_ledger_entries_v1`。
 - `/inventory/ledger` 支持公司、商品、仓库、日期、凭证类型、凭证编号筛选和分页。
@@ -1097,7 +1097,7 @@ Web 端已建立打印领域 service、通用单张打印组件、独立预览�
 - `/master-data/suppliers` 已接入供应商治理第一版，支持关键词 / 状态 / 分组筛选、分页查询、新增、编辑、启用、停用、详情抽屉、主联系人 / 主地址维护、最近使用地址展示、默认价格表、付款条款、税号、税务类别、当前筛选结果 CSV 导出和 CSV 批量导入。
 - `/master-data/uoms` 已接入计量单位列表，支持关键词、状态筛选、分页查询、新增、编辑、启用和停用。
 - `/master-data/warehouses` 已接入仓库列表，支持关键词、公司、状态、仓库类型筛选，支持新增、编辑、启用、停用、当前筛选结果 CSV 导出和 CSV 批量导入；当前覆盖仓库名称、公司、父仓库、是否分组、会计科目、仓库类型、默认在途仓库、拒收仓标记、客户归属、联系方式和地址等 ERPNext 原生治理字段。
-- 商品轻量维护当前覆盖基础字段、图片、库存单位、批发 / 零售默认单位和标准价格；库存目标数量调整已在 `/inventory/adjustments` 接入，库存转仓已在 `/inventory/transfers` 接入，批量盘点已在 `/inventory/counts` 接入并直接提交 ERPNext `Stock Reconciliation`。
+- 商品轻量维护当前覆盖基础字段、图片、库存基准单位、商品单位换算表、批发 / 零售默认单位和标准价格。编辑已有商品时库存基准单位锁定，普通保存完整保留单位换算表；库存目标数量调整和批量盘点均提交 ERPNext `Stock Reconciliation`，库存转仓继续提交 Material Transfer。
 
 当前缺口：
 
@@ -1532,6 +1532,8 @@ c4258c4 feat: localize app chrome
 
 - 所有可编辑 UOM 字段使用 `UomSelect`，提交值保持稳定 UOM 编码；页面传入后端已返回的 `uom_display` 时，必须同时传给 `displayValue`，使表单首次打开即显示映射名称，而不是等待下拉选项加载后才更新。
 - `UomSelect` 对没有直接展示字段的通用表单会按初始值加载 UOM 主数据，并复用模块级缓存；不要为了回显而在页面中手写 UOM 编码到中文的映射。
+- 商品、销售、采购、库存、调拨和 AI 交易页面不得把全局 UOM 目录直接作为交易单位选项；交易单位必须来自当前商品 `all_uoms`。只有商品建档或单位主数据治理入口可以查询全局单位目录。
+- 商品编辑使用共享 `ProductUomFields` 维护 `stock_uom + uom_conversions`；普通商品保存不得自动把换算表缩减为单一基准单位。默认批发 / 零售单位只能从当前商品换算单位中选择。
 - 所有币种编辑字段使用 `CurrencySelect`，展示“人民币 (CNY)”等可读标签，提交值仍为 `CNY` 等币种编码。不要用原生 `Input` 直接回显币种编码，除非该字段明确是只读技术标识。
 
 ## 12. 用户与权限模块

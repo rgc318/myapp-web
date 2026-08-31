@@ -8,13 +8,14 @@ import {
   Input,
   InputNumber,
   message,
+  Select,
   Space,
   Statistic,
   Typography,
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useState } from 'react';
-import { ProductSelect, RemoteLinkSelect, UomSelect } from '@/components';
+import { ProductSelect, RemoteLinkSelect } from '@/components';
 import { ProductImage } from '@/components/ProductImage';
 import { useWorkspacePreferences } from '@/hooks/useWorkspacePreferences';
 import { adjustInventoryStock } from '@/services/myapp/inventory';
@@ -23,6 +24,10 @@ import {
   type ProductSummary,
 } from '@/services/myapp/master-data';
 import { resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  convertQtyToStockQty,
+  getConversionFactorToStockUnit,
+} from '@/utils/uom-conversion';
 
 type FormValues = {
   company?: string;
@@ -53,6 +58,8 @@ const InventoryAdjustmentPage: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const company = Form.useWatch('company', form) || defaultCompany;
   const warehouse = Form.useWatch('warehouse', form) || defaultWarehouse;
+  const targetQty = Form.useWatch('targetQty', form);
+  const selectedUom = Form.useWatch('uom', form);
 
   React.useEffect(() => {
     form.setFieldsValue({
@@ -170,6 +177,40 @@ const InventoryAdjustmentPage: React.FC = () => {
         selectedProduct.stockUomDisplay,
       )
     : '';
+  const uomOptions = React.useMemo(() => {
+    if (!selectedProduct) return [];
+    const names = selectedProduct.allUoms?.length
+      ? selectedProduct.allUoms
+      : [selectedProduct.stockUom];
+    return names.map((uom) => {
+      const factor = getConversionFactorToStockUnit({
+        stockUom: selectedProduct.stockUom,
+        uom,
+        uomConversions: selectedProduct.uomConversions,
+      });
+      const display = resolveDisplayUom(
+        uom,
+        selectedProduct.allUomDisplays?.[uom],
+      );
+      return {
+        label:
+          factor && factor !== 1
+            ? `${display}（1 ${display} = ${formatQty(factor)} ${stockUomDisplay}）`
+            : display,
+        value: uom,
+      };
+    });
+  }, [selectedProduct, stockUomDisplay]);
+  const targetStockQty = selectedProduct
+    ? convertQtyToStockQty({
+        qty: Number(targetQty ?? 0),
+        stockUom: selectedProduct.stockUom,
+        uom: selectedUom,
+        uomConversions: selectedProduct.uomConversions,
+      })
+    : null;
+  const currentStockQty =
+    selectedProduct?.warehouseStockQty ?? selectedProduct?.stockQty ?? null;
 
   return (
     <PageContainer
@@ -286,7 +327,11 @@ const InventoryAdjustmentPage: React.FC = () => {
               rules={[{ required: true, message: '请选择单位' }]}
               style={{ minWidth: 180 }}
             >
-              <UomSelect />
+              <Select
+                disabled={!selectedProduct}
+                options={uomOptions}
+                placeholder="请先选择商品"
+              />
             </Form.Item>
             <Form.Item
               label="估值价"
@@ -295,10 +340,23 @@ const InventoryAdjustmentPage: React.FC = () => {
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
-            <Form.Item label="备注" name="remarks" style={{ minWidth: 360 }}>
-              <Input placeholder="盘点原因或操作说明" />
+            <Form.Item
+              label="盘点原因"
+              name="remarks"
+              rules={[{ required: true, message: '请填写盘点差异原因' }]}
+              style={{ minWidth: 360 }}
+            >
+              <Input placeholder="例如：月末盘点差异、现场复核" />
             </Form.Item>
           </Space>
+          {selectedProduct && targetStockQty !== null ? (
+            <Alert
+              showIcon
+              style={{ marginBottom: 16 }}
+              type="warning"
+              message={`换算预览：${formatQty(Number(targetQty ?? 0))} ${resolveDisplayUom(selectedUom, selectedProduct.allUomDisplays?.[selectedUom || ''])} = ${formatQty(targetStockQty)} ${stockUomDisplay}；当前 ${formatQty(currentStockQty)} ${stockUomDisplay}，差异 ${formatQty(targetStockQty - Number(currentStockQty ?? 0))} ${stockUomDisplay}`}
+            />
+          ) : null}
           <Space>
             <Button loading={submitting} type="primary" htmlType="submit">
               提交调整
