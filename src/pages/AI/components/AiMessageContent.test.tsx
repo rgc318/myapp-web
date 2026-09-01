@@ -86,7 +86,9 @@ const baseProps = {
   onOpenBusinessDocument: jest.fn(),
   onOpenDraftHistory: jest.fn(),
   onOpenProduct: jest.fn(),
+  onAdjustProductStock: jest.fn(),
   onPrepareProductUpdate: jest.fn(),
+  onSelectDraftProductCandidate: jest.fn(),
 };
 
 describe('AiMessageContent', () => {
@@ -160,7 +162,7 @@ describe('AiMessageContent', () => {
     expect(screen.getByText(/查询时间：2026-07-24 09:20:00/)).toBeTruthy();
     expect(screen.getByText(/公司：Demo Company/)).toBeTruthy();
     expect(screen.getByText(/当前账号权限范围/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: '完善此商品' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑商品资料' }));
     expect(onPrepareProductUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ITEM-001', type: 'product' }),
     );

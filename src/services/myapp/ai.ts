@@ -94,6 +94,21 @@ export type AiDraftExecution = {
   targetName: string | null;
 };
 
+export type AiPreparedDraftMessage = {
+  citations: AiCitation[];
+  content: string;
+  name: string;
+  role: AiChatRole;
+  scenario: AiScenario;
+  sequence: number;
+};
+
+export type AiPreparedDraftResult = {
+  conversationId: string;
+  draft: AiDraft;
+  messages: AiPreparedDraftMessage[];
+};
+
 export class AiDraftVersionConflictError extends Error {
   code = 'AI_DRAFT_VERSION_CONFLICT';
 
@@ -1549,6 +1564,95 @@ export async function updateAiDraft(
       },
     ).catch(translateAiDraftMutationError);
   return mapAiDraft(result.data);
+}
+
+function mapPreparedDraftMessage(value: unknown): AiPreparedDraftMessage {
+  const row = readObject(value);
+  return {
+    citations: Array.isArray(row.citations)
+      ? row.citations.map(mapCitation)
+      : [],
+    content: String(row.content ?? ''),
+    name: String(row.name ?? ''),
+    role: row.role === 'user' ? 'user' : 'assistant',
+    scenario: String(row.scenario ?? 'general') as AiScenario,
+    sequence: toNumber(row.sequence),
+  };
+}
+
+function mapPreparedDraftResult(value: unknown): AiPreparedDraftResult {
+  const data = readObject(value);
+  return {
+    conversationId: String(data.conversation ?? ''),
+    draft: mapAiDraft(data.draft),
+    messages: Array.isArray(data.messages)
+      ? data.messages.map(mapPreparedDraftMessage)
+      : [],
+  };
+}
+
+async function prepareAiProductActionDraft(
+  method:
+    | 'prepare_ai_product_update_draft_v1'
+    | 'prepare_ai_inventory_adjustment_draft_v1',
+  payload: { company: string; conversationId: string; itemCode: string },
+): Promise<AiPreparedDraftResult> {
+  const result = await runGatewayMutation<Record<string, unknown>>(method, {
+    idempotencyKey: `web-${method}-${payload.conversationId}-${payload.itemCode}-${Date.now()}`,
+    notifyError: false,
+    payload: {
+      company: payload.company,
+      conversation_id: payload.conversationId,
+      item_code: payload.itemCode,
+    },
+  });
+  return mapPreparedDraftResult(result.data);
+}
+
+export async function prepareAiProductUpdateDraft(payload: {
+  company: string;
+  conversationId: string;
+  itemCode: string;
+}): Promise<AiPreparedDraftResult> {
+  return prepareAiProductActionDraft(
+    'prepare_ai_product_update_draft_v1',
+    payload,
+  );
+}
+
+export async function prepareAiInventoryAdjustmentDraft(payload: {
+  company: string;
+  conversationId: string;
+  itemCode: string;
+}): Promise<AiPreparedDraftResult> {
+  return prepareAiProductActionDraft(
+    'prepare_ai_inventory_adjustment_draft_v1',
+    payload,
+  );
+}
+
+export async function selectAiDraftProductCandidate(payload: {
+  draftId: string;
+  expectedVersion: number;
+  itemCode: string;
+  selectionText?: string;
+}): Promise<AiPreparedDraftResult> {
+  const result = await runGatewayMutation<Record<string, unknown>>(
+    'select_ai_draft_product_candidate_v1',
+    {
+      idempotencyKey: `web-select-ai-draft-product-${payload.draftId}-v${payload.expectedVersion}-${payload.itemCode}`,
+      notifyError: false,
+      payload: {
+        draft_id: payload.draftId,
+        expected_version: payload.expectedVersion,
+        item_code: payload.itemCode,
+        ...(payload.selectionText
+          ? { selection_text: payload.selectionText }
+          : {}),
+      },
+    },
+  ).catch(translateAiDraftMutationError);
+  return mapPreparedDraftResult(result.data);
 }
 
 export async function listAiDraftVersions(

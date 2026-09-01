@@ -26,6 +26,7 @@ import {
 import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { useAiWorkspaceStyles } from '../styles';
 import { AiDraftCompactSummary } from './AiDraftCompactSummary';
+import { getInventoryDraftProductCandidates } from './ai-draft-candidate-selection';
 import { resolveAiFailureRecovery } from './ai-failure';
 import { BusinessResultPanel } from './BusinessResultPanel';
 
@@ -56,7 +57,12 @@ type Props = {
   onOpenBusinessDocument: (document: AiBusinessDocumentResult) => void;
   onOpenDraftHistory: (draftId: string) => void;
   onOpenProduct: (citation: AiCitation) => void;
+  onAdjustProductStock: (citation: AiCitation) => void;
   onPrepareProductUpdate: (citation: AiCitation) => void;
+  onSelectDraftProductCandidate: (
+    citation: AiCitation,
+    candidate: { itemCode: string; itemName: string },
+  ) => void;
   onRefreshBusinessResult?: (resultSet: AiBusinessResultSet) => Promise<void>;
   onRetry?: () => void;
   onViewDiagnostics?: () => void;
@@ -121,7 +127,9 @@ function CitationCard({
   onHandoffDraft,
   onOpenDraftHistory,
   onOpenProduct,
+  onAdjustProductStock,
   onPrepareProductUpdate,
+  onSelectDraftProductCandidate,
 }: Pick<
   Props,
   | 'onDiscardDraft'
@@ -129,9 +137,14 @@ function CitationCard({
   | 'onHandoffDraft'
   | 'onOpenDraftHistory'
   | 'onOpenProduct'
+  | 'onAdjustProductStock'
   | 'onPrepareProductUpdate'
+  | 'onSelectDraftProductCandidate'
 > & { citation: AiCitation }) {
   const draft = resolveAiDraftCitation(citation);
+  const inventoryProductCandidates = draft
+    ? getInventoryDraftProductCandidates(draft)
+    : [];
   const validation = draft?.validation;
   const targetName = draft?.execution?.targetName ?? '';
   const targetDoctype = draft?.execution?.targetDoctype ?? '';
@@ -156,7 +169,10 @@ function CitationCard({
               onClick={() => onPrepareProductUpdate(citation)}
               size="small"
             >
-              完善此商品
+              编辑商品资料
+            </Button>
+            <Button onClick={() => onAdjustProductStock(citation)} size="small">
+              调整库存
             </Button>
             <Button
               onClick={() => onOpenProduct(citation)}
@@ -249,6 +265,24 @@ function CitationCard({
             </Tag>
           </Space>
           {draft ? <AiDraftCompactSummary draft={draft} /> : null}
+          {inventoryProductCandidates.length ? (
+            <Space orientation="vertical" size={4}>
+              <Typography.Text strong>请选择本次要调整的商品</Typography.Text>
+              <Space size={[8, 8]} wrap>
+                {inventoryProductCandidates.map((candidate) => (
+                  <Button
+                    key={candidate.itemCode}
+                    onClick={() =>
+                      onSelectDraftProductCandidate(citation, candidate)
+                    }
+                    size="small"
+                  >
+                    {candidate.itemName} · {candidate.itemCode}
+                  </Button>
+                ))}
+              </Space>
+            </Space>
+          ) : null}
           <Typography.Text>
             {draft?.status === 'executed'
               ? `已创建正式业务对象 ${targetName || '-'}。`
@@ -350,7 +384,9 @@ export function AiMessageContent({
   onOpenBusinessDocument,
   onOpenDraftHistory,
   onOpenProduct,
+  onAdjustProductStock,
   onPrepareProductUpdate,
+  onSelectDraftProductCandidate,
   onRefreshBusinessResult,
   onRetry,
   onViewDiagnostics,
@@ -476,7 +512,9 @@ export function AiMessageContent({
               onHandoffDraft={onHandoffDraft}
               onOpenDraftHistory={onOpenDraftHistory}
               onOpenProduct={onOpenProduct}
+              onAdjustProductStock={onAdjustProductStock}
               onPrepareProductUpdate={onPrepareProductUpdate}
+              onSelectDraftProductCandidate={onSelectDraftProductCandidate}
             />
           ))}
         </div>

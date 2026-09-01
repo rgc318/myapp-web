@@ -18,6 +18,7 @@ import {
   Descriptions,
   Drawer,
   Modal,
+  message,
   Space,
   Tabs,
   Tag,
@@ -31,6 +32,7 @@ import {
   listAiDrafts,
   listAiDraftVersions,
   prepareAiDraftHandoff,
+  prepareAiInventoryAdjustmentDraft,
   restoreAiDraftVersion,
 } from '@/services/myapp/ai';
 import { notifyMutationError } from '@/services/myapp/mutation';
@@ -400,6 +402,24 @@ export default function AiDraftsPage() {
       <AiDraftEditorModal
         draftId={editingDraftId}
         onClose={() => setEditingDraftId(null)}
+        onPrepareInventoryAdjustment={async (productDraft) => {
+          const itemCode = String(productDraft.payload.item_code ?? '').trim();
+          if (
+            !productDraft.company ||
+            !productDraft.conversationId ||
+            !itemCode
+          ) {
+            message.warning('当前商品草稿缺少公司、来源会话或商品编码。');
+            return;
+          }
+          const result = await prepareAiInventoryAdjustmentDraft({
+            company: productDraft.company,
+            conversationId: productDraft.conversationId,
+            itemCode,
+          });
+          setEditingDraftId(result.draft.name);
+          actionRef.current?.reload();
+        }}
         onUpdated={(updated) => {
           setDetail(updated);
           void loadDraftReview(updated.name).catch(notifyMutationError);

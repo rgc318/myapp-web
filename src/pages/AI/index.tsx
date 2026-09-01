@@ -64,6 +64,7 @@ import {
   type AiConversationMessage,
   type AiConversationMessagePagination,
   type AiDraft,
+  type AiPreparedDraftResult,
   type AiRunSummary,
   type AiScenario,
   type AiSelectableModel,
@@ -84,12 +85,16 @@ import {
   listAiDraftVersions,
   listAiSelectableModels,
   prepareAiDraftHandoff,
+  prepareAiInventoryAdjustmentDraft,
+  prepareAiProductUpdateDraft,
   refreshAiBusinessResult,
   renameAiConversation,
   resetAiConversationContext,
+  resolveAiDraftCitation,
   resolveAiScenario,
   restoreAiDraftVersion,
   reviewAiAgentApproval,
+  selectAiDraftProductCandidate,
   streamAiChatMessage,
   submitAiFeedback,
   uploadAiImageAttachment,
@@ -106,6 +111,10 @@ import {
   AiRunInspector,
   type AiToolProgress,
 } from './components/AiRunInspector';
+import {
+  findPendingInventoryCandidateSelection,
+  type InventoryDraftProductCandidate,
+} from './components/ai-draft-candidate-selection';
 import { BusinessDocumentDrawer } from './components/BusinessDocumentDrawer';
 import { ProductDetailDrawer } from './components/ProductDetailDrawer';
 import { useAiWorkspaceStyles } from './styles';
@@ -388,6 +397,7 @@ export default function AiPage() {
   );
   const streamAbortRef = useRef<AbortController | null>(null);
   const submitInFlightRef = useRef(false);
+  const productActionInFlightRef = useRef(false);
   const attachmentUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingAttachmentsRef = useRef<AiAttachment[]>([]);
   const pendingAttachmentsByConversationRef = useRef<
@@ -857,6 +867,128 @@ export default function AiPage() {
     if (targetId) void openConversation(targetId);
   }, []);
 
+  const appendPreparedDraftMessages = (result: AiPreparedDraftResult) => {
+    const preparedRows: ChatRow[] = result.messages.map((item) => ({
+      citations: item.citations,
+      content: item.content,
+      id: item.name || `${Date.now()}-${item.role}`,
+      role: item.role,
+      scenario: item.scenario,
+      sequence: item.sequence,
+    }));
+    setMessages((current) => {
+      const existingIds = new Set(current.map((item) => item.id));
+      return [
+        ...current,
+        ...preparedRows.filter((item) => !existingIds.has(item.id)),
+      ];
+    });
+  };
+
+  const prepareProductActionDraft = async (
+    action: 'product_update' | 'inventory_adjustment',
+    context: {
+      company: string | null;
+      conversationId: string | null;
+      itemCode: string;
+    },
+  ) => {
+    if (productActionInFlightRef.current) return;
+    if (selectedConversationStatus === 'archived') {
+      message.info('归档会话只读，请新建会话后再执行商品操作。');
+      return;
+    }
+    if (!context.company || !context.conversationId || !context.itemCode) {
+      message.warning('缺少商品、公司或来源会话，无法准备业务草稿。');
+      return;
+    }
+    productActionInFlightRef.current = true;
+    try {
+      const result =
+        action === 'product_update'
+          ? await prepareAiProductUpdateDraft({
+              company: context.company,
+              conversationId: context.conversationId,
+              itemCode: context.itemCode,
+            })
+          : await prepareAiInventoryAdjustmentDraft({
+              company: context.company,
+              conversationId: context.conversationId,
+              itemCode: context.itemCode,
+            });
+      appendPreparedDraftMessages(result);
+      setEditingDraftId(result.draft.name);
+      await refreshConversations();
+    } catch (caught) {
+      message.error(
+        caught instanceof Error ? caught.message : '业务草稿准备失败',
+      );
+    } finally {
+      productActionInFlightRef.current = false;
+    }
+  };
+
+  const selectInventoryDraftCandidate = async (
+    targetDraft: AiDraft,
+    candidate: InventoryDraftProductCandidate,
+    selectionText: string,
+  ) => {
+    if (submitInFlightRef.current || loading) return;
+    const optimisticUser = createMessage('user', selectionText);
+    const optimisticAssistant = createMessage(
+      'assistant',
+      '正在续接原库存草稿…',
+    );
+    submitInFlightRef.current = true;
+    setLoading(true);
+    setComposerDraft('', conversationId);
+    setMessages((current) => [...current, optimisticUser, optimisticAssistant]);
+    try {
+      const result = await selectAiDraftProductCandidate({
+        draftId: targetDraft.name,
+        expectedVersion: targetDraft.version,
+        itemCode: candidate.itemCode,
+        selectionText,
+      });
+      applyUpdatedDraft(result.draft);
+      const preparedRows: ChatRow[] = result.messages.map((item) => ({
+        citations: item.citations,
+        content: item.content,
+        id: item.name,
+        role: item.role,
+        scenario: item.scenario,
+        sequence: item.sequence,
+      }));
+      setMessages((current) => {
+        const withoutOptimistic = current.filter(
+          (item) =>
+            item.id !== optimisticUser.id && item.id !== optimisticAssistant.id,
+        );
+        return [...withoutOptimistic, ...preparedRows];
+      });
+      setEditingDraftId(result.draft.name);
+      await refreshConversations();
+    } catch (caught) {
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === optimisticAssistant.id
+            ? {
+                ...item,
+                content: '',
+                error:
+                  caught instanceof Error
+                    ? caught.message
+                    : '商品选择失败，请刷新草稿后重试。',
+              }
+            : item,
+        ),
+      );
+    } finally {
+      submitInFlightRef.current = false;
+      setLoading(false);
+    }
+  };
+
   const submit = async (
     contentValue?: string,
     scenarioValue?: AiScenario,
@@ -899,6 +1031,28 @@ export default function AiPage() {
     }
     if (selectedConversationStatus === 'archived' && conversationId) {
       message.warning('已归档会话为只读状态，请新建会话后继续提问。');
+      return;
+    }
+    const pendingInventorySelection =
+      !retryContext && requestedScenario === 'auto' && attachments.length === 0
+        ? findPendingInventoryCandidateSelection(messages, rawContent)
+        : null;
+    if (pendingInventorySelection?.matches.length === 1) {
+      await selectInventoryDraftCandidate(
+        pendingInventorySelection.draft,
+        pendingInventorySelection.matches[0],
+        rawContent,
+      );
+      return;
+    }
+    if (
+      pendingInventorySelection &&
+      pendingInventorySelection.matches.length > 1
+    ) {
+      setEditingDraftId(pendingInventorySelection.draft.name);
+      message.warning(
+        `“${rawContent}”仍匹配 ${pendingInventorySelection.matches.length} 个候选，请在原库存草稿中选择具体商品。`,
+      );
       return;
     }
     const fixedModel = requestedModelAlias
@@ -2003,20 +2157,31 @@ export default function AiPage() {
           onOpenBusinessDocument={setBusinessDocument}
           onOpenDraftHistory={(draftId) => void openVersionHistory(draftId)}
           onOpenProduct={setProductCitation}
+          onAdjustProductStock={(citation) => {
+            const itemCode = String(citation.id ?? '').trim();
+            if (!itemCode) return;
+            void prepareProductActionDraft('inventory_adjustment', {
+              company: effectiveCompany,
+              conversationId,
+              itemCode,
+            });
+          }}
           onPrepareProductUpdate={(citation) => {
             const itemCode = String(citation.id ?? '').trim();
             if (!itemCode) return;
-            if (selectedConversationStatus === 'archived') {
-              message.info('归档会话只读，请新建会话后再完善商品。');
-              return;
-            }
-            setComposerDraft(
-              `修改商品 ${itemCode}：${draft.trim() ? `\n${draft}` : ''}`,
+            void prepareProductActionDraft('product_update', {
+              company: effectiveCompany,
               conversationId,
-            );
-            setScenario('product_setup_draft');
-            message.info(
-              `已选择商品 ${itemCode}，请补充需要修改的内容后发送。`,
+              itemCode,
+            });
+          }}
+          onSelectDraftProductCandidate={(citation, candidate) => {
+            const targetDraft = resolveAiDraftCitation(citation);
+            if (!targetDraft) return;
+            void selectInventoryDraftCandidate(
+              targetDraft,
+              candidate,
+              candidate.itemName,
             );
           }}
           onRefreshBusinessResult={
@@ -2787,6 +2952,13 @@ export default function AiPage() {
         draftId={editingDraftId}
         onClose={() => setEditingDraftId(null)}
         onLoaded={applyUpdatedDraft}
+        onPrepareInventoryAdjustment={(productDraft) =>
+          prepareProductActionDraft('inventory_adjustment', {
+            company: productDraft.company,
+            conversationId: productDraft.conversationId,
+            itemCode: String(productDraft.payload.item_code ?? '').trim(),
+          })
+        }
         onUpdated={applyUpdatedDraft}
       />
       <Modal

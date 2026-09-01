@@ -111,7 +111,15 @@ function productCandidates(value: unknown): RemoteProductCandidate[] {
     .filter((candidate) => candidate.itemCode);
 }
 
-function ProductUpdateState({ draft }: { draft: AiDraft }) {
+function ProductUpdateState({
+  draft,
+  onPrepareInventoryAdjustment,
+  preparingInventory,
+}: {
+  draft: AiDraft;
+  onPrepareInventoryAdjustment?: (draft: AiDraft) => void;
+  preparingInventory: boolean;
+}) {
   const state = objectValue(draft.payload._state);
   if (state.operation !== 'update') return null;
   const baseline = objectValue(state.baseline);
@@ -121,6 +129,11 @@ function ProductUpdateState({ draft }: { draft: AiDraft }) {
   const stockQty = context.company_total_qty;
   const stockUom =
     String(context.stock_uom_display ?? context.stock_uom ?? '').trim() || '-';
+  const warehouseStock = Array.isArray(context.company_warehouse_stock)
+    ? context.company_warehouse_stock.map(objectValue)
+    : [];
+  const requiresUomMigration = Boolean(context.requires_uom_migration);
+  const itemCode = String(draft.payload.item_code ?? '').trim();
   return (
     <Alert
       description={
@@ -129,6 +142,21 @@ function ProductUpdateState({ draft }: { draft: AiDraft }) {
             当前库存：{productStateValue(stockQty)} {stockUom}
             （只读，不会作为初始库存写入）
           </Typography.Text>
+          {warehouseStock.length ? (
+            <Space orientation="vertical" size={2}>
+              <Typography.Text strong>分仓库存</Typography.Text>
+              {warehouseStock.map((row) => (
+                <Typography.Text key={String(row.warehouse ?? '')}>
+                  {String(row.warehouse ?? '未命名仓库')}：
+                  {productStateValue(row.qty ?? row.total_qty)} {stockUom}
+                </Typography.Text>
+              ))}
+            </Space>
+          ) : (
+            <Typography.Text type="secondary">
+              当前公司没有分仓库存记录。
+            </Typography.Text>
+          )}
           {changedFields.length ? (
             changedFields.map((field) => (
               <Typography.Text key={field}>
@@ -140,9 +168,35 @@ function ProductUpdateState({ draft }: { draft: AiDraft }) {
           ) : (
             <Typography.Text>尚未产生字段修改。</Typography.Text>
           )}
-          <Typography.Text type="secondary">
-            如需改变库存，请单独创建库存调整草稿。
-          </Typography.Text>
+          {requiresUomMigration ? (
+            <Alert
+              action={
+                itemCode ? (
+                  <Button
+                    href={`/master-data/products/${encodeURIComponent(itemCode)}?uom_migration=1`}
+                    size="small"
+                  >
+                    处理单位异常
+                  </Button>
+                ) : null
+              }
+              message={String(
+                context.uom_governance_message ??
+                  '库存基准单位异常，请先完成受控单位错误迁移。',
+              )}
+              showIcon
+              type="error"
+            />
+          ) : (
+            <Button
+              loading={preparingInventory}
+              onClick={() => onPrepareInventoryAdjustment?.(draft)}
+              size="small"
+              type="primary"
+            >
+              调整此商品库存
+            </Button>
+          )}
         </Space>
       }
       showIcon
@@ -192,11 +246,13 @@ export function AiDraftEditorModal({
   draftId,
   onClose,
   onLoaded,
+  onPrepareInventoryAdjustment,
   onUpdated,
 }: {
   draftId: string | null;
   onClose: () => void;
   onLoaded?: (draft: AiDraft) => void;
+  onPrepareInventoryAdjustment?: (draft: AiDraft) => Promise<void>;
   onUpdated: (draft: AiDraft) => void;
 }) {
   const { message, modal } = App.useApp();
@@ -211,6 +267,7 @@ export function AiDraftEditorModal({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [executing, setExecuting] = useState(false);
+  const [preparingInventory, setPreparingInventory] = useState(false);
   const onCloseRef = useRef(onClose);
   const onLoadedRef = useRef(onLoaded);
   const company = Form.useWatch('company', form);
@@ -614,6 +671,16 @@ export function AiDraftEditorModal({
     });
   };
 
+  const prepareInventoryAdjustment = async (productDraft: AiDraft) => {
+    if (!onPrepareInventoryAdjustment || preparingInventory) return;
+    setPreparingInventory(true);
+    try {
+      await onPrepareInventoryAdjustment(productDraft);
+    } finally {
+      setPreparingInventory(false);
+    }
+  };
+
   return (
     <Modal
       closable={!busy}
@@ -668,6 +735,13 @@ export function AiDraftEditorModal({
           : '编辑 AI 草稿'
       }
       width={980}
+      styles={{
+        body: {
+          maxHeight: 'calc(100vh - 190px)',
+          overflowY: 'auto',
+          paddingRight: 12,
+        },
+      }}
     >
       <Spin description="正在读取最新草稿版本…" spinning={loading}>
         {draft ? (
@@ -732,7 +806,13 @@ export function AiDraftEditorModal({
                 />
               ) : null)}
             {draft.draftType === 'product_setup' ? (
-              <ProductUpdateState draft={draft} />
+              <ProductUpdateState
+                draft={draft}
+                onPrepareInventoryAdjustment={(productDraft) =>
+                  void prepareInventoryAdjustment(productDraft)
+                }
+                preparingInventory={preparingInventory}
+              />
             ) : null}
             <Form.Item label="公司" name="company" rules={[{ required: true }]}>
               <Input disabled />
@@ -907,7 +987,7 @@ export function AiDraftEditorModal({
                     }
                     rules={[{ message: '请选择库存基准单位', required: true }]}
                   >
-                    <UomSelect />
+                    <UomSelect disabled={isProductUpdate} />
                   </Form.Item>
                   <Form.Item
                     label="币种"

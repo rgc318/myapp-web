@@ -11,6 +11,8 @@ import {
   listAiAgentApprovals,
   listAiDrafts,
   listAiSelectableModels,
+  prepareAiInventoryAdjustmentDraft,
+  prepareAiProductUpdateDraft,
   renameAiConversation,
   refreshAiBusinessResult,
   resetAiConversationContext,
@@ -19,6 +21,7 @@ import {
   resolveAiScenario,
   restoreAiDraftVersion,
   reviewAiAgentApproval,
+  selectAiDraftProductCandidate,
   sendAiChatMessage,
   streamAiChatMessage,
   submitAiFeedback,
@@ -146,6 +149,122 @@ describe('AI domain service', () => {
       },
     );
     expect(result.version).toBe(3);
+  });
+
+  it('prepares product edit and inventory drafts without sending a model message', async () => {
+    mockedRunGatewayMutation
+      .mockResolvedValueOnce({
+        data: {
+          conversation: 'AI-CONV-1',
+          draft: {
+            draft_type: 'product_setup',
+            name: 'AI-DRAFT-PRODUCT',
+            payload: { item_code: 'ITEM-001' },
+            status: 'draft',
+            validation: { errors: ['尚未修改'], ready_for_handoff: false, warnings: [] },
+            version: 1,
+          },
+          messages: [
+            { content: '编辑商品资料：ITEM-001', name: 'AI-MSG-1', role: 'user', sequence: 3 },
+            {
+              citations: [],
+              content: '已读取当前商品资料',
+              name: 'AI-MSG-2',
+              role: 'assistant',
+              sequence: 4,
+            },
+          ],
+        },
+        idempotencyKey: 'REQ-PREPARE-PRODUCT',
+      })
+      .mockResolvedValueOnce({
+        data: {
+          conversation: 'AI-CONV-1',
+          draft: {
+            draft_type: 'inventory_adjustment',
+            name: 'AI-DRAFT-INVENTORY',
+            payload: { items: [{ item_code: 'ITEM-001' }] },
+            status: 'draft',
+            validation: { errors: ['请选择仓库'], ready_for_handoff: false, warnings: [] },
+            version: 1,
+          },
+          messages: [],
+        },
+        idempotencyKey: 'REQ-PREPARE-INVENTORY',
+      });
+
+    const product = await prepareAiProductUpdateDraft({
+      company: 'Demo Company',
+      conversationId: 'AI-CONV-1',
+      itemCode: 'ITEM-001',
+    });
+    const inventory = await prepareAiInventoryAdjustmentDraft({
+      company: 'Demo Company',
+      conversationId: 'AI-CONV-1',
+      itemCode: 'ITEM-001',
+    });
+
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      1,
+      'prepare_ai_product_update_draft_v1',
+      expect.objectContaining({
+        notifyError: false,
+        payload: {
+          company: 'Demo Company',
+          conversation_id: 'AI-CONV-1',
+          item_code: 'ITEM-001',
+        },
+      }),
+    );
+    expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
+      2,
+      'prepare_ai_inventory_adjustment_draft_v1',
+      expect.objectContaining({ notifyError: false }),
+    );
+    expect(product.draft.draftType).toBe('product_setup');
+    expect(product.messages[0].role).toBe('user');
+    expect(inventory.draft.draftType).toBe('inventory_adjustment');
+  });
+
+  it('selects a candidate on the current draft version', async () => {
+    mockedRunGatewayMutation.mockResolvedValue({
+      data: {
+        conversation: 'AI-CONV-1',
+        draft: {
+          draft_type: 'inventory_adjustment',
+          name: 'AI-DRAFT-1',
+          payload: { items: [{ item_code: 'COKE-5000' }] },
+          status: 'draft',
+          validation: { errors: [], ready_for_handoff: true, warnings: [] },
+          version: 2,
+        },
+        messages: [],
+      },
+      idempotencyKey: 'REQ-SELECT-CANDIDATE',
+    });
+
+    const result = await selectAiDraftProductCandidate({
+      draftId: 'AI-DRAFT-1',
+      expectedVersion: 1,
+      itemCode: 'COKE-5000',
+      selectionText: '可口可乐',
+    });
+
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
+      'select_ai_draft_product_candidate_v1',
+      {
+        idempotencyKey:
+          'web-select-ai-draft-product-AI-DRAFT-1-v1-COKE-5000',
+        notifyError: false,
+        payload: {
+          draft_id: 'AI-DRAFT-1',
+          expected_version: 1,
+          item_code: 'COKE-5000',
+          selection_text: '可口可乐',
+        },
+      },
+    );
+    expect(result.draft.version).toBe(2);
   });
 
   it('cancels a durable AI run through the mutation layer', async () => {

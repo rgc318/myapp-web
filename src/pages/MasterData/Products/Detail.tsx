@@ -25,7 +25,7 @@ import {
   Table,
   Tag,
 } from 'antd';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
@@ -476,6 +476,24 @@ const ProductDetailPage: React.FC = () => {
       refreshDeps: [itemCode, company, warehouse],
     },
   );
+
+  useEffect(() => {
+    if (
+      data &&
+      new URLSearchParams(location.search).get('uom_migration') === '1'
+    ) {
+      setUomMigrationOpen(true);
+    }
+  }, [data, location.search]);
+
+  const closeUomMigration = () => {
+    setUomMigrationOpen(false);
+    const nextQuery = new URLSearchParams(location.search);
+    nextQuery.delete('uom_migration');
+    history.replace(
+      `${location.pathname}${nextQuery.toString() ? `?${nextQuery.toString()}` : ''}`,
+    );
+  };
 
   const openEdit = () => {
     if (!data) {
@@ -1149,7 +1167,7 @@ const ProductDetailPage: React.FC = () => {
       </Modal>
       <ProductUomMigrationModal
         itemCode={data?.itemCode || itemCode}
-        onClose={() => setUomMigrationOpen(false)}
+        onClose={closeUomMigration}
         onCompleted={(newItemCode) => {
           setUomMigrationOpen(false);
           history.push(

@@ -151,6 +151,10 @@ describe('AiDraftEditorModal', () => {
           baseline: { standard_selling_rate: 5 },
           context: {
             company_total_qty: 1000,
+            company_warehouse_stock: [
+              { qty: 750, warehouse: '主仓 - DC' },
+              { qty: 250, warehouse: '门店仓 - DC' },
+            ],
             stock_uom: 'Unit',
             stock_uom_display: '件',
           },
@@ -167,6 +171,7 @@ describe('AiDraftEditorModal', () => {
         stock_uom: 'Unit',
       },
     });
+    const onPrepareInventoryAdjustment = jest.fn().mockResolvedValue(undefined);
 
     render(
       React.createElement(
@@ -175,6 +180,7 @@ describe('AiDraftEditorModal', () => {
         React.createElement(AiDraftEditorModal, {
           draftId: draft.name,
           onClose: jest.fn(),
+          onPrepareInventoryAdjustment,
           onUpdated: jest.fn(),
         }),
       ),
@@ -182,11 +188,75 @@ describe('AiDraftEditorModal', () => {
 
     expect(await screen.findByText('正在完善现有商品')).toBeTruthy();
     expect(screen.getByText(/当前库存：1000 件/)).toBeTruthy();
+    expect(screen.getByText('分仓库存')).toBeTruthy();
+    expect(screen.getByText(/主仓 - DC：750 件/)).toBeTruthy();
+    expect(screen.getByText(/门店仓 - DC：250 件/)).toBeTruthy();
     expect(screen.getByText(/商品描述：未设置 → 补充说明/)).toBeTruthy();
     expect(screen.queryByText('初始库存数量')).toBeNull();
     expect(
       (screen.getByDisplayValue('ITEM-DIMO') as HTMLInputElement).disabled,
     ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '调整此商品库存' }));
+    await waitFor(() => {
+      expect(onPrepareInventoryAdjustment).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'AI-DRAFT-1' }),
+      );
+    });
+  });
+
+  it('blocks direct stock adjustment when the stock UOM needs governed migration', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      payload: {
+        _state: {
+          baseline: { stock_uom: 'Wavelength In Megametres' },
+          context: {
+            company_total_qty: 0,
+            company_warehouse_stock: [],
+            requires_uom_migration: true,
+            stock_uom: 'Wavelength In Megametres',
+            stock_uom_display: '兆米波长',
+            uom_governance_message:
+              '当前库存基准单位未纳入日常业务单位目录，请先完成受控单位错误迁移。',
+          },
+          operation: 'update',
+          patch: {},
+        },
+        company: 'Demo Company',
+        currency: 'CNY',
+        item_code: '可口可乐-5000ML',
+        item_name: '可口可乐 5000ml',
+        operation: 'update',
+        stock_uom: 'Wavelength In Megametres',
+      },
+    });
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onPrepareInventoryAdjustment: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('正在完善现有商品')).toBeTruthy();
+    expect(
+      screen.getByText(
+        '当前库存基准单位未纳入日常业务单位目录，请先完成受控单位错误迁移。',
+      ),
+    ).toBeTruthy();
+    const migrationLink = screen.getByRole('link', {
+      name: '处理单位异常',
+    });
+    expect(migrationLink.getAttribute('href')).toBe(
+      '/master-data/products/%E5%8F%AF%E5%8F%A3%E5%8F%AF%E4%B9%90-5000ML?uom_migration=1',
+    );
+    expect(screen.queryByRole('button', { name: '调整此商品库存' })).toBeNull();
   });
 
   it('lets an unresolved product update draft select its existing target', async () => {
