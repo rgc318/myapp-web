@@ -90,6 +90,7 @@ const POLICY_STATUS: Record<string, { color: string; text: string }> = {
 
 const MODEL_HEALTH: Record<string, { color: string; text: string }> = {
   available: { color: 'success', text: '可用' },
+  degraded: { color: 'warning', text: '临时波动' },
   listed: { color: 'processing', text: 'LiteLLM 可见' },
   missing: { color: 'default', text: 'LiteLLM 不可见' },
   unavailable: { color: 'error', text: '不可用' },
@@ -329,7 +330,7 @@ export default function AiModelGovernancePage({
         aliases.length ? aliases : undefined,
       );
       message.success(
-        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.unavailableCount} 个不可用`,
+        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.degradedCount} 个临时波动，${result.data.unavailableCount} 个不可用`,
       );
       setSelectedModelAliases([]);
       reloadGovernance();

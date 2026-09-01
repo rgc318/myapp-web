@@ -1850,6 +1850,49 @@ describe('AI workspace page', () => {
     );
   });
 
+  it('keeps temporarily degraded models selectable and labels the health fluctuation', async () => {
+    listAiSelectableModels.mockResolvedValueOnce({
+      capabilities: {
+        canSelectFixedModel: true,
+        canViewAdvancedDiagnostics: true,
+      },
+      models: [
+        {
+          capability: 'fast_chat',
+          displayName: 'GPT 5.6 Luna',
+          lastErrorCode: 'PROVIDER_HTTP_429',
+          lastHealthAt: '2026-09-01 03:16:00',
+          lastHealthStatus: 'degraded',
+          modelAlias: 'gpt-5.6-luna',
+          status: 'active',
+          supportsJsonSchema: false,
+          supportsStreaming: true,
+        },
+      ],
+    });
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    await waitFor(() =>
+      expect(
+        document.querySelector('.ai-quick-model-select input[role="combobox"]'),
+      ).toBeTruthy(),
+    );
+    const quickModelSelect = document.querySelector<HTMLElement>(
+      '.ai-quick-model-select input[role="combobox"]',
+    );
+    fireEvent.mouseDown(quickModelSelect as HTMLElement);
+    const degradedOption = (
+      await screen.findAllByText('GPT 5.6 Luna · gpt-5.6-luna · 临时波动')
+    )
+      .map((node) => node.closest('.ant-select-item-option'))
+      .find((node): node is HTMLElement => node instanceof HTMLElement);
+
+    expect(degradedOption).toBeTruthy();
+    expect(degradedOption?.className).not.toContain(
+      'ant-select-item-option-disabled',
+    );
+  });
+
   it('auto-routes an inventory addition request to the validated draft endpoint', async () => {
     resolveAiScenario.mockResolvedValueOnce({
       resolutionId: 'AI-RESOLUTION-INVENTORY',

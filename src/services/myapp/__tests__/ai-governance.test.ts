@@ -313,12 +313,14 @@ describe('AI governance domain service', () => {
           source: 'litellm',
           checked_count: 2,
           available_count: 1,
-          unavailable_count: 1,
+          degraded_count: 1,
+          unavailable_count: 0,
           items: [
             {
               model_alias: 'erp-fast-chat',
               capability: 'fast_chat',
               available: true,
+              health_status: 'available',
               latency_ms: 321.5,
               provider_model: 'openai/gpt-5',
             },
@@ -326,6 +328,7 @@ describe('AI governance domain service', () => {
               model_alias: 'erp-embedding',
               capability: 'embedding',
               available: false,
+              health_status: 'degraded',
               latency_ms: 500,
               error_code: 'PROVIDER_HTTP_429',
             },
@@ -356,12 +359,14 @@ describe('AI governance domain service', () => {
     expect(availabilityResult.data).toMatchObject({
       checkedCount: 2,
       availableCount: 1,
-      unavailableCount: 1,
+      degradedCount: 1,
+      unavailableCount: 0,
     });
     expect(availabilityResult.data.items[1]).toMatchObject({
       modelAlias: 'erp-embedding',
       available: false,
       errorCode: 'PROVIDER_HTTP_429',
+      healthStatus: 'degraded',
     });
   });
 

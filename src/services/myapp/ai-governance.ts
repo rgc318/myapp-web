@@ -100,6 +100,7 @@ export type AiModelAvailabilityItem = {
   available: boolean;
   capability: string | null;
   errorCode: string | null;
+  healthStatus: string;
   latencyMs: number;
   modelAlias: string;
   providerModel: string | null;
@@ -108,6 +109,7 @@ export type AiModelAvailabilityItem = {
 export type AiModelAvailabilityResult = {
   availableCount: number;
   checkedCount: number;
+  degradedCount: number;
   items: AiModelAvailabilityItem[];
   requestedCount: number;
   source: string;
@@ -715,6 +717,7 @@ export async function checkAiModelAvailability(modelAliases?: string[]) {
         return {
           availableCount: toNumber(payload.available_count),
           checkedCount: toNumber(payload.checked_count),
+          degradedCount: toNumber(payload.degraded_count),
           items: Array.isArray(payload.items)
             ? payload.items.map((item) => {
                 const row = readObject(item);
@@ -722,6 +725,9 @@ export async function checkAiModelAvailability(modelAliases?: string[]) {
                   available: Boolean(row.available),
                   capability: toOptionalText(row.capability) ?? null,
                   errorCode: toOptionalText(row.error_code) ?? null,
+                  healthStatus:
+                    toOptionalText(row.health_status) ??
+                    (Boolean(row.available) ? 'available' : 'unavailable'),
                   latencyMs: toNumber(row.latency_ms),
                   modelAlias: toOptionalText(row.model_alias) ?? '',
                   providerModel: toOptionalText(row.provider_model) ?? null,

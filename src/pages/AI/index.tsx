@@ -433,7 +433,7 @@ export default function AiPage() {
           : `${model.displayName} · ${model.modelAlias}`
       }${model.supportsVision ? ' · 图片输入' : ''}${
         model.lastHealthStatus === 'unavailable' ? ' · 不可用' : ''
-      }`,
+      }${model.lastHealthStatus === 'degraded' ? ' · 临时波动' : ''}`,
       value: model.modelAlias,
     })),
   ];

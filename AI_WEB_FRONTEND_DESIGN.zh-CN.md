@@ -203,7 +203,7 @@ src/services/myapp/
 - 常用 Prompt 是可编辑模板：点击后只填入 Sender 并选中对应场景，用户可补充公司、时间、单据类型和范围后再显式发送，避免误点立即产生模型费用或业务 Run。
 - 自动识别在发送前调用 Frappe `resolve_ai_scenario_v1`，并始终携带当前公司和会话 ID，使结构化语义路由能读取服务端 `conversation-state-v2`。Web 只采用四类写草稿结果进入专用校验链路；识别为 `general / product_search / order_query / report_summary` 时，普通 Chat 请求仍发送 `scenario=auto`，同时把 Backend 返回的 opaque `resolutionId` 作为 `scenario_resolution_id` 原样传入 SSE，避免同一消息再次串行调用 intent。该凭据由 Backend 按用户、内容、公司、会话状态版本、附件和模型一次性校验，Web 不读取、不缓存解析结构，也不能把它用于另一条消息。Web 不解析“这个商品/订单/客户/供应商”，不把粗粒度规则结果锁成最终只读场景，也不复制或扩展关键词规则。历史消息中的 `scenario` 是审计事实而不是持久 UI 偏好，重新打开会话后场景选择器恢复 `auto`，防止上一轮订单查询污染后续商品建档等不同意图。
 - 用户显式选择的固定场景只对当前一次发送生效；请求开始后场景选择器立即恢复 `auto`。这既保留人工纠偏能力，也避免同一打开会话中的订单查询或商品建档模式继续污染后续问题，并防止普通查询被错误生成新的空草稿。
-- 高级设置通过 Frappe `list_ai_selectable_models_v1` 同时加载能力位和授权模型清单。所有用户都可临时选择本次场景；只有后端返回 `canSelectFixedModel=true` 时才展示页头和 Drawer 模型选择器。模型优先显示 `provider_model_display` 友好名称，技术 alias 只作为治理补充；`lastHealthStatus=unavailable` 的项显示“不可用”并禁用，当前固定选择若变为不可用则自动回到自动模式。普通业务账号只显示自动模式标签，不能从浏览器获得模型库存或提交固定覆盖。固定模型被授权并选中后，同步 Chat、SSE、四类草稿及人工重试携带同一 `modelAlias`。
+- 高级设置通过 Frappe `list_ai_selectable_models_v1` 同时加载能力位和授权模型清单。所有用户都可临时选择本次场景；只有后端返回 `canSelectFixedModel=true` 时才展示页头和 Drawer 模型选择器。模型优先显示 `provider_model_display` 友好名称，技术 alias 只作为治理补充；`lastHealthStatus=unavailable` 的项显示“不可用”并禁用，当前固定选择若变为不可用则自动回到自动模式；`lastHealthStatus=degraded` 的项显示“临时波动”但保持可选，表示单次限流、超时或 Provider 波动尚未达到硬阻断阈值。普通业务账号只显示自动模式标签，不能从浏览器获得模型库存或提交固定覆盖。固定模型被授权并选中后，同步 Chat、SSE、四类草稿及人工重试携带同一 `modelAlias`。
 
 - 自动模式在没有运行事实时显示“自动模型（由策略选择）”；收到 Run 后显示“自动模型（实际模型名）”。固定模式显示请求模型，但消息和 Run Inspector 仍以服务端返回的实际模型为准。
 
@@ -353,7 +353,7 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 - 每行“检测”只发送当前行 alias；成功或失败后刷新表格并保留当前筛选、分页和列设置。
 - ProTable 行选择允许跨当前页操作前明确核对已选数量；“检测已选（N）”只发送选中的 alias，不得把空选择降级为全量检测。
 - “一键检查可用性”是明确的全量动作，必须二次确认真实 Provider 调用和可能产生的少量费用。
-- 页面展示 `lastHealthAt`、`available / unavailable`、工具能力和稳定错误码。健康是时间快照；不得把旧的绿色状态表述为当前 Provider SLA。
+- 页面展示 `lastHealthAt`、`available / degraded / unavailable`、工具能力和稳定错误码。`degraded` 显示“临时波动”，不禁用模型；健康是时间快照，不得把旧的绿色状态表述为当前 Provider SLA。
 - 检测结果只更新健康和能力事实，不自动启用、停用、退役模型，也不自动发布或回滚策略。
 - 治理总览展示 Scheduler 的启停、`03:15` 站点时间、`all_enabled / selected` 范围和最近检测时间；页面只读展示这些站点配置，不在浏览器直接修改 Scheduler。
 - 单项、多选和全量检测都使用相同 loading/成功/失败反馈。批量响应允许部分模型不可用，但请求级校验、权限或 Orchestrator 故障必须作为整次失败处理。
