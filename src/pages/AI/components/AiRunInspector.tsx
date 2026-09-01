@@ -26,6 +26,7 @@ export type AiRunDisplayStatus =
   | 'running'
   | 'waiting_approval'
   | 'completed'
+  | 'expired'
   | 'stopped'
   | 'failed';
 
@@ -43,6 +44,11 @@ const STATUS_META: Record<
     color: 'success',
     icon: <CheckCircleOutlined />,
     text: '已完成',
+  },
+  expired: {
+    color: 'warning',
+    icon: <ClockCircleOutlined />,
+    text: '已过期',
   },
   failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' },
   idle: { color: 'default', icon: <ClockCircleOutlined />, text: '等待运行' },

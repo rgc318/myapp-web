@@ -1738,6 +1738,165 @@ describe('AI workspace page', () => {
     });
   });
 
+  it('restores a running Run from the durable conversation snapshot', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-RUNNING';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-09-01 10:00:00',
+        lastMessageAt: '2026-09-01 10:00:00',
+        messageCount: 1,
+        modified: '2026-09-01 10:00:00',
+        name: 'AI-CONV-RUNNING',
+        status: 'active',
+        title: '运行中会话',
+      },
+      latestRun: {
+        creation: '2026-09-01 10:00:00',
+        modified: '2026-09-01 10:00:03',
+        runId: 'AI-RUN-RUNNING',
+        run: {
+          error: null,
+          errorCode: null,
+          firstTokenMs: null,
+          latencyMs: 0,
+          model: null,
+          modelAlias: 'erp-fast-chat',
+          modelDisplay: 'ERP Fast Chat',
+          modelSelection: 'auto',
+          requestedModelAlias: null,
+          requestedModelDisplay: null,
+          status: 'running',
+          traceId: null,
+          usage: {
+            completionTokens: 0,
+            promptTokens: 0,
+            reasoningTokens: 0,
+            totalTokens: 0,
+          },
+        },
+      },
+      messages: [
+        {
+          citations: [],
+          content: '查询库存',
+          creation: '2026-09-01 10:00:00',
+          feedback: null,
+          name: 'AI-MSG-USER-RUNNING',
+          promptVersion: 'erp-readonly-v8',
+          role: 'user',
+          run: null,
+          runId: null,
+          scenario: 'general',
+          sequence: 1,
+        },
+      ],
+      pagination: {
+        hasMore: false,
+        limit: 40,
+        nextBeforeSequence: null,
+        returnedCount: 1,
+        total: 1,
+      },
+    });
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: '2026-09-01 10:00:00',
+        lastMessageAt: '2026-09-01 10:00:08',
+        messageCount: 2,
+        modified: '2026-09-01 10:00:08',
+        name: 'AI-CONV-RUNNING',
+        status: 'active',
+        title: '运行中会话',
+      },
+      latestRun: {
+        creation: '2026-09-01 10:00:00',
+        modified: '2026-09-01 10:00:08',
+        runId: 'AI-RUN-RUNNING',
+        run: {
+          error: null,
+          errorCode: null,
+          firstTokenMs: 500,
+          latencyMs: 8000,
+          model: 'provider-model',
+          modelAlias: 'erp-fast-chat',
+          modelDisplay: 'ERP Fast Chat',
+          modelSelection: 'auto',
+          requestedModelAlias: null,
+          requestedModelDisplay: null,
+          status: 'completed',
+          traceId: 'trace-running',
+          usage: {
+            completionTokens: 2,
+            promptTokens: 10,
+            reasoningTokens: 0,
+            totalTokens: 12,
+          },
+        },
+      },
+      messages: [
+        {
+          citations: [],
+          content: '库存查询完成',
+          creation: '2026-09-01 10:00:08',
+          feedback: null,
+          name: 'AI-MSG-ASSISTANT-RUNNING',
+          promptVersion: 'erp-readonly-v8',
+          role: 'assistant',
+          run: {
+            error: null,
+            errorCode: null,
+            firstTokenMs: 500,
+            latencyMs: 8000,
+            model: 'provider-model',
+            modelAlias: 'erp-fast-chat',
+            modelDisplay: 'ERP Fast Chat',
+            modelSelection: 'auto',
+            requestedModelAlias: null,
+            requestedModelDisplay: null,
+            status: 'completed',
+            traceId: 'trace-running',
+            usage: {
+              completionTokens: 2,
+              promptTokens: 10,
+              reasoningTokens: 0,
+              totalTokens: 12,
+            },
+          },
+          runId: 'AI-RUN-RUNNING',
+          scenario: 'general',
+          sequence: 2,
+        },
+      ],
+      pagination: {
+        hasMore: false,
+        limit: 1,
+        nextBeforeSequence: null,
+        returnedCount: 1,
+        total: 2,
+      },
+    });
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+
+    fireEvent.click(await screen.findByRole('button', { name: '运行详情' }));
+    expect(await screen.findByText('生成中')).toBeTruthy();
+    expect(screen.queryByText('已完成')).toBeNull();
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' })
+        .disabled,
+    ).toBe(true);
+    expect(
+      await screen.findByText('库存查询完成', {}, { timeout: 5000 }),
+    ).toBeTruthy();
+    expect(await screen.findByText('已完成')).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLInputElement>('textbox', { name: 'AI 输入' })
+        .disabled,
+    ).toBe(false);
+  });
+
   it('allows a new conversation to choose its query company', async () => {
     render(React.createElement(App, null, React.createElement(AiPage)));
 

@@ -366,6 +366,14 @@ export type AiConversationMessagePagination = {
   total: number;
 };
 
+export type AiConversationLatestRun = {
+  runId: string;
+  messageId: string | null;
+  run: AiRunSummary;
+  creation: string | null;
+  modified: string | null;
+};
+
 export type AiTokenUsage = {
   promptTokens: number;
   completionTokens: number;
@@ -1014,6 +1022,42 @@ function mapConversationContext(value: unknown): AiConversationContext {
   };
 }
 
+function mapAiRunSummary(value: unknown): AiRunSummary | null {
+  const run = readObject(value);
+  if (!Object.keys(run).length) return null;
+  const usage = readObject(run.usage);
+  return {
+    error: typeof run.error === 'string' ? run.error : null,
+    errorCode: typeof run.error_code === 'string' ? run.error_code : null,
+    firstTokenMs:
+      run.first_token_ms === null || run.first_token_ms === undefined
+        ? null
+        : toNumber(run.first_token_ms),
+    latencyMs: toNumber(run.latency_ms),
+    model: typeof run.model === 'string' ? run.model : null,
+    modelAlias: typeof run.model_alias === 'string' ? run.model_alias : null,
+    modelDisplay:
+      typeof run.model_display === 'string' ? run.model_display : null,
+    modelSelection: run.model_selection === 'fixed' ? 'fixed' : 'auto',
+    requestedModelAlias:
+      typeof run.requested_model_alias === 'string'
+        ? run.requested_model_alias
+        : null,
+    requestedModelDisplay:
+      typeof run.requested_model_display === 'string'
+        ? run.requested_model_display
+        : null,
+    status: String(run.status ?? ''),
+    traceId: typeof run.trace_id === 'string' ? run.trace_id : null,
+    usage: {
+      promptTokens: toNumber(usage.prompt_tokens),
+      completionTokens: toNumber(usage.completion_tokens),
+      totalTokens: toNumber(usage.total_tokens),
+      reasoningTokens: toNumber(usage.reasoning_tokens),
+    },
+  };
+}
+
 function mapConversationMessage(value: unknown): AiConversationMessage {
   const row = readObject(value);
   return {
@@ -1032,43 +1076,7 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
       : [],
     promptVersion:
       typeof row.prompt_version === 'string' ? row.prompt_version : null,
-    run: (() => {
-      const run = readObject(row.run);
-      if (!Object.keys(run).length) return null;
-      const usage = readObject(run.usage);
-      return {
-        error: typeof run.error === 'string' ? run.error : null,
-        errorCode:
-          typeof run.error_code === 'string' ? run.error_code : null,
-        firstTokenMs:
-          run.first_token_ms === null || run.first_token_ms === undefined
-            ? null
-            : toNumber(run.first_token_ms),
-        latencyMs: toNumber(run.latency_ms),
-        model: typeof run.model === 'string' ? run.model : null,
-        modelAlias:
-          typeof run.model_alias === 'string' ? run.model_alias : null,
-        modelDisplay:
-          typeof run.model_display === 'string' ? run.model_display : null,
-        modelSelection: run.model_selection === 'fixed' ? 'fixed' : 'auto',
-        requestedModelAlias:
-          typeof run.requested_model_alias === 'string'
-            ? run.requested_model_alias
-            : null,
-        requestedModelDisplay:
-          typeof run.requested_model_display === 'string'
-            ? run.requested_model_display
-            : null,
-        status: String(run.status ?? ''),
-        traceId: typeof run.trace_id === 'string' ? run.trace_id : null,
-        usage: {
-          promptTokens: toNumber(usage.prompt_tokens),
-          completionTokens: toNumber(usage.completion_tokens),
-          totalTokens: toNumber(usage.total_tokens),
-          reasoningTokens: toNumber(usage.reasoning_tokens),
-        },
-      };
-    })(),
+    run: mapAiRunSummary(row.run),
     feedback: (() => {
       const feedback = readObject(row.feedback);
       if (
@@ -1243,6 +1251,7 @@ export async function getAiConversation(
 ): Promise<{
   conversation: AiConversation;
   context?: AiConversationContext;
+  latestRun: AiConversationLatestRun | null;
   messages: AiConversationMessage[];
   pagination: AiConversationMessagePagination;
 }> {
@@ -1262,9 +1271,30 @@ export async function getAiConversation(
   const messages = Array.isArray(data.messages)
     ? data.messages.map(mapConversationMessage)
     : [];
+  const latestRunRow = readObject(data.latest_run);
+  const latestRunSummary = mapAiRunSummary(latestRunRow.run);
   return {
     conversation,
     context: mapConversationContext(data.context),
+    latestRun:
+      typeof latestRunRow.run_id === 'string' && latestRunSummary
+        ? {
+            runId: latestRunRow.run_id,
+            messageId:
+              typeof latestRunRow.message_id === 'string'
+                ? latestRunRow.message_id
+                : null,
+            run: latestRunSummary,
+            creation:
+              typeof latestRunRow.creation === 'string'
+                ? latestRunRow.creation
+                : null,
+            modified:
+              typeof latestRunRow.modified === 'string'
+                ? latestRunRow.modified
+                : null,
+          }
+        : null,
     messages,
     pagination: {
       hasMore: Boolean(pagination.has_more),

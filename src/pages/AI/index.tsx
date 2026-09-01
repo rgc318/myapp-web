@@ -176,7 +176,8 @@ function resolveRunDisplayStatus(
   if (status === 'running') return 'running';
   if (status === 'waiting_approval') return 'waiting_approval';
   if (status === 'failed') return 'failed';
-  if (status === 'stopped') return 'stopped';
+  if (status === 'stopped' || status === 'cancelled') return 'stopped';
+  if (status === 'expired') return 'expired';
   if (status === 'completed') return 'completed';
   return 'idle';
 }
@@ -270,10 +271,13 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
     attachments: item.attachments,
     citations: item.citations,
     error:
-      item.run?.status === 'failed'
+      item.run?.status === 'failed' || item.run?.status === 'expired'
         ? (item.run.error ?? 'AI 服务调用失败')
         : null,
-    errorCode: item.run?.status === 'failed' ? item.run.errorCode : null,
+    errorCode:
+      item.run?.status === 'failed' || item.run?.status === 'expired'
+        ? item.run.errorCode
+        : null,
     modelAlias: item.run?.modelAlias ?? null,
     modelDisplay: item.run?.modelDisplay ?? null,
     modelSelection: item.run?.modelSelection ?? 'auto',
@@ -712,6 +716,36 @@ export default function AiPage() {
       setConversationStatus(openedConversationStatus);
       setSelectedConversationStatus(openedConversationStatus);
       const restoredMessages = mapConversationMessages(result.messages);
+      const restoredLatestRun = result.latestRun ?? null;
+      if (
+        restoredLatestRun &&
+        !restoredLatestRun.messageId &&
+        !restoredMessages.some((item) => item.runId === restoredLatestRun.runId)
+      ) {
+        restoredMessages.push({
+          ...createMessage('assistant', '', [], restoredLatestRun.runId),
+          creation: restoredLatestRun.creation,
+          error:
+            restoredLatestRun.run.status === 'failed' ||
+            restoredLatestRun.run.status === 'expired'
+              ? restoredLatestRun.run.error
+              : null,
+          errorCode:
+            restoredLatestRun.run.status === 'failed' ||
+            restoredLatestRun.run.status === 'expired'
+              ? restoredLatestRun.run.errorCode
+              : null,
+          modelAlias: restoredLatestRun.run.modelAlias,
+          modelDisplay: restoredLatestRun.run.modelDisplay,
+          modelSelection: restoredLatestRun.run.modelSelection,
+          requestedModelDisplay: restoredLatestRun.run.requestedModelDisplay,
+          run: restoredLatestRun.run,
+          runStatus: resolveRunDisplayStatus(restoredLatestRun.run.status),
+          runStream: { deltaCount: 0, streamedChars: 0 },
+          runTools: [],
+          runWarnings: [],
+        });
+      }
       setMessages(restoredMessages);
       setMessagePagination(
         result.pagination ?? {
@@ -736,25 +770,23 @@ export default function AiPage() {
       );
       const latestRunMessage =
         latestRunIndex >= 0 ? result.messages[latestRunIndex] : null;
+      const latestRunSummary =
+        restoredLatestRun?.run ?? latestRunMessage?.run ?? null;
+      const latestRunId =
+        restoredLatestRun?.runId ?? latestRunMessage?.runId ?? null;
       const failedRequestMessage =
         latestRunIndex >= 0 && latestRunMessage?.run?.status === 'failed'
           ? [...result.messages.slice(0, latestRunIndex)]
               .reverse()
               .find((item) => item.role === 'user')
           : null;
-      setActiveRunId(latestRunMessage?.runId ?? null);
+      setActiveRunId(latestRunId);
       setRunWarnings([]);
       setToolProgress([]);
       setRunProgress(null);
-      setRunError(latestRunMessage?.run?.error ?? null);
-      setRunErrorCode(latestRunMessage?.run?.errorCode ?? null);
-      setRunStatus(
-        latestRunMessage?.run
-          ? latestRunMessage.run.status === 'failed'
-            ? 'failed'
-            : 'completed'
-          : 'idle',
-      );
+      setRunError(latestRunSummary?.error ?? null);
+      setRunErrorCode(latestRunSummary?.errorCode ?? null);
+      setRunStatus(resolveRunDisplayStatus(latestRunSummary?.status));
       setRetryRequest(
         openedConversationStatus === 'active' &&
           latestRunMessage?.run?.status === 'failed' &&
@@ -769,23 +801,23 @@ export default function AiPage() {
           : null,
       );
       setLastResult(
-        latestRunMessage?.run
+        latestRunSummary
           ? {
               conversationId: result.conversation.name,
               events: [],
               message: {
                 role: 'assistant',
-                content: latestRunMessage.content,
-                citations: latestRunMessage.citations,
+                content: latestRunMessage?.content ?? '',
+                citations: latestRunMessage?.citations ?? [],
               },
-              model: latestRunMessage.run.model,
-              modelAlias: latestRunMessage.run.modelAlias,
-              modelDisplay: latestRunMessage.run.modelDisplay,
-              runId: latestRunMessage.runId,
-              run: latestRunMessage.run,
+              model: latestRunSummary.model,
+              modelAlias: latestRunSummary.modelAlias,
+              modelDisplay: latestRunSummary.modelDisplay,
+              runId: latestRunId,
+              run: latestRunSummary,
               stream: { deltaCount: 0, streamedChars: 0 },
-              traceId: latestRunMessage.run.traceId,
-              usage: latestRunMessage.run.usage,
+              traceId: latestRunSummary.traceId,
+              usage: latestRunSummary.usage,
               warnings: [],
             }
           : null,
@@ -797,6 +829,117 @@ export default function AiPage() {
       setConversationLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      !activeRunId ||
+      (runStatus !== 'running' && runStatus !== 'waiting_approval')
+    ) {
+      return;
+    }
+    let active = true;
+    let timer: number | null = null;
+
+    const pollRunStatus = async () => {
+      try {
+        const snapshot = await getAiConversation(conversationId, { limit: 1 });
+        if (!active || snapshot.latestRun?.runId !== activeRunId) return;
+        const latestRun = snapshot.latestRun;
+        const nextStatus = resolveRunDisplayStatus(latestRun.run.status);
+        const persistedMessage = [...snapshot.messages]
+          .reverse()
+          .find((item) => item.runId === latestRun.runId);
+        const mappedMessage = persistedMessage
+          ? mapConversationMessages([persistedMessage])[0]
+          : null;
+
+        setMessages((current) => {
+          const existingIndex = current.findIndex(
+            (item) => item.runId === latestRun.runId,
+          );
+          const nextMessage: ChatRow = mappedMessage ?? {
+            ...createMessage('assistant', '', [], latestRun.runId),
+            creation: latestRun.creation,
+            error:
+              latestRun.run.status === 'failed' ||
+              latestRun.run.status === 'expired'
+                ? latestRun.run.error
+                : null,
+            errorCode:
+              latestRun.run.status === 'failed' ||
+              latestRun.run.status === 'expired'
+                ? latestRun.run.errorCode
+                : null,
+            modelAlias: latestRun.run.modelAlias,
+            modelDisplay: latestRun.run.modelDisplay,
+            modelSelection: latestRun.run.modelSelection,
+            requestedModelDisplay: latestRun.run.requestedModelDisplay,
+            run: latestRun.run,
+            runId: latestRun.runId,
+            runStatus: nextStatus,
+            runStream: { deltaCount: 0, streamedChars: 0 },
+            runTools: [],
+            runWarnings: [],
+          };
+          if (existingIndex < 0) return [...current, nextMessage];
+          const next = [...current];
+          next[existingIndex] = {
+            ...next[existingIndex],
+            ...nextMessage,
+            id: next[existingIndex].id,
+          };
+          return next;
+        });
+        setRunStatus(nextStatus);
+        setRunError(latestRun.run.error);
+        setRunErrorCode(latestRun.run.errorCode);
+        setLastResult({
+          conversationId,
+          events: [],
+          message: {
+            role: 'assistant',
+            content: persistedMessage?.content ?? '',
+            citations: persistedMessage?.citations ?? [],
+          },
+          model: latestRun.run.model,
+          modelAlias: latestRun.run.modelAlias,
+          modelDisplay: latestRun.run.modelDisplay,
+          runId: latestRun.runId,
+          run: latestRun.run,
+          stream: { deltaCount: 0, streamedChars: 0 },
+          traceId: latestRun.run.traceId,
+          usage: latestRun.run.usage,
+          warnings: [],
+        });
+        if (nextStatus === 'waiting_approval') {
+          void refreshPendingApprovals();
+        }
+        if (nextStatus !== 'running' && nextStatus !== 'waiting_approval') {
+          setRunProgress(null);
+          void refreshConversations();
+        }
+      } catch {
+        // Keep the last durable status and retry on the next bounded poll.
+      } finally {
+        if (active) {
+          timer = window.setTimeout(pollRunStatus, 3000);
+        }
+      }
+    };
+
+    timer = window.setTimeout(pollRunStatus, 3000);
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [
+    activeRunId,
+    conversationId,
+    refreshConversations,
+    refreshPendingApprovals,
+    runStatus,
+  ]);
 
   const loadOlderMessages = async () => {
     const targetId = conversationId;
@@ -1031,6 +1174,13 @@ export default function AiPage() {
     }
     if (selectedConversationStatus === 'archived' && conversationId) {
       message.warning('已归档会话为只读状态，请新建会话后继续提问。');
+      return;
+    }
+    if (
+      !retryContext &&
+      (runStatus === 'running' || runStatus === 'waiting_approval')
+    ) {
+      message.warning('当前 AI Run 尚未结束，请等待状态更新后再发送。');
       return;
     }
     const pendingInventorySelection =
@@ -2103,6 +2253,8 @@ export default function AiPage() {
       ((conversationId && approval.conversationId === conversationId) ||
         (!conversationId && approval.runId === activeRunId)),
   );
+  const hasDurableActiveRun =
+    runStatus === 'running' || runStatus === 'waiting_approval';
 
   const bubbleItems: BubbleItemType[] = messages.map((item, index) => ({
     key: item.id,
@@ -2602,7 +2754,8 @@ export default function AiPage() {
                   disabled={
                     (selectedConversationStatus === 'archived' &&
                       Boolean(conversationId)) ||
-                    Boolean(activeApproval)
+                    Boolean(activeApproval) ||
+                    hasDurableActiveRun
                   }
                   loading={loading}
                   onCancel={stopGeneration}
@@ -2628,7 +2781,11 @@ export default function AiPage() {
                               {pendingAttachments.map((attachment) => (
                                 <AiAttachmentPreview
                                   attachment={attachment}
-                                  disabled={loading || attachmentUploading}
+                                  disabled={
+                                    loading ||
+                                    hasDurableActiveRun ||
+                                    attachmentUploading
+                                  }
                                   key={attachment.attachmentId}
                                   onRemove={() =>
                                     void removePendingAttachment(attachment)
@@ -2653,9 +2810,11 @@ export default function AiPage() {
                   placeholder={
                     selectedConversationStatus === 'archived' && conversationId
                       ? '归档会话为只读状态'
-                      : activeApproval
+                      : activeApproval || runStatus === 'waiting_approval'
                         ? '请先处理当前 Run 的工具审批'
-                        : '输入业务问题；Enter 发送，Shift+Enter 换行'
+                        : runStatus === 'running'
+                          ? '当前 AI Run 仍在执行，请等待状态更新'
+                          : '输入业务问题；Enter 发送，Shift+Enter 换行'
                   }
                   prefix={
                     <Upload
@@ -2663,6 +2822,7 @@ export default function AiPage() {
                       beforeUpload={uploadAttachment}
                       disabled={
                         loading ||
+                        hasDurableActiveRun ||
                         attachmentUploading ||
                         pendingAttachments.length >= AI_ATTACHMENT_LIMIT
                       }
@@ -2687,6 +2847,7 @@ export default function AiPage() {
                       <components.SendButton
                         disabled={
                           attachmentUploading ||
+                          hasDurableActiveRun ||
                           (!draft.trim() && !pendingAttachments.length)
                         }
                       />

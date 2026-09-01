@@ -950,6 +950,17 @@ describe('AI domain service', () => {
           context_start_sequence: 1,
           state: { active_scenario: 'product_search' },
         },
+        latest_run: {
+          run_id: 'AI-RUN-2',
+          message_id: null,
+          creation: '2026-07-26 12:01:00',
+          modified: '2026-07-26 12:01:03',
+          run: {
+            status: 'running',
+            model_alias: 'erp-fast-chat',
+            latency_ms: 0,
+          },
+        },
         messages: [
           {
             name: 'AI-MSG-1',
@@ -999,6 +1010,11 @@ describe('AI domain service', () => {
       usage: { totalTokens: 12 },
     });
     expect(result.messages[0].feedback?.rating).toBe('positive');
+    expect(result.latestRun).toMatchObject({
+      messageId: null,
+      runId: 'AI-RUN-2',
+      run: { modelAlias: 'erp-fast-chat', status: 'running' },
+    });
     expect(result.pagination).toEqual({
       hasMore: true,
       limit: 40,
