@@ -94,6 +94,12 @@ export type ProductUomMigrationAssessment = {
     salesOrderCount: number;
   };
   prices: ProductUomMigrationPrice[];
+  recommendedStrategy: 'in_place' | 'replacement' | null;
+  strategies: {
+    inPlace: { available: boolean; reason: string };
+    replacement: { available: boolean; reason: string };
+  };
+  suggestedNewItemCode: string;
   source: {
     disabled: boolean;
     itemCode: string;
@@ -116,22 +122,46 @@ export type ExecuteProductUomMigrationPayload = {
   }[];
   confirmDisableSource: boolean;
   confirmHistoryPreserved: boolean;
+  confirmInPlaceCorrection?: boolean;
+  correctionReason?: string | null;
   itemCode: string;
-  newItemCode: string;
+  newItemCode?: string | null;
   newItemName?: string | null;
+  newPrices?: {
+    currency?: string | null;
+    priceList: string;
+    rate: number;
+    targetUom: string;
+  }[];
   priceMappings: {
-    action: 'copy' | 'skip';
+    action: 'copy' | 'manual' | 'skip';
     sourceName: string;
+    targetRate?: number | null;
     targetUom?: string | null;
   }[];
   retailDefaultUom?: string | null;
   sourceModified: string;
   stockUom: string;
+  strategy?: 'in_place' | 'replacement';
   uomConversions: {
     conversionFactor?: number | null;
     uom?: string | null;
   }[];
   wholesaleDefaultUom?: string | null;
+};
+
+export type ActiveProductResolution = {
+  activeDisabled: boolean;
+  activeItemCode: string;
+  chain: {
+    source: 'correction_record' | 'legacy_item_alternative';
+    sourceItem: string;
+    targetItem: string;
+  }[];
+  changed: boolean;
+  requestedItemCode: string;
+  requiresConfirmation: boolean;
+  resolutionSource: 'correction_record' | 'legacy_item_alternative' | null;
 };
 
 export type ProductSummary = {
@@ -576,6 +606,25 @@ function mapProductUomMigrationAssessment(
         };
       })
       .filter((entry): entry is ProductUomMigrationPrice => Boolean(entry)),
+    recommendedStrategy:
+      row.recommended_strategy === 'in_place' ||
+      row.recommended_strategy === 'replacement'
+        ? row.recommended_strategy
+        : null,
+    strategies: {
+      inPlace: {
+        available: Boolean(readObject(readObject(row.strategies).in_place).available),
+        reason:
+          toOptionalText(readObject(readObject(row.strategies).in_place).reason) ?? '',
+      },
+      replacement: {
+        available: Boolean(readObject(readObject(row.strategies).replacement).available),
+        reason:
+          toOptionalText(readObject(readObject(row.strategies).replacement).reason) ?? '',
+      },
+    },
+    suggestedNewItemCode:
+      toOptionalText(row.suggested_new_item_code) ?? '',
     source: {
       disabled: Boolean(source.disabled),
       itemCode: toOptionalText(source.item_code) ?? '',
@@ -1107,6 +1156,38 @@ export async function assessProductUomMigration(itemCode: string) {
   return mapProductUomMigrationAssessment(result.data);
 }
 
+export async function resolveActiveProduct(
+  itemCode: string,
+): Promise<ActiveProductResolution> {
+  const result = await callGatewayMethod<unknown>('resolve_active_product_v1', {
+    item_code: itemCode,
+  });
+  const row = readObject(result.data);
+  return {
+    activeDisabled: Boolean(row.active_disabled),
+    activeItemCode: toOptionalText(row.active_item_code) ?? itemCode,
+    chain: (Array.isArray(row.chain) ? row.chain : []).map((entry) => {
+      const chainRow = readObject(entry);
+      return {
+        source:
+          chainRow.source === 'correction_record'
+            ? 'correction_record'
+            : 'legacy_item_alternative',
+        sourceItem: toOptionalText(chainRow.source_item) ?? '',
+        targetItem: toOptionalText(chainRow.target_item) ?? '',
+      };
+    }),
+    changed: Boolean(row.changed),
+    requestedItemCode: toOptionalText(row.requested_item_code) ?? itemCode,
+    requiresConfirmation: Boolean(row.requires_confirmation),
+    resolutionSource:
+      row.resolution_source === 'correction_record' ||
+      row.resolution_source === 'legacy_item_alternative'
+        ? row.resolution_source
+        : null,
+  };
+}
+
 export async function executeProductUomMigration(
   payload: ExecuteProductUomMigrationPayload,
 ) {
@@ -1116,6 +1197,8 @@ export async function executeProductUomMigration(
       itemCode: string;
       name: string;
     };
+    copiedPriceNames: string[];
+    createdPriceNames: string[];
     historyPreserved: boolean;
     movedBarcodes: string[];
     newItem: ProductSummary;
@@ -1130,17 +1213,29 @@ export async function executeProductUomMigration(
       })),
       confirm_disable_source: payload.confirmDisableSource ? 1 : 0,
       confirm_history_preserved: payload.confirmHistoryPreserved ? 1 : 0,
+      confirm_in_place_correction: payload.confirmInPlaceCorrection ? 1 : 0,
+      correction_reason: toOptionalText(payload.correctionReason),
       item_code: payload.itemCode,
       new_item_code: payload.newItemCode,
       new_item_name: toOptionalText(payload.newItemName),
-      price_mappings: payload.priceMappings.map((mapping) => ({
-        action: mapping.action,
-        source_name: mapping.sourceName,
-        target_uom: toOptionalText(mapping.targetUom),
+      new_prices: (payload.newPrices ?? []).map((price) => ({
+        currency: toOptionalText(price.currency),
+        price_list: price.priceList,
+        rate: price.rate,
+        target_uom: price.targetUom,
       })),
+      price_mappings: payload.priceMappings.map((mapping) =>
+        definedPayload({
+          action: mapping.action,
+          source_name: mapping.sourceName,
+          target_rate: mapping.targetRate ?? undefined,
+          target_uom: toOptionalText(mapping.targetUom),
+        }),
+      ),
       retail_default_uom: toOptionalText(payload.retailDefaultUom),
       source_modified: payload.sourceModified,
       stock_uom: payload.stockUom,
+      strategy: payload.strategy,
       uom_conversions: payload.uomConversions
         .map((entry) => ({
           conversion_factor: entry.conversionFactor ?? undefined,
@@ -1149,7 +1244,7 @@ export async function executeProductUomMigration(
         .filter((entry) => entry.uom),
       wholesale_default_uom: toOptionalText(payload.wholesaleDefaultUom),
     }),
-    successMessage: '商品单位迁移已完成',
+    successMessage: '商品单位纠正已完成',
     transform: (raw) => {
       const row = readObject(raw);
       const alternative = readObject(row.alternative);
@@ -1160,6 +1255,16 @@ export async function executeProductUomMigration(
           itemCode: toOptionalText(alternative.item_code) ?? '',
           name: toOptionalText(alternative.name) ?? '',
         },
+        copiedPriceNames: Array.isArray(row.copied_price_names)
+          ? row.copied_price_names
+              .map((value) => toOptionalText(value))
+              .filter((value): value is string => Boolean(value))
+          : [],
+        createdPriceNames: Array.isArray(row.created_price_names)
+          ? row.created_price_names
+              .map((value) => toOptionalText(value))
+              .filter((value): value is string => Boolean(value))
+          : [],
         historyPreserved: Boolean(row.history_preserved),
         movedBarcodes: Array.isArray(row.moved_barcodes)
           ? row.moved_barcodes

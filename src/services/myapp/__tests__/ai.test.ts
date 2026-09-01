@@ -196,12 +196,12 @@ describe('AI domain service', () => {
     const product = await prepareAiProductUpdateDraft({
       company: 'Demo Company',
       conversationId: 'AI-CONV-1',
-      itemCode: 'ITEM-001',
+      itemCode: '可口可乐-5000ML',
     });
     const inventory = await prepareAiInventoryAdjustmentDraft({
       company: 'Demo Company',
       conversationId: 'AI-CONV-1',
-      itemCode: 'ITEM-001',
+      itemCode: '可口可乐-5000ML',
     });
 
     expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
@@ -212,14 +212,21 @@ describe('AI domain service', () => {
         payload: {
           company: 'Demo Company',
           conversation_id: 'AI-CONV-1',
-          item_code: 'ITEM-001',
+          item_code: '可口可乐-5000ML',
         },
       }),
     );
     expect(mockedRunGatewayMutation).toHaveBeenNthCalledWith(
       2,
       'prepare_ai_inventory_adjustment_draft_v1',
-      expect.objectContaining({ notifyError: false }),
+      {
+        notifyError: false,
+        payload: {
+          company: 'Demo Company',
+          conversation_id: 'AI-CONV-1',
+          item_code: '可口可乐-5000ML',
+        },
+      },
     );
     expect(product.draft.draftType).toBe('product_setup');
     expect(product.messages[0].role).toBe('user');

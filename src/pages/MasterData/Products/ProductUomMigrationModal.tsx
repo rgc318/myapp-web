@@ -1,13 +1,16 @@
 import { ProCard, ProDescriptions } from '@ant-design/pro-components';
 import {
   Alert,
+  AutoComplete,
   Button,
   Checkbox,
   Empty,
   Form,
   type FormInstance,
   Input,
+  InputNumber,
   Modal,
+  message,
   Select,
   Skeleton,
   Space,
@@ -34,12 +37,22 @@ type MigrationFormValues = SaveProductPayload & {
   }[];
   confirmDisableSource: boolean;
   confirmHistoryPreserved: boolean;
+  confirmInPlaceCorrection: boolean;
+  correctionReason?: string;
   newItemCode: string;
-  priceMappings: {
-    action?: 'copy' | 'skip';
-    sourceName: string;
+  newPrices: {
+    currency?: string;
+    priceList?: string;
+    rate?: number;
     targetUom?: string;
   }[];
+  priceMappings: {
+    action?: 'copy' | 'manual' | 'skip';
+    sourceName: string;
+    targetRate?: number;
+    targetUom?: string;
+  }[];
+  strategy: 'in_place' | 'replacement';
 };
 
 function formatNumber(value: number | null | undefined) {
@@ -60,6 +73,43 @@ function migrationUomOptions(values: MigrationFormValues['uomConversions']) {
     .map((uom) => ({ label: resolveDisplayUom(uom), value: uom }));
 }
 
+function findDuplicatePricePlan(
+  assessment: ProductUomMigrationAssessment,
+  values: MigrationFormValues,
+) {
+  const sourceByName = new Map(
+    assessment.prices.map((price) => [price.name, price]),
+  );
+  const rows = [
+    ...(values.priceMappings ?? [])
+      .filter((mapping) => mapping.action && mapping.action !== 'skip')
+      .map((mapping) => {
+        const source = sourceByName.get(mapping.sourceName);
+        return {
+          currency: source?.currency?.trim() || '',
+          priceList: source?.priceList?.trim() || '',
+          targetUom: mapping.targetUom?.trim() || '',
+        };
+      }),
+    ...(values.newPrices ?? []).map((price) => ({
+      currency: price.currency?.trim() || '',
+      priceList: price.priceList?.trim() || '',
+      targetUom: price.targetUom?.trim() || '',
+    })),
+  ];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.priceList}\u0000${row.currency}\u0000${row.targetUom}`;
+    if (seen.has(key)) {
+      return `${row.priceList} / ${row.currency || '默认币种'} / ${resolveDisplayUom(
+        row.targetUom,
+      )}`;
+    }
+    seen.add(key);
+  }
+  return undefined;
+}
+
 export function ProductUomMigrationModal({
   itemCode,
   onClose,
@@ -76,13 +126,25 @@ export function ProductUomMigrationModal({
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const [previewValues, setPreviewValues] = useState<MigrationFormValues>();
   const uomConversions = Form.useWatch('uomConversions', form) ?? [];
   const priceMappings = Form.useWatch('priceMappings', form) ?? [];
   const barcodeMappings = Form.useWatch('barcodeMappings', form) ?? [];
+  const strategy = Form.useWatch('strategy', form) ?? 'replacement';
   const uomOptions = useMemo(
     () => migrationUomOptions(uomConversions),
     [uomConversions],
   );
+  const priceListOptions = useMemo(() => {
+    const names = new Set([
+      'Retail',
+      'Wholesale',
+      'Standard Selling',
+      'Standard Buying',
+      ...(assessment?.prices.map((price) => price.priceList) ?? []),
+    ]);
+    return [...names].map((name) => ({ label: name, value: name }));
+  }, [assessment]);
 
   useEffect(() => {
     if (!open || !itemCode) return;
@@ -94,6 +156,7 @@ export function ProductUomMigrationModal({
       .then((result) => {
         if (!active) return;
         setAssessment(result);
+        setPreviewValues(undefined);
         form.setFieldsValue({
           barcodeMappings: result.barcodes.map((row) => ({
             action: undefined,
@@ -102,14 +165,18 @@ export function ProductUomMigrationModal({
           })),
           confirmDisableSource: false,
           confirmHistoryPreserved: false,
+          confirmInPlaceCorrection: false,
+          correctionReason: '纠正错误库存基准单位',
           itemName: result.source.itemName,
-          newItemCode: '',
+          newItemCode: result.suggestedNewItemCode,
+          newPrices: [],
           priceMappings: result.prices.map((row) => ({
             action: undefined,
             sourceName: row.name,
             targetUom: undefined,
           })),
           retailDefaultUom: undefined,
+          strategy: result.recommendedStrategy ?? 'replacement',
           stockUom: undefined,
           uomConversions: [],
           wholesaleDefaultUom: undefined,
@@ -117,7 +184,7 @@ export function ProductUomMigrationModal({
       })
       .catch((caught) => {
         if (!active) return;
-        setError(caught instanceof Error ? caught.message : '迁移评估失败');
+        setError(caught instanceof Error ? caught.message : '纠正评估失败');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -127,399 +194,828 @@ export function ProductUomMigrationModal({
     };
   }, [form, itemCode, open]);
 
-  const handleSubmit = async (values: MigrationFormValues) => {
+  const executeMigration = async (values: MigrationFormValues) => {
     if (!assessment) return;
     setSubmitting(true);
     try {
       const result = await executeProductUomMigration({
-        barcodeMappings: values.barcodeMappings.map((mapping) => ({
+        barcodeMappings: (values.barcodeMappings ?? []).map((mapping) => ({
           action: mapping.action as 'move' | 'keep',
           sourceName: mapping.sourceName,
           targetUom: mapping.targetUom,
         })),
         confirmDisableSource: values.confirmDisableSource,
         confirmHistoryPreserved: values.confirmHistoryPreserved,
+        confirmInPlaceCorrection: values.confirmInPlaceCorrection,
+        correctionReason: values.correctionReason,
         itemCode: assessment.source.itemCode,
-        newItemCode: values.newItemCode.trim(),
+        newItemCode:
+          values.strategy === 'replacement'
+            ? values.newItemCode?.trim() || undefined
+            : undefined,
         newItemName: values.itemName,
-        priceMappings: values.priceMappings.map((mapping) => ({
-          action: mapping.action as 'copy' | 'skip',
+        newPrices: (values.newPrices ?? []).map((price) => ({
+          currency: price.currency?.trim() || undefined,
+          priceList: String(price.priceList || '').trim(),
+          rate: Number(price.rate),
+          targetUom: String(price.targetUom || ''),
+        })),
+        priceMappings: (values.priceMappings ?? []).map((mapping) => ({
+          action: mapping.action as 'copy' | 'manual' | 'skip',
           sourceName: mapping.sourceName,
+          targetRate: mapping.targetRate,
           targetUom: mapping.targetUom,
         })),
         retailDefaultUom: values.retailDefaultUom,
         sourceModified: assessment.source.modified,
         stockUom: String(values.stockUom || ''),
+        strategy: values.strategy,
         uomConversions: values.uomConversions ?? [],
         wholesaleDefaultUom: values.wholesaleDefaultUom,
       });
+      setPreviewValues(undefined);
       onCompleted(result.data.newItem.itemCode);
+    } catch {
+      // mutation 层已经展示结构化错误；保留预览和表单内容供用户修正后重试。
     } finally {
       setSubmitting(false);
     }
   };
 
-  return (
-    <Modal
-      destroyOnHidden
-      footer={null}
-      onCancel={onClose}
-      open={open}
-      title={`单位错误迁移 · ${itemCode}`}
-      width={1120}
-    >
-      {loading ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
-      {error ? (
-        <Alert
-          action={<Button onClick={onClose}>关闭</Button>}
-          description={error}
-          showIcon
-          title="迁移评估失败"
-          type="error"
-        />
-      ) : null}
-      {!loading && !error && !assessment ? (
-        <Empty description="未读取到迁移评估结果" />
-      ) : null}
-      {assessment ? (
-        <Form<MigrationFormValues>
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-        >
-          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-            <Alert
-              description="系统会新建正确商品、建立 ERPNext 原生替代关系并停用源商品。历史 Stock Ledger Entry 永久保留在源商品下，不会直接覆盖 stock_uom。"
-              showIcon
-              title="这是主数据替代迁移，不是原地改单位"
-              type="warning"
-            />
+  const handleSubmit = (values: MigrationFormValues) => {
+    if (!assessment) return;
+    const duplicatePrice = findDuplicatePricePlan(assessment, values);
+    if (duplicatePrice) {
+      message.error(`价格计划重复：${duplicatePrice}，请合并或删除重复项。`);
+      return;
+    }
+    setPreviewValues({
+      ...values,
+      barcodeMappings: values.barcodeMappings ?? [],
+      newPrices: values.newPrices ?? [],
+      priceMappings: values.priceMappings ?? [],
+      uomConversions: values.uomConversions ?? [],
+    });
+  };
 
-            {assessment.blockers.map((issue) => (
+  const previewPrices = useMemo(() => {
+    if (!assessment || !previewValues) return [];
+    const sourceByName = new Map(
+      assessment.prices.map((price) => [price.name, price]),
+    );
+    const mapped = previewValues.priceMappings
+      .filter((mapping) => mapping.action && mapping.action !== 'skip')
+      .map((mapping) => {
+        const source = sourceByName.get(mapping.sourceName);
+        return {
+          currency: source?.currency || '',
+          key: `source-${mapping.sourceName}`,
+          priceList: source?.priceList || '',
+          rate: mapping.action === 'manual' ? mapping.targetRate : source?.rate,
+          source: mapping.action === 'manual' ? '手工指定' : '保留原金额',
+          uom: mapping.targetUom || '',
+        };
+      });
+    return [
+      ...mapped,
+      ...previewValues.newPrices.map((price, index) => ({
+        currency: price.currency || '',
+        key: `new-${index}`,
+        priceList: price.priceList || '',
+        rate: price.rate,
+        source: '直接新增',
+        uom: price.targetUom || '',
+      })),
+    ];
+  }, [assessment, previewValues]);
+
+  return (
+    <>
+      <Modal
+        destroyOnHidden
+        footer={null}
+        onCancel={() => {
+          setPreviewValues(undefined);
+          onClose();
+        }}
+        open={open}
+        title={`单位错误纠正 · ${itemCode}`}
+        width={1120}
+      >
+        {loading ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
+        {error ? (
+          <Alert
+            action={<Button onClick={onClose}>关闭</Button>}
+            description={error}
+            showIcon
+            title="纠正评估失败"
+            type="error"
+          />
+        ) : null}
+        {!loading && !error && !assessment ? (
+          <Empty description="未读取到纠正评估结果" />
+        ) : null}
+        {assessment ? (
+          <Form<MigrationFormValues>
+            form={form}
+            layout="vertical"
+            onFinish={handleSubmit}
+            onFinishFailed={({ errorFields }) => {
+              const firstError = errorFields[0];
+              if (firstError?.name) {
+                form.scrollToField(firstError.name, { block: 'center' });
+              }
+              message.error(
+                firstError?.errors[0] || '纠正表单仍有内容需要检查。',
+              );
+            }}
+          >
+            <Space orientation="vertical" size={16} style={{ width: '100%' }}>
               <Alert
-                description={issue.message}
-                key={issue.code}
+                description={
+                  strategy === 'in_place'
+                    ? '系统会保留原商品编码，受控修正库存单位、换算、价格和条码。历史 Stock Ledger Entry 保持原记录，不会重写账本。'
+                    : '系统会新建正确商品、建立正式继任关系并停用源商品。历史 Stock Ledger Entry 永久保留在源商品下。'
+                }
                 showIcon
-                title={issue.code}
-                type="error"
-              />
-            ))}
-            {assessment.warnings.map((issue) => (
-              <Alert
-                description={issue.message}
-                key={issue.code}
-                showIcon
-                title={issue.code}
+                title={
+                  strategy === 'in_place'
+                    ? '系统推荐：保留原编码并受控纠正'
+                    : '创建继任商品并停用源商品'
+                }
                 type="warning"
               />
-            ))}
 
-            <ProCard title="评估报告">
-              <ProDescriptions column={3}>
-                <ProDescriptions.Item label="源商品编码">
-                  {assessment.source.itemCode}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="源库存单位">
-                  {resolveDisplayUom(
-                    assessment.source.stockUom,
-                    assessment.source.stockUomDisplay,
+              {assessment.blockers.map((issue) => (
+                <Alert
+                  description={issue.message}
+                  key={issue.code}
+                  showIcon
+                  title={issue.code}
+                  type="error"
+                />
+              ))}
+              {assessment.warnings.map((issue) => (
+                <Alert
+                  description={issue.message}
+                  key={issue.code}
+                  showIcon
+                  title={issue.code}
+                  type="warning"
+                />
+              ))}
+
+              <ProCard title="评估报告">
+                <ProDescriptions column={3}>
+                  <ProDescriptions.Item label="源商品编码">
+                    {assessment.source.itemCode}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="源库存单位">
+                    {resolveDisplayUom(
+                      assessment.source.stockUom,
+                      assessment.source.stockUomDisplay,
+                    )}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="历史库存流水">
+                    {assessment.history.stockLedgerEntryCount} 条
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="实际库存">
+                    {formatNumber(assessment.inventory.totalActualQty)}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="库存占用/在途">
+                    {formatNumber(assessment.inventory.totalCommittedQty)}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="未完订单">
+                    销售 {assessment.openTransactions.salesOrderCount} / 采购{' '}
+                    {assessment.openTransactions.purchaseOrderCount}
+                  </ProDescriptions.Item>
+                </ProDescriptions>
+                <Table
+                  columns={[
+                    { dataIndex: 'warehouse', title: '仓库' },
+                    { dataIndex: 'company', title: '公司' },
+                    {
+                      align: 'right' as const,
+                      dataIndex: 'actualQty',
+                      render: formatNumber,
+                      title: '实际库存',
+                    },
+                    {
+                      align: 'right' as const,
+                      dataIndex: 'committedQty',
+                      render: formatNumber,
+                      title: '占用/在途',
+                    },
+                    {
+                      align: 'right' as const,
+                      dataIndex: 'projectedQty',
+                      render: formatNumber,
+                      title: '预计库存',
+                    },
+                  ]}
+                  dataSource={assessment.inventory.bins}
+                  locale={{ emptyText: '没有 Bin 库存记录' }}
+                  pagination={false}
+                  rowKey="warehouse"
+                  size="small"
+                />
+              </ProCard>
+
+              <ProCard title="处理策略">
+                <Form.Item
+                  extra={
+                    strategy === 'in_place'
+                      ? assessment.strategies.inPlace.reason
+                      : assessment.strategies.replacement.reason
+                  }
+                  label="纠正方式"
+                  name="strategy"
+                  rules={[{ required: true, message: '请选择纠正方式' }]}
+                >
+                  <Select
+                    options={[
+                      {
+                        disabled: !assessment.strategies.inPlace.available,
+                        label: '保留原商品编码（推荐用于低风险录入错误）',
+                        value: 'in_place',
+                      },
+                      {
+                        disabled: !assessment.strategies.replacement.available,
+                        label: '创建继任商品并停用源商品',
+                        value: 'replacement',
+                      },
+                    ]}
+                  />
+                </Form.Item>
+                <Form.Item
+                  label="纠正原因"
+                  name="correctionReason"
+                  rules={[{ required: true, message: '请填写纠正原因' }]}
+                >
+                  <Input.TextArea
+                    autoSize={{ maxRows: 3, minRows: 2 }}
+                    placeholder="例如：建档时误选科学计量单位，实际应按瓶管理"
+                  />
+                </Form.Item>
+              </ProCard>
+
+              <ProCard title="商品与正确单位">
+                {strategy === 'replacement' ? (
+                  <Space size={16} style={{ width: '100%' }}>
+                    <Form.Item
+                      extra="系统已按现有商品编码规则给出建议；可修改，也可留空由后端执行时生成。"
+                      label="新商品编码（建议值）"
+                      name="newItemCode"
+                      style={{ flex: 1 }}
+                    >
+                      <Input
+                        addonAfter={
+                          <Button
+                            disabled={!assessment.suggestedNewItemCode}
+                            onClick={() =>
+                              form.setFieldValue(
+                                'newItemCode',
+                                assessment.suggestedNewItemCode,
+                              )
+                            }
+                            size="small"
+                            type="link"
+                          >
+                            使用建议
+                          </Button>
+                        }
+                        placeholder="留空由系统自动生成"
+                      />
+                    </Form.Item>
+                    <Form.Item
+                      label="新商品名称"
+                      name="itemName"
+                      rules={[{ required: true, message: '请输入新商品名称' }]}
+                      style={{ flex: 1 }}
+                    >
+                      <Input />
+                    </Form.Item>
+                  </Space>
+                ) : null}
+                <ProductUomFields
+                  form={form as unknown as FormInstance<SaveProductPayload>}
+                />
+              </ProCard>
+
+              <ProCard title="价格单位人工映射">
+                <Alert
+                  description="可保留原金额、手工指定新金额或跳过旧价格；下方还可以新增不依赖旧记录的价格。错误旧单位没有可信换算关系，因此系统不会自动推算。"
+                  showIcon
+                  title="在同一迁移向导中完成价格重建"
+                  type="info"
+                />
+                <Table<ProductUomMigrationPrice>
+                  columns={[
+                    { dataIndex: 'priceList', title: '价格表' },
+                    {
+                      dataIndex: 'uom',
+                      render: (value) => resolveDisplayUom(value),
+                      title: '旧单位',
+                    },
+                    { dataIndex: 'currency', title: '币种' },
+                    {
+                      align: 'right' as const,
+                      dataIndex: 'rate',
+                      render: (value) => formatCurrencyValue(value),
+                      title: '原金额',
+                    },
+                    {
+                      title: '处理方式',
+                      render: (_value, _row, index) => (
+                        <>
+                          <Form.Item
+                            hidden
+                            name={['priceMappings', index, 'sourceName']}
+                          >
+                            <Input />
+                          </Form.Item>
+                          <Form.Item
+                            name={['priceMappings', index, 'action']}
+                            rules={[
+                              { required: true, message: '请选择处理方式' },
+                            ]}
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Select
+                              options={[
+                                { label: '保留原金额', value: 'copy' },
+                                { label: '手工指定新价格', value: 'manual' },
+                                {
+                                  label:
+                                    strategy === 'in_place'
+                                      ? '停止使用此价格'
+                                      : '跳过此价格',
+                                  value: 'skip',
+                                },
+                              ]}
+                              placeholder="必须选择"
+                              style={{ width: 160 }}
+                            />
+                          </Form.Item>
+                        </>
+                      ),
+                    },
+                    {
+                      title: '新单位',
+                      render: (_value, _row, index) => (
+                        <Form.Item
+                          name={['priceMappings', index, 'targetUom']}
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                if (
+                                  ['copy', 'manual'].includes(
+                                    String(priceMappings[index]?.action || ''),
+                                  ) &&
+                                  !value
+                                ) {
+                                  throw new Error('创建价格时必须选择新单位');
+                                }
+                              },
+                            },
+                          ]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Select
+                            allowClear
+                            disabled={
+                              !['copy', 'manual'].includes(
+                                String(priceMappings[index]?.action || ''),
+                              )
+                            }
+                            options={uomOptions}
+                            placeholder="从新换算表选择"
+                            style={{ width: 180 }}
+                          />
+                        </Form.Item>
+                      ),
+                    },
+                    {
+                      title: '新金额',
+                      render: (_value, row, index) => (
+                        <Form.Item
+                          name={['priceMappings', index, 'targetRate']}
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                if (
+                                  priceMappings[index]?.action === 'manual' &&
+                                  (value === undefined || value === null)
+                                ) {
+                                  throw new Error('请输入手工新价格');
+                                }
+                                if (value !== undefined && Number(value) < 0) {
+                                  throw new Error('价格不能为负数');
+                                }
+                              },
+                            },
+                          ]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <InputNumber
+                            disabled={priceMappings[index]?.action !== 'manual'}
+                            min={0}
+                            placeholder={
+                              priceMappings[index]?.action === 'copy'
+                                ? formatNumber(row.rate)
+                                : '输入新金额'
+                            }
+                            precision={6}
+                            style={{ width: 140 }}
+                          />
+                        </Form.Item>
+                      ),
+                    },
+                  ]}
+                  dataSource={assessment.prices}
+                  locale={{ emptyText: '源商品没有价格记录' }}
+                  pagination={false}
+                  rowKey="name"
+                  size="small"
+                />
+                <Form.List name="newPrices">
+                  {(fields, { add, remove }) => (
+                    <Space
+                      orientation="vertical"
+                      size={8}
+                      style={{ marginTop: 16, width: '100%' }}
+                    >
+                      <Typography.Text strong>直接新增价格</Typography.Text>
+                      {fields.map((field) => (
+                        <Space align="start" key={field.key} wrap>
+                          <Form.Item
+                            label={field.name === 0 ? '价格表' : undefined}
+                            name={[field.name, 'priceList']}
+                            rules={[
+                              { required: true, message: '请选择价格表' },
+                            ]}
+                            style={{ marginBottom: 0, width: 200 }}
+                          >
+                            <AutoComplete
+                              options={priceListOptions}
+                              placeholder="选择或输入价格表"
+                            />
+                          </Form.Item>
+                          <Form.Item
+                            label={field.name === 0 ? '币种' : undefined}
+                            name={[field.name, 'currency']}
+                            rules={[{ required: true, message: '请输入币种' }]}
+                            style={{ marginBottom: 0, width: 120 }}
+                          >
+                            <Input placeholder="CNY" />
+                          </Form.Item>
+                          <Form.Item
+                            label={field.name === 0 ? '单位' : undefined}
+                            name={[field.name, 'targetUom']}
+                            rules={[{ required: true, message: '请选择单位' }]}
+                            style={{ marginBottom: 0, width: 180 }}
+                          >
+                            <Select
+                              options={uomOptions}
+                              placeholder="选择单位"
+                            />
+                          </Form.Item>
+                          <Form.Item
+                            label={field.name === 0 ? '金额' : undefined}
+                            name={[field.name, 'rate']}
+                            rules={[
+                              { required: true, message: '请输入金额' },
+                              {
+                                validator: async (_, value) => {
+                                  if (
+                                    value !== undefined &&
+                                    Number(value) < 0
+                                  ) {
+                                    throw new Error('价格不能为负数');
+                                  }
+                                },
+                              },
+                            ]}
+                            style={{ marginBottom: 0, width: 160 }}
+                          >
+                            <InputNumber
+                              min={0}
+                              precision={6}
+                              style={{ width: '100%' }}
+                            />
+                          </Form.Item>
+                          <Button
+                            danger
+                            onClick={() => remove(field.name)}
+                            style={{ marginTop: field.name === 0 ? 30 : 0 }}
+                            type="link"
+                          >
+                            删除
+                          </Button>
+                        </Space>
+                      ))}
+                      <Button
+                        block
+                        onClick={() =>
+                          add({ currency: 'CNY', priceList: 'Retail' })
+                        }
+                        type="dashed"
+                      >
+                        添加新价格
+                      </Button>
+                    </Space>
                   )}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="历史库存流水">
-                  {assessment.history.stockLedgerEntryCount} 条
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="实际库存">
-                  {formatNumber(assessment.inventory.totalActualQty)}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="库存占用/在途">
-                  {formatNumber(assessment.inventory.totalCommittedQty)}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="未完订单">
-                  销售 {assessment.openTransactions.salesOrderCount} / 采购{' '}
-                  {assessment.openTransactions.purchaseOrderCount}
-                </ProDescriptions.Item>
-              </ProDescriptions>
-              <Table
-                columns={[
-                  { dataIndex: 'warehouse', title: '仓库' },
-                  { dataIndex: 'company', title: '公司' },
-                  {
-                    align: 'right' as const,
-                    dataIndex: 'actualQty',
-                    render: formatNumber,
-                    title: '实际库存',
-                  },
-                  {
-                    align: 'right' as const,
-                    dataIndex: 'committedQty',
-                    render: formatNumber,
-                    title: '占用/在途',
-                  },
-                  {
-                    align: 'right' as const,
-                    dataIndex: 'projectedQty',
-                    render: formatNumber,
-                    title: '预计库存',
-                  },
-                ]}
-                dataSource={assessment.inventory.bins}
-                locale={{ emptyText: '没有 Bin 库存记录' }}
-                pagination={false}
-                rowKey="warehouse"
-                size="small"
-              />
-            </ProCard>
+                </Form.List>
+              </ProCard>
 
-            <ProCard title="新商品与正确单位">
-              <Space size={16} style={{ width: '100%' }}>
+              <ProCard title="条码单位人工映射">
+                <Alert
+                  description={
+                    strategy === 'in_place'
+                      ? '改绑会更新原商品条码的对应单位；如果旧单位不在新换算表中，则不能保留旧单位。'
+                      : '迁移会从源商品移除条码并原子地绑定到继任商品；保留则条码继续指向停用的源商品。'
+                  }
+                  showIcon
+                  title="每条条码必须明确选择"
+                  type="info"
+                />
+                <Table
+                  columns={[
+                    { dataIndex: 'barcode', title: '条码' },
+                    {
+                      dataIndex: 'uom',
+                      render: (value) => resolveDisplayUom(value),
+                      title: '旧单位',
+                    },
+                    {
+                      dataIndex: 'isPrimary',
+                      render: (value) =>
+                        value ? <Tag color="green">主条码</Tag> : '-',
+                      title: '主条码',
+                    },
+                    {
+                      title: '处理方式',
+                      render: (_value, _row, index) => (
+                        <>
+                          <Form.Item
+                            hidden
+                            name={['barcodeMappings', index, 'sourceName']}
+                          >
+                            <Input />
+                          </Form.Item>
+                          <Form.Item
+                            name={['barcodeMappings', index, 'action']}
+                            rules={[
+                              { required: true, message: '请选择处理方式' },
+                            ]}
+                            style={{ marginBottom: 0 }}
+                          >
+                            <Select
+                              options={[
+                                {
+                                  label:
+                                    strategy === 'in_place'
+                                      ? '改绑到新单位'
+                                      : '迁移到继任商品',
+                                  value: 'move',
+                                },
+                                {
+                                  label:
+                                    strategy === 'in_place'
+                                      ? '保留原单位'
+                                      : '保留在源商品',
+                                  value: 'keep',
+                                },
+                              ]}
+                              placeholder="必须选择"
+                              style={{ width: 170 }}
+                            />
+                          </Form.Item>
+                        </>
+                      ),
+                    },
+                    {
+                      title: '新单位',
+                      render: (_value, _row, index) => (
+                        <Form.Item
+                          name={['barcodeMappings', index, 'targetUom']}
+                          rules={[
+                            {
+                              validator: async (_, value) => {
+                                if (
+                                  barcodeMappings[index]?.action === 'move' &&
+                                  !value
+                                ) {
+                                  throw new Error('迁移条码时必须选择新单位');
+                                }
+                              },
+                            },
+                          ]}
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Select
+                            allowClear
+                            disabled={barcodeMappings[index]?.action !== 'move'}
+                            options={uomOptions}
+                            placeholder="从新换算表选择"
+                            style={{ width: 180 }}
+                          />
+                        </Form.Item>
+                      ),
+                    },
+                  ]}
+                  dataSource={assessment.barcodes}
+                  locale={{ emptyText: '源商品没有条码记录' }}
+                  pagination={false}
+                  rowKey={(row) => row.name || row.barcode}
+                  size="small"
+                />
+              </ProCard>
+
+              <ProCard title="最终确认">
+                <Typography.Paragraph type="danger">
+                  {strategy === 'in_place'
+                    ? '执行成功后会保留原商品编码并更新当前主数据。该操作不会修改历史单据或历史库存流水。'
+                    : '执行成功后，源商品会立即停用；新交易应改用继任商品。该操作不会修改历史单据、历史库存流水或历史价格记录。'}
+                </Typography.Paragraph>
+                {strategy === 'replacement' ? (
+                  <Form.Item
+                    name="confirmDisableSource"
+                    rules={[
+                      {
+                        validator: async (_, value) => {
+                          if (!value) throw new Error('请确认停用源商品');
+                        },
+                      },
+                    ]}
+                    valuePropName="checked"
+                  >
+                    <Checkbox>我确认迁移成功后停用源商品</Checkbox>
+                  </Form.Item>
+                ) : (
+                  <Form.Item
+                    name="confirmInPlaceCorrection"
+                    rules={[
+                      {
+                        validator: async (_, value) => {
+                          if (!value) throw new Error('请确认保留原商品编码');
+                        },
+                      },
+                    ]}
+                    valuePropName="checked"
+                  >
+                    <Checkbox>
+                      我确认保留原商品编码，并按上述配置纠正当前主数据
+                    </Checkbox>
+                  </Form.Item>
+                )}
                 <Form.Item
-                  label="新商品编码"
-                  name="newItemCode"
-                  rules={[{ required: true, message: '请明确填写新商品编码' }]}
-                  style={{ flex: 1 }}
+                  name="confirmHistoryPreserved"
+                  rules={[
+                    {
+                      validator: async (_, value) => {
+                        if (!value) throw new Error('请确认保留历史账本');
+                      },
+                    },
+                  ]}
+                  valuePropName="checked"
                 >
-                  <Input placeholder="例如 COCA-COLA-5000ML-V2" />
+                  <Checkbox>
+                    我确认历史库存流水继续保留在源商品下，不要求重写历史
+                  </Checkbox>
                 </Form.Item>
-                <Form.Item
-                  label="新商品名称"
-                  name="itemName"
-                  rules={[{ required: true, message: '请输入新商品名称' }]}
-                  style={{ flex: 1 }}
+              </ProCard>
+
+              <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+                <Button onClick={onClose}>取消</Button>
+                <Button
+                  danger={strategy === 'replacement'}
+                  disabled={!assessment.canExecute}
+                  loading={submitting}
+                  onClick={() => form.submit()}
+                  type="primary"
                 >
-                  <Input />
-                </Form.Item>
+                  预览并确认纠正
+                </Button>
               </Space>
-              <ProductUomFields
-                form={form as unknown as FormInstance<SaveProductPayload>}
-              />
-            </ProCard>
-
-            <ProCard title="价格单位人工映射">
-              <Alert
-                description="复制会保留原价格表、币种和金额，只把该价格明确绑定到你选择的新单位；跳过则不在新商品创建该价格。"
-                showIcon
-                title="系统不会根据旧单位自动换算或猜测价格"
-                type="info"
-              />
-              <Table<ProductUomMigrationPrice>
-                columns={[
-                  { dataIndex: 'priceList', title: '价格表' },
-                  {
-                    dataIndex: 'uom',
-                    render: (value) => resolveDisplayUom(value),
-                    title: '旧单位',
-                  },
-                  { dataIndex: 'currency', title: '币种' },
-                  {
-                    align: 'right' as const,
-                    dataIndex: 'rate',
-                    render: (value) => formatCurrencyValue(value),
-                    title: '原金额',
-                  },
-                  {
-                    title: '处理方式',
-                    render: (_value, _row, index) => (
-                      <>
-                        <Form.Item
-                          hidden
-                          name={['priceMappings', index, 'sourceName']}
-                        >
-                          <Input />
-                        </Form.Item>
-                        <Form.Item
-                          name={['priceMappings', index, 'action']}
-                          rules={[
-                            { required: true, message: '请选择处理方式' },
-                          ]}
-                          style={{ marginBottom: 0 }}
-                        >
-                          <Select
-                            options={[
-                              { label: '复制到新商品', value: 'copy' },
-                              { label: '跳过此价格', value: 'skip' },
-                            ]}
-                            placeholder="必须选择"
-                            style={{ width: 160 }}
-                          />
-                        </Form.Item>
-                      </>
-                    ),
-                  },
-                  {
-                    title: '新单位',
-                    render: (_value, _row, index) => (
-                      <Form.Item
-                        name={['priceMappings', index, 'targetUom']}
-                        rules={[
-                          {
-                            validator: async (_, value) => {
-                              if (
-                                priceMappings[index]?.action === 'copy' &&
-                                !value
-                              ) {
-                                throw new Error('复制价格时必须选择新单位');
-                              }
-                            },
-                          },
-                        ]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Select
-                          allowClear
-                          disabled={priceMappings[index]?.action !== 'copy'}
-                          options={uomOptions}
-                          placeholder="从新换算表选择"
-                          style={{ width: 180 }}
-                        />
-                      </Form.Item>
-                    ),
-                  },
-                ]}
-                dataSource={assessment.prices}
-                locale={{ emptyText: '源商品没有价格记录' }}
-                pagination={false}
-                rowKey="name"
-                size="small"
-              />
-            </ProCard>
-
-            <ProCard title="条码单位人工映射">
-              <Alert
-                description="迁移会从源商品移除条码并原子地绑定到新商品；保留则条码继续指向停用的源商品。"
-                showIcon
-                title="每条条码必须明确选择"
-                type="info"
-              />
-              <Table
-                columns={[
-                  { dataIndex: 'barcode', title: '条码' },
-                  {
-                    dataIndex: 'uom',
-                    render: (value) => resolveDisplayUom(value),
-                    title: '旧单位',
-                  },
-                  {
-                    dataIndex: 'isPrimary',
-                    render: (value) =>
-                      value ? <Tag color="green">主条码</Tag> : '-',
-                    title: '主条码',
-                  },
-                  {
-                    title: '处理方式',
-                    render: (_value, _row, index) => (
-                      <>
-                        <Form.Item
-                          hidden
-                          name={['barcodeMappings', index, 'sourceName']}
-                        >
-                          <Input />
-                        </Form.Item>
-                        <Form.Item
-                          name={['barcodeMappings', index, 'action']}
-                          rules={[
-                            { required: true, message: '请选择处理方式' },
-                          ]}
-                          style={{ marginBottom: 0 }}
-                        >
-                          <Select
-                            options={[
-                              { label: '迁移到新商品', value: 'move' },
-                              { label: '保留在源商品', value: 'keep' },
-                            ]}
-                            placeholder="必须选择"
-                            style={{ width: 170 }}
-                          />
-                        </Form.Item>
-                      </>
-                    ),
-                  },
-                  {
-                    title: '新单位',
-                    render: (_value, _row, index) => (
-                      <Form.Item
-                        name={['barcodeMappings', index, 'targetUom']}
-                        rules={[
-                          {
-                            validator: async (_, value) => {
-                              if (
-                                barcodeMappings[index]?.action === 'move' &&
-                                !value
-                              ) {
-                                throw new Error('迁移条码时必须选择新单位');
-                              }
-                            },
-                          },
-                        ]}
-                        style={{ marginBottom: 0 }}
-                      >
-                        <Select
-                          allowClear
-                          disabled={barcodeMappings[index]?.action !== 'move'}
-                          options={uomOptions}
-                          placeholder="从新换算表选择"
-                          style={{ width: 180 }}
-                        />
-                      </Form.Item>
-                    ),
-                  },
-                ]}
-                dataSource={assessment.barcodes}
-                locale={{ emptyText: '源商品没有条码记录' }}
-                pagination={false}
-                rowKey={(row) => row.name || row.barcode}
-                size="small"
-              />
-            </ProCard>
-
-            <ProCard title="最终确认">
-              <Typography.Paragraph type="danger">
-                执行成功后，源商品会立即停用；新交易应改用新商品。该操作不会修改历史单据、历史库存流水或历史价格记录。
-              </Typography.Paragraph>
-              <Form.Item
-                name="confirmDisableSource"
-                rules={[
-                  {
-                    validator: async (_, value) => {
-                      if (!value) throw new Error('请确认停用源商品');
-                    },
-                  },
-                ]}
-                valuePropName="checked"
-              >
-                <Checkbox>我确认迁移成功后停用源商品</Checkbox>
-              </Form.Item>
-              <Form.Item
-                name="confirmHistoryPreserved"
-                rules={[
-                  {
-                    validator: async (_, value) => {
-                      if (!value) throw new Error('请确认保留历史账本');
-                    },
-                  },
-                ]}
-                valuePropName="checked"
-              >
-                <Checkbox>
-                  我确认历史库存流水继续保留在源商品下，不要求重写历史
-                </Checkbox>
-              </Form.Item>
-            </ProCard>
-
-            <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
-              <Button onClick={onClose}>取消</Button>
-              <Button
-                danger
-                disabled={!assessment.canExecute}
-                loading={submitting}
-                onClick={() => form.submit()}
-                type="primary"
-              >
-                创建替代商品并停用源商品
-              </Button>
             </Space>
+          </Form>
+        ) : null}
+      </Modal>
+      <Modal
+        cancelText="返回修改"
+        confirmLoading={submitting}
+        okButtonProps={{ danger: previewValues?.strategy === 'replacement' }}
+        okText={
+          previewValues?.strategy === 'in_place'
+            ? '确认原地纠正'
+            : '确认创建继任商品'
+        }
+        onCancel={() => setPreviewValues(undefined)}
+        onOk={() =>
+          previewValues ? void executeMigration(previewValues) : undefined
+        }
+        open={Boolean(previewValues)}
+        title="确认商品单位纠正计划"
+        width={900}
+      >
+        {assessment && previewValues ? (
+          <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+            <Alert
+              description={
+                previewValues.strategy === 'in_place'
+                  ? '确认后会保留原商品编码，修正单位、价格和条码；历史账本仍保持原记录。'
+                  : '确认后会创建继任商品、创建下列价格、处理条码并停用源商品；历史账本仍保留在源商品下。'
+              }
+              showIcon
+              title="请核对最终变更"
+              type="warning"
+            />
+            <ProDescriptions column={2} bordered size="small">
+              <ProDescriptions.Item label="源商品">
+                {assessment.source.itemCode}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="处理策略">
+                {previewValues.strategy === 'in_place'
+                  ? '保留原商品编码并受控纠正'
+                  : '创建继任商品并停用源商品'}
+              </ProDescriptions.Item>
+              {previewValues.strategy === 'replacement' ? (
+                <>
+                  <ProDescriptions.Item label="新商品编码">
+                    {previewValues.newItemCode?.trim() || '执行时自动生成'}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="新商品名称">
+                    {previewValues.itemName}
+                  </ProDescriptions.Item>
+                </>
+              ) : null}
+              <ProDescriptions.Item label="纠正原因" span={2}>
+                {previewValues.correctionReason}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="库存基准单位">
+                {resolveDisplayUom(String(previewValues.stockUom || ''))}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="批发默认单位">
+                {previewValues.wholesaleDefaultUom
+                  ? resolveDisplayUom(previewValues.wholesaleDefaultUom)
+                  : '-'}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="零售默认单位">
+                {previewValues.retailDefaultUom
+                  ? resolveDisplayUom(previewValues.retailDefaultUom)
+                  : '-'}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="单位换算" span={2}>
+                {(previewValues.uomConversions ?? [])
+                  .map(
+                    (row) =>
+                      `1 ${resolveDisplayUom(String(row.uom || ''))} = ${formatNumber(
+                        row.conversionFactor,
+                      )} ${resolveDisplayUom(String(previewValues.stockUom || ''))}`,
+                  )
+                  .join('；') || '-'}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="条码处理" span={2}>
+                {previewValues.barcodeMappings.length
+                  ? `${previewValues.strategy === 'in_place' ? '改绑' : '迁移'} ${previewValues.barcodeMappings.filter((row) => row.action === 'move').length} 条，保留 ${previewValues.barcodeMappings.filter((row) => row.action === 'keep').length} 条`
+                  : '源商品没有条码，无需处理'}
+              </ProDescriptions.Item>
+              <ProDescriptions.Item label="跳过旧价格" span={2}>
+                {
+                  previewValues.priceMappings.filter(
+                    (row) => row.action === 'skip',
+                  ).length
+                }{' '}
+                条
+              </ProDescriptions.Item>
+            </ProDescriptions>
+            <Table
+              columns={[
+                { dataIndex: 'priceList', title: '价格表' },
+                { dataIndex: 'currency', title: '币种' },
+                {
+                  dataIndex: 'uom',
+                  render: (value) => resolveDisplayUom(value),
+                  title: '单位',
+                },
+                {
+                  align: 'right' as const,
+                  dataIndex: 'rate',
+                  render: (value) => formatCurrencyValue(value),
+                  title: '金额',
+                },
+                { dataIndex: 'source', title: '来源' },
+              ]}
+              dataSource={previewPrices}
+              locale={{ emptyText: '本次不会创建价格' }}
+              pagination={false}
+              rowKey="key"
+              size="small"
+            />
           </Space>
-        </Form>
-      ) : null}
-    </Modal>
+        ) : null}
+      </Modal>
+    </>
   );
 }

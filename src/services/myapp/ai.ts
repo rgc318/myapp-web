@@ -1628,7 +1628,6 @@ async function prepareAiProductActionDraft(
   payload: { company: string; conversationId: string; itemCode: string },
 ): Promise<AiPreparedDraftResult> {
   const result = await runGatewayMutation<Record<string, unknown>>(method, {
-    idempotencyKey: `web-${method}-${payload.conversationId}-${payload.itemCode}-${Date.now()}`,
     notifyError: false,
     payload: {
       company: payload.company,

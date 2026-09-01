@@ -26,6 +26,7 @@ import {
   listProducts,
   listUoms,
   listWarehouses,
+  resolveActiveProduct,
   searchProducts,
   searchLinkOptions,
   setPrimaryProductBarcode,
@@ -1156,6 +1157,18 @@ describe('myapp domain services', () => {
             uom: 'Wrong UOM',
           },
         ],
+        recommended_strategy: 'replacement',
+        strategies: {
+          in_place: {
+            available: 0,
+            reason: '存在历史库存流水，不能原地纠正',
+          },
+          replacement: {
+            available: 1,
+            reason: '允许创建继任商品',
+          },
+        },
+        suggested_new_item_code: 'ITEM-NEW',
         source: {
           disabled: 0,
           item_code: 'ITEM-OLD',
@@ -1183,6 +1196,12 @@ describe('myapp domain services', () => {
     );
     expect(result.canExecute).toBe(true);
     expect(result.history.stockLedgerEntryCount).toBe(2);
+    expect(result.recommendedStrategy).toBe('replacement');
+    expect(result.strategies.inPlace).toEqual({
+      available: false,
+      reason: '存在历史库存流水，不能原地纠正',
+    });
+    expect(result.suggestedNewItemCode).toBe('ITEM-NEW');
     expect(result.prices).toEqual([
       {
         currency: 'CNY',
@@ -1223,8 +1242,21 @@ describe('myapp domain services', () => {
       itemCode: 'ITEM-OLD',
       newItemCode: 'ITEM-NEW',
       newItemName: '测试商品',
+      newPrices: [
+        {
+          currency: 'CNY',
+          priceList: 'Retail',
+          rate: 9.9,
+          targetUom: 'Nos',
+        },
+      ],
       priceMappings: [
-        { action: 'copy', sourceName: 'PRICE-1', targetUom: 'Box' },
+        {
+          action: 'manual',
+          sourceName: 'PRICE-1',
+          targetRate: 88,
+          targetUom: 'Box',
+        },
       ],
       sourceModified: '2026-08-31 12:00:00',
       stockUom: 'Nos',
@@ -1242,8 +1274,21 @@ describe('myapp domain services', () => {
         confirm_history_preserved: 1,
         item_code: 'ITEM-OLD',
         new_item_code: 'ITEM-NEW',
+        new_prices: [
+          {
+            currency: 'CNY',
+            price_list: 'Retail',
+            rate: 9.9,
+            target_uom: 'Nos',
+          },
+        ],
         price_mappings: [
-          { action: 'copy', source_name: 'PRICE-1', target_uom: 'Box' },
+          {
+            action: 'manual',
+            source_name: 'PRICE-1',
+            target_rate: 88,
+            target_uom: 'Box',
+          },
         ],
         stock_uom: 'Nos',
       }),
@@ -1251,6 +1296,96 @@ describe('myapp domain services', () => {
     );
     expect(result.data.newItem.itemCode).toBe('ITEM-NEW');
     expect(result.data.historyPreserved).toBe(true);
+  });
+
+  it('resolves a historical product reference to the current active product', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        active_disabled: 0,
+        active_item_code: 'ITEM-NEW',
+        chain: [
+          {
+            source: 'correction_record',
+            source_item: 'ITEM-OLD',
+            target_item: 'ITEM-NEW',
+          },
+        ],
+        changed: 1,
+        requested_item_code: 'ITEM-OLD',
+        requires_confirmation: 1,
+        resolution_source: 'correction_record',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await resolveActiveProduct('ITEM-OLD');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'resolve_active_product_v1',
+      { item_code: 'ITEM-OLD' },
+    );
+    expect(result).toEqual({
+      activeDisabled: false,
+      activeItemCode: 'ITEM-NEW',
+      chain: [
+        {
+          source: 'correction_record',
+          sourceItem: 'ITEM-OLD',
+          targetItem: 'ITEM-NEW',
+        },
+      ],
+      changed: true,
+      requestedItemCode: 'ITEM-OLD',
+      requiresConfirmation: true,
+      resolutionSource: 'correction_record',
+    });
+  });
+
+  it('serializes an in-place product UOM correction explicitly', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        alternative: null,
+        history_preserved: 1,
+        moved_barcodes: [],
+        new_item: {
+          item_code: 'ITEM-OLD',
+          item_name: '测试商品',
+          stock_uom: 'Nos',
+        },
+        source_disabled: 0,
+        source_item_code: 'ITEM-OLD',
+      },
+      meta: {},
+      raw: {},
+    });
+
+    await executeProductUomMigration({
+      barcodeMappings: [],
+      confirmDisableSource: false,
+      confirmHistoryPreserved: true,
+      confirmInPlaceCorrection: true,
+      correctionReason: '纠正建档单位',
+      itemCode: 'ITEM-OLD',
+      priceMappings: [],
+      sourceModified: '2026-08-31 12:00:00',
+      stockUom: 'Nos',
+      strategy: 'in_place',
+      uomConversions: [{ conversionFactor: 1, uom: 'Nos' }],
+    });
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'execute_product_uom_migration_v1',
+      expect.objectContaining({
+        confirm_disable_source: 0,
+        confirm_history_preserved: 1,
+        confirm_in_place_correction: 1,
+        correction_reason: '纠正建档单位',
+        item_code: 'ITEM-OLD',
+        strategy: 'in_place',
+      }),
+      expect.objectContaining({ method: 'POST' }),
+    );
   });
 
   it('maps inventory stock summary rows', async () => {

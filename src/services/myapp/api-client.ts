@@ -75,6 +75,10 @@ function isGatewayEnvelope(value: unknown): value is GatewayEnvelope {
   );
 }
 
+function encodeHeaderValue(value: string) {
+  return /^[\x21-\x7e]+$/.test(value) ? value : encodeURIComponent(value);
+}
+
 export async function callFrappeMethod<T = unknown>(
   methodPath: string,
   payload?: Record<string, unknown>,
@@ -82,7 +86,7 @@ export async function callFrappeMethod<T = unknown>(
 ) {
   const headers: Record<string, string> = {};
   if (options?.idempotencyKey) {
-    headers['Idempotency-Key'] = options.idempotencyKey;
+    headers['Idempotency-Key'] = encodeHeaderValue(options.idempotencyKey);
   }
 
   const response = await request<FrappeMethodResponse<T>>(

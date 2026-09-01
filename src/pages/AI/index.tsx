@@ -99,6 +99,7 @@ import {
   submitAiFeedback,
   uploadAiImageAttachment,
 } from '@/services/myapp/ai';
+import { resolveActiveProduct } from '@/services/myapp/master-data';
 import { AiAttachmentPreview } from './components/AiAttachmentPreview';
 import { AiDraftEditorModal } from './components/AiDraftEditorModal';
 import { AiDraftVersionList } from './components/AiDraftReview';
@@ -134,6 +135,19 @@ type ChatRow = AiMessageRow & {
   modelSelection?: 'auto' | 'fixed';
   requestedModelDisplay?: string | null;
 };
+
+function confirmProductSuccessor(sourceItem: string, activeItem: string) {
+  return new Promise<boolean>((resolve) => {
+    Modal.confirm({
+      cancelText: '保留历史内容',
+      content: `历史消息引用的商品 ${sourceItem} 已停用，当前有效商品为 ${activeItem}。确认后将重新读取有效商品资料生成草稿。`,
+      okText: '使用当前有效商品',
+      onCancel: () => resolve(false),
+      onOk: () => resolve(true),
+      title: '商品已被替代',
+    });
+  });
+}
 
 const AI_MESSAGE_PAGE_SIZE = 40;
 const AI_MODEL_CONTEXT_MESSAGE_LIMIT = 20;
@@ -1047,17 +1061,33 @@ export default function AiPage() {
     }
     productActionInFlightRef.current = true;
     try {
+      const resolution = await resolveActiveProduct(context.itemCode);
+      if (resolution.activeDisabled) {
+        message.warning('该商品已停用，且没有可用的继任商品。');
+        return;
+      }
+      if (
+        resolution.changed &&
+        resolution.requiresConfirmation &&
+        !(await confirmProductSuccessor(
+          resolution.requestedItemCode,
+          resolution.activeItemCode,
+        ))
+      ) {
+        return;
+      }
+      const activeItemCode = resolution.activeItemCode;
       const result =
         action === 'product_update'
           ? await prepareAiProductUpdateDraft({
               company: context.company,
               conversationId: context.conversationId,
-              itemCode: context.itemCode,
+              itemCode: activeItemCode,
             })
           : await prepareAiInventoryAdjustmentDraft({
               company: context.company,
               conversationId: context.conversationId,
-              itemCode: context.itemCode,
+              itemCode: activeItemCode,
             });
       appendPreparedDraftMessages(result);
       setEditingDraftId(result.draft.name);

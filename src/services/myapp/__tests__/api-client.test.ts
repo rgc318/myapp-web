@@ -45,6 +45,34 @@ describe('myapp api client', () => {
     );
   });
 
+  it('encodes non-ASCII idempotency keys before assigning request headers', async () => {
+    mockedRequest.mockResolvedValueOnce({
+      message: {
+        code: 'OK',
+        data: { value: 1 },
+        ok: true,
+        status: 'success',
+      },
+    } as never);
+
+    await callGatewayMethod(
+      'demo_method',
+      { item_code: '可口可乐-5000ML' },
+      { idempotencyKey: 'web-可口可乐-5000ML' },
+    );
+
+    expect(mockedRequest).toHaveBeenCalledWith(
+      '/api/method/myapp.api.gateway.demo_method',
+      expect.objectContaining({
+        data: { item_code: '可口可乐-5000ML' },
+        headers: {
+          'Idempotency-Key':
+            'web-%E5%8F%AF%E5%8F%A3%E5%8F%AF%E4%B9%90-5000ML',
+        },
+      }),
+    );
+  });
+
   it('unwraps envelopes from axios-style response data', async () => {
     mockedRequest.mockResolvedValueOnce({
       data: {

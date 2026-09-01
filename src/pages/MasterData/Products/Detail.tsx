@@ -116,6 +116,10 @@ function hasPositiveAmount(value: number | null | undefined) {
   return Number(value ?? 0) > 0;
 }
 
+function editablePositiveAmount(value: number | null | undefined) {
+  return hasPositiveAmount(value) ? Number(value) : undefined;
+}
+
 function buildProductQualityIssues(
   product: ProductSummary,
 ): ProductQualityIssue[] {
@@ -486,6 +490,11 @@ const ProductDetailPage: React.FC = () => {
     }
   }, [data, location.search]);
 
+  useEffect(() => {
+    if (!data) return;
+    barcodeForm.setFieldsValue({ barcode: '', uom: data.stockUom });
+  }, [barcodeForm, data]);
+
   const closeUomMigration = () => {
     setUomMigrationOpen(false);
     const nextQuery = new URLSearchParams(location.search);
@@ -499,6 +508,7 @@ const ProductDetailPage: React.FC = () => {
     if (!data) {
       return;
     }
+    form.resetFields();
     form.setFieldsValue({
       barcode: data.barcode,
       brand: data.brand,
@@ -509,12 +519,13 @@ const ProductDetailPage: React.FC = () => {
       itemGroup: data.itemGroup,
       itemName: data.itemName,
       retailDefaultUom: data.retailDefaultUom ?? data.stockUom,
-      standardBuyingRate: data.priceSummary?.standardBuyingRate ?? undefined,
+      standardBuyingRate: editablePositiveAmount(
+        data.priceSummary?.standardBuyingRate,
+      ),
       standardSellingRate:
-        data.priceSummary?.standardSellingRate ??
-        data.priceSummary?.currentRate ??
-        undefined,
-      retailRate: data.priceSummary?.retailRate ?? undefined,
+        editablePositiveAmount(data.priceSummary?.standardSellingRate) ??
+        editablePositiveAmount(data.priceSummary?.currentRate),
+      retailRate: editablePositiveAmount(data.priceSummary?.retailRate),
       stockUom: data.stockUom,
       uomConversions: data.uomConversions.map((entry) => ({
         conversionFactor: entry.conversionFactor,
@@ -522,7 +533,7 @@ const ProductDetailPage: React.FC = () => {
       })),
       valuationRate: data.priceSummary?.valuationRate ?? undefined,
       wholesaleDefaultUom: data.wholesaleDefaultUom ?? data.stockUom,
-      wholesaleRate: data.priceSummary?.wholesaleRate ?? undefined,
+      wholesaleRate: editablePositiveAmount(data.priceSummary?.wholesaleRate),
     });
     setEditOpen(true);
   };
@@ -533,8 +544,20 @@ const ProductDetailPage: React.FC = () => {
     }
     setSubmitting(true);
     try {
-      await updateProduct(data.itemCode, values);
+      const payload = { ...values };
+      for (const field of [
+        'standardBuyingRate',
+        'standardSellingRate',
+        'wholesaleRate',
+        'retailRate',
+      ] as const) {
+        if (!form.isFieldTouched(field)) {
+          delete payload[field];
+        }
+      }
+      await updateProduct(data.itemCode, payload);
       setEditOpen(false);
+      form.resetFields();
       refresh();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '保存失败');
@@ -571,6 +594,7 @@ const ProductDetailPage: React.FC = () => {
     try {
       await addProductBarcode(data.itemCode, barcode, { uom: values.uom });
       barcodeForm.resetFields();
+      barcodeForm.setFieldsValue({ barcode: '', uom: data.stockUom });
       refresh();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '新增条码失败');
@@ -630,7 +654,7 @@ const ProductDetailPage: React.FC = () => {
           key="uom-migration"
           onClick={() => setUomMigrationOpen(true)}
         >
-          单位错误迁移
+          单位错误纠正
         </Button>,
         data ? (
           <Popconfirm
@@ -900,7 +924,6 @@ const ProductDetailPage: React.FC = () => {
                     </Space.Compact>
                   </Form.Item>
                   <Form.Item
-                    initialValue={data.stockUom}
                     name="uom"
                     rules={[{ required: true, message: '请选择条码对应单位' }]}
                   >
