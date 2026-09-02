@@ -3,6 +3,7 @@ import { App, Modal } from 'antd';
 import React from 'react';
 import {
   getProductDetail,
+  listProductChangeHistory,
   listProductPrices,
   updateProduct,
 } from '@/services/myapp/master-data';
@@ -101,6 +102,7 @@ jest.mock('@/services/myapp/master-data', () => ({
   addProductBarcode: jest.fn(),
   deleteProductBarcode: jest.fn(),
   getProductDetail: jest.fn(),
+  listProductChangeHistory: jest.fn(),
   listProductPrices: jest.fn(),
   setPrimaryProductBarcode: jest.fn(),
   terminateProductPrice: jest.fn(),
@@ -108,6 +110,7 @@ jest.mock('@/services/myapp/master-data', () => ({
 }));
 
 const mockedGetProductDetail = jest.mocked(getProductDetail);
+const mockedListProductChangeHistory = jest.mocked(listProductChangeHistory);
 const mockedListProductPrices = jest.mocked(listProductPrices);
 const mockedUpdateProduct = jest.mocked(updateProduct);
 const mockedUmi = jest.requireMock('@umijs/max') as {
@@ -182,6 +185,13 @@ describe('ProductMaintenanceWorkspace', () => {
     jest.clearAllMocks();
     mockedUmi.__setSearch('?section=basic');
     mockedGetProductDetail.mockResolvedValue(product as never);
+    mockedListProductChangeHistory.mockResolvedValue({
+      events: [],
+      hasMore: false,
+      itemCode: 'ITEM-001',
+      limit: 100,
+      start: 0,
+    });
     mockedListProductPrices.mockResolvedValue({
       canCreate: true,
       canWrite: true,
@@ -273,5 +283,47 @@ describe('ProductMaintenanceWorkspace', () => {
       (await screen.findAllByText('放弃未保存修改？')).length,
     ).toBeGreaterThan(0);
     expect(mockedUmi.history.push).not.toHaveBeenCalled();
+  });
+
+  it('renders the governed product change timeline from the backend', async () => {
+    mockedUmi.__setSearch('?section=history');
+    mockedListProductChangeHistory.mockResolvedValue({
+      events: [
+        {
+          action: 'terminated',
+          actor: 'editor@example.com',
+          category: 'price',
+          changes: [
+            {
+              field: 'valid_upto',
+              label: '失效日期',
+              newValue: '2026-09-03',
+              oldValue: null,
+              rowAction: null,
+            },
+          ],
+          id: 'Version:VERSION-1',
+          occurredAt: '2026-09-03 10:00:00',
+          sourceDoctype: 'Item Price',
+          sourceName: 'PRICE-1',
+          summary: 'Standard Selling · 件',
+          title: '终止价格',
+        },
+      ],
+      hasMore: false,
+      itemCode: 'ITEM-001',
+      limit: 100,
+      start: 0,
+    });
+
+    renderWorkspace();
+
+    expect(await screen.findByText('正式变更审计')).toBeTruthy();
+    expect(screen.getByText('终止价格')).toBeTruthy();
+    expect(screen.getByText('Standard Selling · 件')).toBeTruthy();
+    expect(screen.getByText(/失效日期/)).toBeTruthy();
+    expect(mockedListProductChangeHistory).toHaveBeenCalledWith('ITEM-001', {
+      limit: 100,
+    });
   });
 });

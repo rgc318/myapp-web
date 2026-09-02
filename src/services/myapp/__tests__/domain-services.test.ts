@@ -23,6 +23,7 @@ import {
   deleteProductBarcode,
   executeProductUomMigration,
   getProductDetail,
+  listProductChangeHistory,
   listProductPrices,
   listProducts,
   listUoms,
@@ -1172,6 +1173,59 @@ describe('myapp domain services', () => {
     );
     expect(result.canCreate).toBe(true);
     expect(result.canWrite).toBe(true);
+  });
+
+  it('maps the governed product change timeline', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        events: [
+          {
+            action: 'terminated',
+            actor: 'editor@example.com',
+            category: 'price',
+            changes: [
+              {
+                field: 'valid_upto',
+                label: '失效日期',
+                new_value: '2026-09-03',
+                old_value: null,
+              },
+            ],
+            id: 'Version:VERSION-1',
+            occurred_at: '2026-09-03 10:00:00',
+            source_doctype: 'Item Price',
+            source_name: 'PRICE-1',
+            summary: 'Standard Selling · 件',
+            title: '终止价格',
+          },
+        ],
+        item_code: 'SKU-1',
+        pagination: { has_more: false, limit: 100, start: 0 },
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listProductChangeHistory('SKU-1');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_product_change_history_v1',
+      { item_code: 'SKU-1', limit: 100, start: 0 },
+    );
+    expect(result.events[0]).toEqual(
+      expect.objectContaining({
+        action: 'terminated',
+        category: 'price',
+        occurredAt: '2026-09-03 10:00:00',
+        title: '终止价格',
+      }),
+    );
+    expect(result.events[0].changes[0]).toEqual(
+      expect.objectContaining({
+        label: '失效日期',
+        newValue: '2026-09-03',
+      }),
+    );
   });
 
   it('maps product UOM migration assessment without guessing mappings', async () => {

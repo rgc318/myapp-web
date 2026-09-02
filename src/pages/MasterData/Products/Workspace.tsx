@@ -11,7 +11,6 @@ import {
 import {
   PageContainer,
   ProCard,
-  ProDescriptions,
   StatisticCard,
 } from '@ant-design/pro-components';
 import { history, useLocation, useParams, useRequest } from '@umijs/max';
@@ -43,8 +42,10 @@ import {
   addProductBarcode,
   deleteProductBarcode,
   getProductDetail,
+  listProductChangeHistory,
   listProductPrices,
   type ProductBarcode,
+  type ProductChangeHistoryEvent,
   type ProductPriceRecord,
   type ProductSummary,
   type SaveProductPayload,
@@ -415,6 +416,130 @@ function ProductBarcodeSection({
   );
 }
 
+const HISTORY_CATEGORY_META: Record<
+  ProductChangeHistoryEvent['category'],
+  { color: string; label: string }
+> = {
+  barcode: { color: 'cyan', label: '条码' },
+  price: { color: 'gold', label: '价格' },
+  product: { color: 'blue', label: '商品资料' },
+  uom: { color: 'purple', label: '单位治理' },
+  valuation: { color: 'orange', label: '库存估值' },
+};
+
+function formatHistoryValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '未设置';
+  if (typeof value === 'boolean') return value ? '是' : '否';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function ProductHistorySection({ product }: { product: ProductSummary }) {
+  const { data, error, loading, refresh } = useRequest(
+    () => listProductChangeHistory(product.itemCode, { limit: 100 }),
+    { formatResult: (result) => result, refreshDeps: [product.itemCode] },
+  );
+
+  return (
+    <Space orientation="vertical" size={16} style={{ width: '100%' }}>
+      <Alert
+        description="时间线聚合 Frappe 商品版本、正式 Item Price 版本和商品单位纠正审计；记录按当前商品读取权限返回，不允许前端自行拼接或改写。"
+        showIcon
+        title="正式变更审计"
+        type="info"
+      />
+      {error ? (
+        <Alert
+          action={<Button onClick={refresh}>重试</Button>}
+          showIcon
+          title={error instanceof Error ? error.message : '变更历史加载失败'}
+          type="error"
+        />
+      ) : null}
+      {data?.hasMore ? (
+        <Alert
+          showIcon
+          title="当前显示最近 100 条记录；更早记录可在后续分页中继续加载。"
+          type="warning"
+        />
+      ) : null}
+      <Table<ProductChangeHistoryEvent>
+        columns={[
+          {
+            dataIndex: 'occurredAt',
+            title: '发生时间',
+            width: 170,
+          },
+          {
+            render: (_, record) => {
+              const meta = HISTORY_CATEGORY_META[record.category];
+              return <Tag color={meta.color}>{meta.label}</Tag>;
+            },
+            title: '类型',
+            width: 110,
+          },
+          {
+            render: (_, record) => (
+              <Space orientation="vertical" size={0}>
+                <Typography.Text strong>{record.title}</Typography.Text>
+                <Typography.Text type="secondary">
+                  {record.summary || record.sourceName}
+                </Typography.Text>
+              </Space>
+            ),
+            title: '事件',
+            width: 220,
+          },
+          {
+            render: (_, record) =>
+              record.changes.length ? (
+                <Space orientation="vertical" size={2}>
+                  {record.changes.map((change) => (
+                    <Typography.Text
+                      key={`${change.field}:${change.rowAction ?? ''}:${formatHistoryValue(change.oldValue)}:${formatHistoryValue(change.newValue)}`}
+                    >
+                      {change.label || change.field}：
+                      <Typography.Text
+                        delete={change.oldValue !== null}
+                        type="secondary"
+                      >
+                        {formatHistoryValue(change.oldValue)}
+                      </Typography.Text>
+                      {' → '}
+                      {formatHistoryValue(change.newValue)}
+                    </Typography.Text>
+                  ))}
+                </Space>
+              ) : (
+                <Typography.Text type="secondary">无字段级差异</Typography.Text>
+              ),
+            title: '变更内容',
+          },
+          {
+            dataIndex: 'actor',
+            render: (value) => value || '系统',
+            title: '操作人',
+            width: 190,
+          },
+        ]}
+        dataSource={data?.events ?? []}
+        loading={loading}
+        locale={{ emptyText: '暂无可见变更记录' }}
+        pagination={false}
+        rowKey="id"
+        scroll={{ x: 1050 }}
+        size="small"
+      />
+    </Space>
+  );
+}
+
 const ProductMaintenanceWorkspace: React.FC = () => {
   const params = useParams();
   const location = useLocation();
@@ -694,36 +819,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
         label: '库存与估值',
       },
       {
-        children: (
-          <ProCard title="变更与治理记录">
-            <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-              <Alert
-                description="当前阶段保留 Frappe 文档版本、价格有效期和商品纠正审计作为正式来源。下一阶段会在这里聚合普通资料、价格、条码和单位纠正的完整时间线。"
-                showIcon
-                title="统一变更时间线建设中"
-                type="info"
-              />
-              <ProDescriptions bordered column={2}>
-                <ProDescriptions.Item label="商品编码">
-                  {data.itemCode}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="当前状态">
-                  {data.disabled ? (
-                    <Tag>停用</Tag>
-                  ) : (
-                    <Tag color="green">启用</Tag>
-                  )}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="最后修改">
-                  {data.modified || '-'}
-                </ProDescriptions.Item>
-                <ProDescriptions.Item label="价格记录">
-                  进入销售/采购价格页签查看有效期和版本
-                </ProDescriptions.Item>
-              </ProDescriptions>
-            </Space>
-          </ProCard>
-        ),
+        children: <ProductHistorySection product={data} />,
         key: 'history',
         label: '变更历史',
       },

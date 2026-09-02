@@ -294,6 +294,7 @@ Web 商品模块当前按企业级主数据维护界面建设，不只复刻移�
 - 有价格维护权限时，详情页可以新增价格、修改金额或有效期、终止旧价格。现有价格的价格表、币种和单位作为定位键锁定；定位键错误时应新增正确价格并终止旧记录，不在前端静默改写身份。终止通过设置 `valid_upto` 保留审计，不等同于物理删除。
 - 销售和采购价格在工作区使用完整价格矩阵维护，不再把四个价格摘要混入普通资料表单；新增、修改和终止均按单条 Item Price 执行并保留权限与审计边界。
 - 工作区使用 URL 页签、顶部与底部保存入口、sticky 保存状态、`beforeunload` 和离开确认保护未保存修改；价格与条码即时动作不伪装成普通资料保存。
+- 变更历史页签调用 `list_product_change_history_v1`，统一展示商品 Version、价格创建/修改/终止、条码/单位差异和商品纠正审计；页面不得根据当前值自行推测历史。
 - AI 商品快捷窗口同时展示实时单位换算、完整价目表和条码，回答时快照仍与当前实时数据分开展示。
 - 商品列表工具栏支持摄像头扫码搜索；命中停用商品时自动切换状态筛选，未命中时只提示用户确认新建并预填条码，不自动创建商品或调用外部条码数据源
 - 商品创建 / 编辑、商品详情新增条码和主条码字段均复用 `BarcodeScannerButton`；销售、采购等共享 `ProductSelect` 也支持扫码后按现有 `search_product_v2` 结果选品
@@ -312,6 +313,7 @@ Web 商品模块当前按企业级主数据维护界面建设，不只复刻移�
 - 商品详情返回的 `barcode` 是主条码兼容字段，`barcodes[]` 是完整条码列表；页面应优先用 `barcodes[]` 渲染条码管理区
 - 多价格层级通过 `selling_prices` / `buying_prices` 写入，不在页面中硬读 ERPNext 原生 `Item Price`
 - 完整价目表查询、单条价格新增/更新和终止分别使用 `list_product_prices_v1`、`upsert_product_price_v1`、`terminate_product_price_v1`；页面仍只调用 `master-data.ts` 的驼峰领域函数。
+- 商品变更时间线使用 `list_product_change_history_v1`；领域 service 映射为 `ProductChangeHistoryEvent`，页面只渲染结构化事件和差异。
 - 页面组件只使用 `master-data.ts` 返回的驼峰字段，例如 `priceSummary.wholesaleRate`、`priceSummary.retailRate`、`priceSummary.standardBuyingRate`
 - 前端不直接拼后端蛇形字段，也不在页面层维护价格表名称映射；价格表名称映射集中在 domain service 中
 

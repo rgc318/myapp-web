@@ -67,6 +67,35 @@ export type ProductPriceCollection = {
   prices: ProductPriceRecord[];
 };
 
+export type ProductChangeHistoryChange = {
+  field: string;
+  label: string;
+  newValue: unknown;
+  oldValue: unknown;
+  rowAction?: 'added' | 'removed' | null;
+};
+
+export type ProductChangeHistoryEvent = {
+  action: 'created' | 'updated' | 'terminated' | 'corrected';
+  actor: string | null;
+  category: 'product' | 'price' | 'barcode' | 'uom' | 'valuation';
+  changes: ProductChangeHistoryChange[];
+  id: string;
+  occurredAt: string;
+  sourceDoctype: string;
+  sourceName: string;
+  summary: string;
+  title: string;
+};
+
+export type ProductChangeHistory = {
+  events: ProductChangeHistoryEvent[];
+  hasMore: boolean;
+  itemCode: string;
+  limit: number;
+  start: number;
+};
+
 export type SaveProductPricePayload = {
   currency?: string | null;
   itemCode: string;
@@ -910,6 +939,51 @@ function mapProductPriceCollection(value: unknown): ProductPriceCollection {
   };
 }
 
+function mapProductChangeHistory(value: unknown): ProductChangeHistory {
+  const row = readObject(value);
+  const pagination = readObject(row.pagination);
+  const categories = new Set(['product', 'price', 'barcode', 'uom', 'valuation']);
+  const actions = new Set(['created', 'updated', 'terminated', 'corrected']);
+  return {
+    events: (Array.isArray(row.events) ? row.events : []).map((entry) => {
+      const event = readObject(entry);
+      const category = String(event.category ?? 'product');
+      const action = String(event.action ?? 'updated');
+      return {
+        action: (actions.has(action) ? action : 'updated') as ProductChangeHistoryEvent['action'],
+        actor: toOptionalText(event.actor) ?? null,
+        category: (categories.has(category)
+          ? category
+          : 'product') as ProductChangeHistoryEvent['category'],
+        changes: (Array.isArray(event.changes) ? event.changes : []).map((change) => {
+          const changeRow = readObject(change);
+          const rowAction =
+            changeRow.row_action === 'added' || changeRow.row_action === 'removed'
+              ? changeRow.row_action
+              : null;
+          return {
+            field: toOptionalText(changeRow.field) ?? '',
+            label: toOptionalText(changeRow.label) ?? '',
+            newValue: changeRow.new_value,
+            oldValue: changeRow.old_value,
+            rowAction,
+          };
+        }),
+        id: toOptionalText(event.id) ?? '',
+        occurredAt: toOptionalText(event.occurred_at) ?? '',
+        sourceDoctype: toOptionalText(event.source_doctype) ?? '',
+        sourceName: toOptionalText(event.source_name) ?? '',
+        summary: toOptionalText(event.summary) ?? '',
+        title: toOptionalText(event.title) ?? '商品变更',
+      };
+    }),
+    hasMore: Boolean(pagination.has_more),
+    itemCode: toOptionalText(row.item_code) ?? '',
+    limit: toOptionalNumber(pagination.limit) ?? 50,
+    start: toOptionalNumber(pagination.start) ?? 0,
+  };
+}
+
 function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
   if (!Array.isArray(value)) {
     return [];
@@ -1239,6 +1313,18 @@ export async function listProductPrices(itemCode: string) {
     item_code: itemCode,
   });
   return mapProductPriceCollection(result.data);
+}
+
+export async function listProductChangeHistory(
+  itemCode: string,
+  options: Pick<ListOptions, 'limit' | 'start'> = {},
+) {
+  const result = await callGatewayMethod<unknown>('list_product_change_history_v1', {
+    item_code: itemCode,
+    limit: options.limit ?? 100,
+    start: options.start ?? 0,
+  });
+  return mapProductChangeHistory(result.data);
 }
 
 export async function saveProductPrice(payload: SaveProductPricePayload) {
