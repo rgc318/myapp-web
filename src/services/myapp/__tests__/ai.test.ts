@@ -164,16 +164,8 @@ describe('AI domain service', () => {
             validation: { errors: ['尚未修改'], ready_for_handoff: false, warnings: [] },
             version: 1,
           },
-          messages: [
-            { content: '编辑商品资料：ITEM-001', name: 'AI-MSG-1', role: 'user', sequence: 3 },
-            {
-              citations: [],
-              content: '已读取当前商品资料',
-              name: 'AI-MSG-2',
-              role: 'assistant',
-              sequence: 4,
-            },
-          ],
+          messages: [],
+          outcome: 'reused',
         },
         idempotencyKey: 'REQ-PREPARE-PRODUCT',
       })
@@ -189,6 +181,7 @@ describe('AI domain service', () => {
             version: 1,
           },
           messages: [],
+          outcome: 'created',
         },
         idempotencyKey: 'REQ-PREPARE-INVENTORY',
       });
@@ -229,8 +222,10 @@ describe('AI domain service', () => {
       },
     );
     expect(product.draft.draftType).toBe('product_setup');
-    expect(product.messages[0].role).toBe('user');
+    expect(product.messages).toEqual([]);
+    expect(product.outcome).toBe('reused');
     expect(inventory.draft.draftType).toBe('inventory_adjustment');
+    expect(inventory.outcome).toBe('created');
   });
 
   it('selects a candidate on the current draft version', async () => {
@@ -246,6 +241,7 @@ describe('AI domain service', () => {
           version: 2,
         },
         messages: [],
+        outcome: 'updated',
       },
       idempotencyKey: 'REQ-SELECT-CANDIDATE',
     });
@@ -272,6 +268,7 @@ describe('AI domain service', () => {
       },
     );
     expect(result.draft.version).toBe(2);
+    expect(result.outcome).toBe('updated');
   });
 
   it('cancels a durable AI run through the mutation layer', async () => {
@@ -973,6 +970,7 @@ describe('AI domain service', () => {
             name: 'AI-MSG-1',
             sequence: 1,
             role: 'assistant',
+            message_kind: 'activity',
             content: '候选商品',
             scenario: 'product_search',
             citations: [{ type: 'product', id: 'ITEM-001', label: '测试商品' }],
@@ -1007,6 +1005,7 @@ describe('AI domain service', () => {
     });
 
     expect(result.messages[0].scenario).toBe('product_search');
+    expect(result.messages[0].messageKind).toBe('activity');
     expect(result.context?.status).toBe('active');
     expect(result.context?.stateVersion).toBe(3);
     expect(result.messages[0].citations?.[0].id).toBe('ITEM-001');

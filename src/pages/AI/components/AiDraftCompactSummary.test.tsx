@@ -55,10 +55,10 @@ describe('AiDraftCompactSummary', () => {
 
     expect(screen.getByText('迪莫（SKU-001）')).toBeTruthy();
     expect(screen.getAllByText('件').length).toBeGreaterThan(0);
-    expect(screen.getByText('标准 5.00 元')).toBeTruthy();
+    expect(screen.getByText('销售参考 5.00 元')).toBeTruthy();
     expect(screen.getByText('批发 4.00 元')).toBeTruthy();
     expect(screen.getByText('零售 6.00 元')).toBeTruthy();
-    expect(screen.getByText('成本 3.00 元')).toBeTruthy();
+    expect(screen.getByText('采购参考 3.00 元')).toBeTruthy();
     expect(screen.getByText('1000 件 · 成品仓 - RD')).toBeTruthy();
   });
 
@@ -84,7 +84,7 @@ describe('AiDraftCompactSummary', () => {
     );
 
     expect(screen.getByText('完善现有商品')).toBeTruthy();
-    expect(screen.getByText('标准 5.00 元')).toBeTruthy();
+    expect(screen.getByText('销售参考 5.00 元')).toBeTruthy();
     expect(screen.getByText('批发 3.00 元')).toBeTruthy();
     expect(screen.getByText('1000 件')).toBeTruthy();
     expect(screen.queryByText('初始库存')).toBeNull();

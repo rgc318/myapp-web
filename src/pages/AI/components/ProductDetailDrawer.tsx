@@ -1,4 +1,8 @@
-import { ExportOutlined, ReloadOutlined } from '@ant-design/icons';
+import {
+  EditOutlined,
+  ExportOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { ProCard } from '@ant-design/pro-components';
 import {
   Alert,
@@ -18,6 +22,8 @@ import { ProductImage } from '@/components/ProductImage';
 import type { AiCitation } from '@/services/myapp/ai';
 import {
   getProductDetail,
+  listProductPrices,
+  type ProductPriceCollection,
   type ProductSummary,
 } from '@/services/myapp/master-data';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
@@ -31,6 +37,8 @@ export function ProductDetailDrawer({
   onClose: () => void;
 }) {
   const [detail, setDetail] = useState<ProductSummary | null>(null);
+  const [prices, setPrices] = useState<ProductPriceCollection | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [readAt, setReadAt] = useState<string | null>(null);
@@ -42,16 +50,27 @@ export function ProductDetailDrawer({
       const requestId = ++requestSequence.current;
       if (clearDetail) setDetail(null);
       setError(null);
+      setPriceError(null);
       setLoading(true);
       try {
-        const result = await getProductDetail(citation.id, {
-          company:
-            typeof citation.data.company === 'string'
-              ? citation.data.company
-              : undefined,
-        });
+        let currentPriceError: string | null = null;
+        const [result, priceResult] = await Promise.all([
+          getProductDetail(citation.id, {
+            company:
+              typeof citation.data.company === 'string'
+                ? citation.data.company
+                : undefined,
+          }),
+          listProductPrices(citation.id).catch((caught) => {
+            currentPriceError =
+              caught instanceof Error ? caught.message : '完整价目表加载失败';
+            return null;
+          }),
+        ]);
         if (requestId !== requestSequence.current) return;
         setDetail(result);
+        setPrices(priceResult);
+        setPriceError(currentPriceError);
         setReadAt(dayjs().format('YYYY-MM-DD HH:mm:ss'));
         if (!result) setError('未能读取当前商品详情。');
       } catch (caught) {
@@ -67,7 +86,9 @@ export function ProductDetailDrawer({
   useEffect(() => {
     requestSequence.current += 1;
     setDetail(null);
+    setPrices(null);
     setError(null);
+    setPriceError(null);
     setReadAt(null);
     setLoading(false);
     if (citation?.id) void loadCurrentData(true);
@@ -95,6 +116,15 @@ export function ProductDetailDrawer({
               onClick={() => void loadCurrentData(false)}
             >
               刷新当前数据
+            </Button>
+          ) : null}
+          {citation?.id ? (
+            <Button
+              href={`/master-data/products/${encodeURIComponent(citation.id)}/edit?section=basic`}
+              icon={<EditOutlined />}
+              type="primary"
+            >
+              维护商品
             </Button>
           ) : null}
           {citation?.id ? (
@@ -252,6 +282,143 @@ export function ProductDetailDrawer({
               ]}
               size="small"
             />
+            <ProCard
+              extra={<Tag>{detail.uomConversions.length} 个单位</Tag>}
+              title="单位与包装"
+              variant="outlined"
+            >
+              <Descriptions
+                column={{ lg: 2, md: 2, sm: 1, xs: 1 }}
+                items={[
+                  {
+                    key: 'stockUom',
+                    label: '库存基准单位',
+                    children: resolveDisplayUom(
+                      detail.stockUom,
+                      detail.stockUomDisplay,
+                    ),
+                  },
+                  {
+                    key: 'wholesaleUom',
+                    label: '批发默认单位',
+                    children: resolveDisplayUom(
+                      detail.wholesaleDefaultUom,
+                      detail.wholesaleDefaultUomDisplay,
+                    ),
+                  },
+                  {
+                    key: 'retailUom',
+                    label: '零售默认单位',
+                    children: resolveDisplayUom(
+                      detail.retailDefaultUom,
+                      detail.retailDefaultUomDisplay,
+                    ),
+                  },
+                ]}
+                size="small"
+              />
+              <Table
+                columns={[
+                  {
+                    dataIndex: 'uom',
+                    title: '单位',
+                    render: (value) =>
+                      resolveDisplayUom(value, detail.allUomDisplays[value]),
+                  },
+                  {
+                    align: 'right' as const,
+                    dataIndex: 'conversionFactor',
+                    title: `换算为 ${resolveDisplayUom(detail.stockUom)}`,
+                  },
+                ]}
+                dataSource={detail.uomConversions}
+                pagination={false}
+                rowKey="uom"
+                size="small"
+              />
+            </ProCard>
+            <ProCard
+              extra={<Tag>{prices?.prices.length ?? 0} 条</Tag>}
+              title="完整价目表"
+              variant="outlined"
+            >
+              {priceError ? (
+                <Alert
+                  description="商品基础资料仍可正常查看；可刷新重试或进入商品模块维护价目表。"
+                  showIcon
+                  title={priceError}
+                  type="warning"
+                />
+              ) : null}
+              <Table
+                columns={[
+                  { dataIndex: 'priceList', title: '价格表' },
+                  {
+                    dataIndex: 'priceListType',
+                    render: (value) =>
+                      value === 'buying'
+                        ? '采购'
+                        : value === 'both'
+                          ? '销售 / 采购'
+                          : '销售',
+                    title: '类型',
+                    width: 110,
+                  },
+                  {
+                    dataIndex: 'uom',
+                    render: (value) => resolveDisplayUom(value),
+                    title: '计价单位',
+                    width: 110,
+                  },
+                  { dataIndex: 'currency', title: '币种', width: 80 },
+                  {
+                    align: 'right' as const,
+                    dataIndex: 'rate',
+                    render: (value) => formatCurrencyValue(value),
+                    title: '价格',
+                    width: 120,
+                  },
+                  { dataIndex: 'validFrom', title: '生效日期', width: 110 },
+                  { dataIndex: 'validUpto', title: '失效日期', width: 110 },
+                ]}
+                dataSource={prices?.prices ?? []}
+                locale={{
+                  emptyText: priceError ? '价目表读取失败' : '暂无价格',
+                }}
+                pagination={false}
+                rowKey="name"
+                scroll={{ x: 820 }}
+                size="small"
+              />
+            </ProCard>
+            <ProCard
+              extra={<Tag>{detail.barcodes.length} 条</Tag>}
+              title="条码"
+              variant="outlined"
+            >
+              <Table
+                columns={[
+                  { dataIndex: 'barcode', title: '条码' },
+                  {
+                    dataIndex: 'uom',
+                    render: (value) => resolveDisplayUom(value),
+                    title: '对应单位',
+                  },
+                  {
+                    dataIndex: 'isPrimary',
+                    render: (value) =>
+                      value ? <Tag color="green">主条码</Tag> : '-',
+                    title: '主条码',
+                    width: 100,
+                  },
+                ]}
+                dataSource={detail.barcodes}
+                locale={{ emptyText: '暂无条码' }}
+                pagination={false}
+                rowKey={(row) => row.name || row.barcode}
+                size="small"
+              />
+            </ProCard>
             <Table
               columns={[
                 { dataIndex: 'warehouse', key: 'warehouse', title: '仓库' },

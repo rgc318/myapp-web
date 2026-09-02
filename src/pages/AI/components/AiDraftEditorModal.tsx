@@ -60,8 +60,8 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   item_group: '商品分类',
   item_name: '商品名称',
   retail_rate: '零售价',
-  standard_buying_rate: '成本价',
-  standard_selling_rate: '标准售价',
+  standard_buying_rate: '标准采购参考价',
+  standard_selling_rate: '标准销售参考价',
   specification: '规格',
   stock_uom: '库存基准单位',
   wholesale_rate: '批发价',
@@ -369,6 +369,43 @@ export function AiDraftEditorModal({
         : adjustmentType === 'decrease'
           ? inventoryCurrentStockQty - inventoryInputStockQty
           : inventoryInputStockQty;
+  const inventoryNeedsValuationRate =
+    inventoryTargetStockQty !== null &&
+    inventoryTargetStockQty > inventoryCurrentStockQty;
+  const inventoryValuationRateSource = String(
+    inventorySourceItem.valuation_rate_source ?? '',
+  );
+  const inventoryValuationReference = objectValue(
+    inventorySourceItem.valuation_rate_reference,
+  );
+  const inventoryValuationReferenceConflict =
+    inventoryValuationReference.conflict === true;
+  const inventoryValuationConflictDetails = Array.isArray(
+    inventoryValuationReference.candidates,
+  )
+    ? inventoryValuationReference.candidates
+        .map(objectValue)
+        .map(
+          (row) =>
+            `${row.rate ?? '-'} / ${row.uom_display ?? row.uom ?? '-'} → ${row.stock_unit_rate ?? '-'} / ${(inventoryValuationReference.stock_uom_display ?? inventoryStockUomDisplay) || '-'}`,
+        )
+        .join('；')
+    : '';
+  const inventoryValuationReferenceFactor = Number(
+    inventoryValuationReference.conversion_factor ?? 1,
+  );
+  const inventoryValuationReferenceHelp =
+    inventoryValuationReferenceFactor > 0 &&
+    inventoryValuationReferenceFactor !== 1
+      ? `已将 Standard Buying 的 ${inventoryValuationReference.rate ?? '-'} / ${inventoryValuationReference.uom_display ?? inventoryValuationReference.uom ?? '-'} 按换算系数 ${inventoryValuationReferenceFactor} 折算为每${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}成本。`
+      : '已从 Standard Buying 的标准采购参考价带出。';
+  const inventoryValuationRateHelp = inventoryValuationReferenceConflict
+    ? '检测到多个标准采购参考价折算后不一致，因此没有自动填写。请确认正确的采购计价单位，或按本次库存的实际来源手工填写。'
+    : inventoryValuationRateSource === 'standard_buying_reference'
+      ? `商品当前没有有效库存估值，${inventoryValuationReferenceHelp}请按本次库存的实际来源核对；执行库存调整不会创建采购单、供应商应付或采购发票。`
+      : inventoryValuationRateSource === 'current_valuation'
+        ? `已沿用商品当前库存估值，按库存基准单位“${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}”计价。`
+        : `按库存基准单位“${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}”计价。库存调整不是采购，但增加库存必须确定新增库存资产的估值。`;
   const unresolvedProductItemGroupQuery =
     draft?.draftType === 'product_setup'
       ? unresolvedSelectionQuery(
@@ -582,6 +619,22 @@ export function AiDraftEditorModal({
 
   const confirmExecute = async () => {
     if (!draft || draft.status !== 'draft' || versionConflict) return;
+    if (
+      draft.draftType === 'inventory_adjustment' &&
+      inventoryNeedsValuationRate &&
+      Number(form.getFieldValue('valuationRate') ?? 0) <= 0
+    ) {
+      try {
+        await form.validateFields(['valuationRate']);
+      } catch {
+        form.scrollToField('valuationRate', {
+          behavior: 'smooth',
+          block: 'center',
+          focus: true,
+        });
+        return;
+      }
+    }
 
     let latestDraft: AiDraft | null = null;
     if (dirty) {
@@ -997,9 +1050,9 @@ export function AiDraftEditorModal({
                     <CurrencySelect />
                   </Form.Item>
                   <Form.Item
-                    label="标准售价（默认单价）"
+                    label="标准销售参考价"
                     name="standardSellingRate"
-                    extra="写入 Standard Selling，作为未指定销售模式时的默认销售单价。"
+                    extra="写入 Standard Selling，仅在没有匹配到更具体的客户、渠道或价格表规则时作为销售兜底参考；不等同于批发价或零售价。"
                   >
                     <InputNumber
                       min={0}
@@ -1030,12 +1083,12 @@ export function AiDraftEditorModal({
                     />
                   </Form.Item>
                   <Form.Item
-                    label="成本价（默认采购价）"
+                    label="标准采购参考价"
                     name="standardBuyingRate"
                     extra={
                       hasOpeningStock
-                        ? '用于首次入库成本，同时写入 Standard Buying 作为默认采购参考价；不会使用售价代替。'
-                        : '写入 Standard Buying，作为采购业务的默认成本参考价。'
+                        ? '写入 Standard Buying，并作为当前初始库存估值的建议来源；请按实际取得成本核对，销售价格不会参与库存计价。'
+                        : '写入 Standard Buying，作为没有供应商合同价、数量阶梯价或采购价格表时的采购兜底参考；它不是库存实时估值。'
                     }
                     required={hasOpeningStock}
                     rules={[
@@ -1048,7 +1101,7 @@ export function AiDraftEditorModal({
                               value === '')
                           ) {
                             throw new Error(
-                              '填写初始库存时，请输入成本价（默认采购价）',
+                              '填写初始库存时，请输入标准采购参考价并核对首次入库估值',
                             );
                           }
                         },
@@ -1119,7 +1172,7 @@ export function AiDraftEditorModal({
                 style={{
                   display: 'grid',
                   gap: 12,
-                  gridTemplateColumns: '1fr 1fr',
+                  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
                 }}
               >
                 <Form.Item
@@ -1176,7 +1229,10 @@ export function AiDraftEditorModal({
                         : '搜索并选择商品'
                     }
                     warehouse={selectedWarehouse}
-                    onChange={() => form.setFieldValue('uom', undefined)}
+                    onChange={() => {
+                      form.setFieldValue('uom', undefined);
+                      form.setFieldValue('valuationRate', undefined);
+                    }}
                   />
                 </Form.Item>
                 <Form.Item
@@ -1192,13 +1248,6 @@ export function AiDraftEditorModal({
                     ]}
                   />
                 </Form.Item>
-                {inventoryTargetStockQty !== null ? (
-                  <Alert
-                    showIcon
-                    type="warning"
-                    message={`换算预览：${Number(inventoryQuantity ?? 0)} ${selectedInventoryUom?.uom_display ?? inventoryUom ?? ''} = ${inventoryInputStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}；当前 ${inventoryCurrentStockQty}，执行后 ${inventoryTargetStockQty}`}
-                  />
-                ) : null}
                 <Form.Item
                   label="数量"
                   name="quantity"
@@ -1251,9 +1300,66 @@ export function AiDraftEditorModal({
                     }
                   />
                 </Form.Item>
+                {inventoryNeedsValuationRate ? (
+                  <Form.Item
+                    extra={inventoryValuationRateHelp}
+                    label="库存单位成本"
+                    name="valuationRate"
+                    required
+                    rules={[
+                      {
+                        validator: async (_, value) => {
+                          if (Number(value ?? 0) <= 0) {
+                            throw new Error(
+                              '增加库存时必须填写有效的库存单位成本',
+                            );
+                          }
+                        },
+                      },
+                    ]}
+                  >
+                    <InputNumber
+                      min={0}
+                      precision={6}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                ) : null}
+                {inventoryNeedsValuationRate &&
+                inventoryValuationReferenceConflict ? (
+                  <Alert
+                    description={inventoryValuationConflictDetails}
+                    showIcon
+                    style={{ gridColumn: '1 / -1' }}
+                    title="存在多个折算结果不一致的标准采购参考价，无法自动填写库存成本。"
+                    type="warning"
+                  />
+                ) : null}
+                {inventoryNeedsValuationRate &&
+                inventoryValuationRateSource === 'standard_buying_reference' ? (
+                  <Alert
+                    showIcon
+                    style={{ gridColumn: '1 / -1' }}
+                    title="当前数值来自标准采购参考价，仅作为本次库存估值建议，请核对后执行。"
+                    type="info"
+                  />
+                ) : null}
+                {inventoryTargetStockQty !== null ? (
+                  <Alert
+                    showIcon
+                    style={{
+                      gridColumn: '1 / -1',
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
+                    }}
+                    title={`换算预览：${Number(inventoryQuantity ?? 0)} ${selectedInventoryUom?.uom_display ?? inventoryUom ?? ''} = ${inventoryInputStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}；当前 ${inventoryCurrentStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}，执行后 ${inventoryTargetStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}`}
+                    type="warning"
+                  />
+                ) : null}
                 <Form.Item
                   label="调整原因"
                   name="reason"
+                  style={{ gridColumn: '1 / -1' }}
                   rules={[
                     {
                       message: '请填写盘点差异或业务原因',

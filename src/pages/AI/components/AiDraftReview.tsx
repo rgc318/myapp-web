@@ -197,7 +197,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'sellingRate',
-              label: '标准售价（默认单价）',
+              label: '标准销售参考价',
               children: formatCurrencyValue(
                 payload.standard_selling_rate as number | string | null,
                 typeof payload.currency === 'string' ? payload.currency : 'CNY',
@@ -240,7 +240,7 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
             },
             {
               key: 'standardBuyingRate',
-              label: '成本价（默认采购价）',
+              label: '标准采购参考价',
               children: formatCurrencyValue(
                 (payload.standard_buying_rate ?? payload.valuation_rate) as
                   | number

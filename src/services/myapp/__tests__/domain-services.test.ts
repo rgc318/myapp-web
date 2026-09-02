@@ -23,6 +23,7 @@ import {
   deleteProductBarcode,
   executeProductUomMigration,
   getProductDetail,
+  listProductPrices,
   listProducts,
   listUoms,
   listWarehouses,
@@ -1120,6 +1121,57 @@ describe('myapp domain services', () => {
       { barcode: 'BAR-001', idx: 1, isPrimary: true, name: 'ROW-1' },
       { barcode: 'BAR-002', idx: 2, isPrimary: false, name: 'ROW-2' },
     ]);
+  });
+
+  it('maps the complete unit-aware product price matrix', async () => {
+    mockedCallGatewayMethod.mockResolvedValueOnce({
+      data: {
+        item_code: 'SKU-1',
+        item_modified: '2026-09-02 10:00:00',
+        permissions: { can_create: 1, can_write: 1 },
+        price_lists: [
+          {
+            buying: 1,
+            currency: 'CNY',
+            name: 'Standard Buying',
+            selling: 0,
+          },
+        ],
+        prices: [
+          {
+            currency: 'CNY',
+            modified: '2026-09-02 10:01:00',
+            name: 'PRICE-1',
+            price_list: 'Standard Buying',
+            price_list_type: 'buying',
+            rate: 70,
+            uom: 'Box',
+            valid_from: '2026-09-01',
+            valid_upto: null,
+          },
+        ],
+      },
+      meta: {},
+      raw: {},
+    });
+
+    const result = await listProductPrices('SKU-1');
+
+    expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
+      'list_product_prices_v1',
+      { item_code: 'SKU-1' },
+    );
+    expect(result.prices[0]).toEqual(
+      expect.objectContaining({
+        name: 'PRICE-1',
+        priceList: 'Standard Buying',
+        priceListType: 'buying',
+        rate: 70,
+        uom: 'Box',
+      }),
+    );
+    expect(result.canCreate).toBe(true);
+    expect(result.canWrite).toBe(true);
   });
 
   it('maps product UOM migration assessment without guessing mappings', async () => {

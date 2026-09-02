@@ -204,6 +204,9 @@ jest.mock('./components/AiMessageContent', () => {
       onEditRequest,
       onRetry,
       onRefreshBusinessResult,
+      onAdjustProductStock,
+      onPrepareProductUpdate,
+      isProductActionPending,
       onViewDiagnostics,
       onViewRun,
       progressMessage,
@@ -221,6 +224,37 @@ jest.mock('./components/AiMessageContent', () => {
               `来源 ${citations.map((citation: any) => citation.id).join(',')}`,
             )
           : null,
+        citations
+          ?.filter((citation: any) => citation.type === 'product')
+          .map((citation: any) =>
+            React.createElement(
+              'button',
+              {
+                disabled: isProductActionPending?.('product_update', citation),
+                key: `edit-${citation.id}`,
+                onClick: () => onPrepareProductUpdate?.(citation),
+                type: 'button',
+              },
+              '编辑商品资料',
+            ),
+          ),
+        citations
+          ?.filter((citation: any) => citation.type === 'product')
+          .map((citation: any) =>
+            React.createElement(
+              'button',
+              {
+                disabled: isProductActionPending?.(
+                  'inventory_adjustment',
+                  citation,
+                ),
+                key: `stock-${citation.id}`,
+                onClick: () => onAdjustProductStock?.(citation),
+                type: 'button',
+              },
+              '调整库存',
+            ),
+          ),
         error ? React.createElement('span', null, error) : null,
         feedback ? React.createElement('span', null, `反馈 ${feedback}`) : null,
         errorCode === 'AI_REQUEST_INVALID'
@@ -333,6 +367,8 @@ jest.mock('@/services/myapp/ai', () => ({
   }),
   listAiDraftVersions: jest.fn(),
   prepareAiDraftHandoff: jest.fn(),
+  prepareAiInventoryAdjustmentDraft: jest.fn(),
+  prepareAiProductUpdateDraft: jest.fn(),
   renameAiConversation: jest.fn(),
   refreshAiBusinessResult: jest.fn(),
   resetAiConversationContext: jest.fn(),
@@ -345,6 +381,10 @@ jest.mock('@/services/myapp/ai', () => ({
   uploadAiImageAttachment: jest.fn(),
 }));
 
+jest.mock('@/services/myapp/master-data', () => ({
+  resolveActiveProduct: jest.fn(),
+}));
+
 const {
   cancelAiRun,
   generateAiInventoryAdjustmentDraft,
@@ -353,6 +393,7 @@ const {
   listAiConversations,
   listAiAgentApprovals,
   listAiSelectableModels,
+  prepareAiProductUpdateDraft,
   renameAiConversation,
   resolveAiScenario,
   refreshAiBusinessResult,
@@ -361,6 +402,9 @@ const {
   streamAiChatMessage,
   uploadAiImageAttachment,
 } = jest.requireMock('@/services/myapp/ai');
+const { resolveActiveProduct } = jest.requireMock(
+  '@/services/myapp/master-data',
+);
 
 const buildWaitingApprovalResult = () => ({
   approval: {
@@ -706,6 +750,87 @@ describe('AI workspace page', () => {
     expect(screen.getByText('search_products')).toBeTruthy();
     expect(screen.getByText('完成 · 2 项')).toBeTruthy();
     expect(screen.getByText('只读模式')).toBeTruthy();
+  });
+
+  it('single-flights repeated product draft actions and disables the button', async () => {
+    mockLocationSearch = '?conversation=AI-CONV-PRODUCT';
+    getAiConversation.mockResolvedValueOnce({
+      conversation: {
+        company: 'Demo Company',
+        creation: null,
+        lastMessageAt: null,
+        messageCount: 1,
+        modified: null,
+        name: 'AI-CONV-PRODUCT',
+        status: 'active',
+        title: '商品会话',
+      },
+      messages: [
+        {
+          citations: [
+            {
+              data: { company: 'Demo Company' },
+              href: null,
+              id: 'ITEM-001',
+              label: '测试商品',
+              type: 'product',
+            },
+          ],
+          content: '找到商品',
+          creation: null,
+          feedback: null,
+          messageKind: 'chat',
+          name: 'AI-MSG-1',
+          promptVersion: null,
+          role: 'assistant',
+          run: null,
+          runId: null,
+          scenario: 'product_search',
+          sequence: 1,
+        },
+      ],
+    });
+    let finishResolution:
+      | ((value: Record<string, unknown>) => void)
+      | undefined;
+    resolveActiveProduct.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishResolution = resolve;
+        }),
+    );
+
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    const editButton = await screen.findByRole('button', {
+      name: '编辑商品资料',
+    });
+    fireEvent.click(editButton);
+    fireEvent.click(editButton);
+
+    await waitFor(() => expect(resolveActiveProduct).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: '编辑商品资料',
+      }).disabled,
+    ).toBe(true);
+    expect(prepareAiProductUpdateDraft).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishResolution?.({
+        activeDisabled: true,
+        activeItemCode: 'ITEM-001',
+        changed: false,
+        requestedItemCode: 'ITEM-001',
+        requiresConfirmation: false,
+      });
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole<HTMLButtonElement>('button', {
+          name: '编辑商品资料',
+        }).disabled,
+      ).toBe(false),
+    );
   });
 
   it('renders the user message immediately while auto routing is pending', async () => {
@@ -1246,7 +1371,7 @@ describe('AI workspace page', () => {
     const composer = await screen.findByRole<HTMLInputElement>('textbox', {
       name: 'AI 输入',
     });
-    await screen.findByRole('button', { name: /加载更早消息/ });
+    await screen.findByRole('button', { name: /加载更早记录/ });
     const scrollBox = document.querySelector<HTMLElement>(
       '.ant-bubble-list-scroll-box',
     );
@@ -1258,7 +1383,7 @@ describe('AI workspace page', () => {
     if (scrollBox) scrollBox.scrollTop = 50;
     fireEvent.change(composer, { target: { value: '尚未发送的文本' } });
     fireEvent.click(
-      await screen.findByRole('button', { name: /加载更早消息/ }),
+      await screen.findByRole('button', { name: /加载更早记录/ }),
     );
 
     expect(await screen.findByText('较早回答')).toBeTruthy();

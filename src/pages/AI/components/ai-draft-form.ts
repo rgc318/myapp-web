@@ -40,6 +40,7 @@ export type AiDraftFormValues = {
   targetDate?: Dayjs;
   transactionDate?: Dayjs;
   uom?: string;
+  valuationRate?: number;
   warehouse?: string;
   wholesaleRate?: number;
 };
@@ -83,14 +84,15 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   reason: '调整原因',
   remarks: '备注',
   retailRate: '零售价',
-  standardBuyingRate: '成本价（默认采购价）',
-  standardSellingRate: '标准售价（默认单价）',
+  standardBuyingRate: '标准采购参考价',
+  standardSellingRate: '标准销售参考价',
   specification: '规格',
   stockUom: '库存基准单位',
   supplierRef: '供应商参考号',
   targetDate: '交货/到货日期',
   transactionDate: '单据日期',
   uom: '单位',
+  valuationRate: '库存单位成本',
   warehouse: '仓库',
   wholesaleRate: '批发价',
 };
@@ -124,6 +126,7 @@ const INVENTORY_FIELDS: (keyof AiDraftFormValues)[] = [
   'adjustmentType',
   'quantity',
   'uom',
+  'valuationRate',
   'reason',
 ];
 
@@ -296,6 +299,7 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       Array.isArray(payload.items) ? payload.items[0] : undefined,
     );
     const rawAdjustmentType = textValue(payload.adjustment_type);
+    const valuationRate = numberValue(item.valuation_rate);
     return {
       adjustmentType:
         rawAdjustmentType === 'increase' || rawAdjustmentType === 'decrease'
@@ -309,6 +313,10 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       quantity: numberValue(item.qty),
       reason: textValue(payload.reason) ?? textValue(payload.remarks),
       uom: textValue(item.uom),
+      valuationRate:
+        valuationRate !== undefined && valuationRate > 0
+          ? valuationRate
+          : undefined,
       warehouse: textValue(payload.warehouse),
     };
   }
@@ -392,7 +400,10 @@ export function getAiDraftFormFieldIssues(
       { name: 'standardSellingRate', terms: ['标准售价'] },
       { name: 'wholesaleRate', terms: ['批发价'] },
       { name: 'retailRate', terms: ['零售价'] },
-      { name: 'standardBuyingRate', terms: ['成本价', '默认采购价'] },
+      {
+        name: 'standardBuyingRate',
+        terms: ['标准采购参考价', '成本价', '默认采购价'],
+      },
     ];
     for (const mapping of mappings) {
       const error = matchingValidationError(draft, mapping.terms);
@@ -559,6 +570,13 @@ export function getAiDraftFormFieldIssues(
       name: 'reason',
     });
   }
+  const valuationError = matchingValidationError(draft, ['成本', '估值']);
+  if (valuationError) {
+    issues.push({
+      message: valuationError,
+      name: 'valuationRate',
+    });
+  }
 
   return issues;
 }
@@ -602,6 +620,17 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
     };
   }
   if (draft.draftType === 'inventory_adjustment') {
+    const originalItem = readPayloadRow(
+      Array.isArray(draft.payload.items) ? draft.payload.items[0] : undefined,
+    );
+    const originalValuationRate = numberValue(originalItem.valuation_rate);
+    const valuationRateSource =
+      values.valuationRate !== undefined &&
+      values.valuationRate === originalValuationRate
+        ? textValue(originalItem.valuation_rate_source)
+        : values.valuationRate !== undefined
+          ? 'user'
+          : undefined;
     return {
       adjustment_type: values.adjustmentType,
       company: values.company,
@@ -621,6 +650,8 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       quantity: values.quantity,
       reason: values.reason,
       uom: values.uom,
+      valuation_rate: values.valuationRate,
+      valuation_rate_source: valuationRateSource,
       warehouse: values.warehouse,
       warehouse_query: values.warehouse
         ? undefined

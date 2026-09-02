@@ -574,7 +574,9 @@ describe('AiDraftEditorModal', () => {
     expect(screen.queryByText('初始库存单位')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     expect(
-      await screen.findByText('填写初始库存时，请输入成本价（默认采购价）'),
+      await screen.findByText(
+        '填写初始库存时，请输入标准采购参考价并核对首次入库估值',
+      ),
     ).toBeTruthy();
     expect(mockedUpdate).not.toHaveBeenCalled();
   });
@@ -630,7 +632,7 @@ describe('AiDraftEditorModal', () => {
     expect(
       Number(
         screen.getByRole<HTMLInputElement>('spinbutton', {
-          name: '成本价（默认采购价）',
+          name: '标准采购参考价',
         }).value,
       ),
     ).toBe(5000);
@@ -998,10 +1000,12 @@ describe('AiDraftEditorModal', () => {
             ],
             item_code: 'ITEM-001',
             item_name: '测试饮料',
-            qty: 2,
+            current_stock_qty: 0,
+            qty: 200,
             stock_uom: 'Nos',
             stock_uom_display: '件',
             uom: 'Box',
+            valuation_rate: null,
           },
         ],
         posting_date: '2026-08-03',
@@ -1033,6 +1037,206 @@ describe('AiDraftEditorModal', () => {
     expect(screen.getByText('件')).toBeTruthy();
     expect(screen.queryByText(/纸箱/)).toBeNull();
     expect(screen.queryByText(/箱装/)).toBeNull();
+    const preview = screen.getByText(
+      '换算预览：200 箱 = 4800 件；当前 0 件，执行后 4800 件',
+    );
+    expect(
+      (preview.closest('.ant-alert') as HTMLElement).style.gridColumn,
+    ).toBe('1 / -1');
+
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    expect(
+      await screen.findByText('增加库存时必须填写有效的库存单位成本'),
+    ).toBeTruthy();
+    expect(mockedUpdate).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: '库存单位成本' }), {
+      target: { value: '2.5' },
+    });
+    mockedUpdate.mockResolvedValue({
+      ...inventoryDraft,
+      payload: {
+        ...inventoryDraft.payload,
+        items: [
+          {
+            ...inventoryDraft.payload.items[0],
+            valuation_rate: 2.5,
+          },
+        ],
+      },
+      version: 3,
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
+    await waitFor(() => {
+      expect(mockedUpdate).toHaveBeenCalledWith(
+        inventoryDraft.name,
+        2,
+        expect.objectContaining({
+          valuation_rate: 2.5,
+          valuation_rate_source: 'user',
+        }),
+      );
+    });
+  });
+
+  it('shows the provenance warning when inventory valuation is suggested from Standard Buying', async () => {
+    const inventoryDraft = {
+      ...draft,
+      draftType: 'inventory_adjustment' as const,
+      payload: {
+        adjustment_type: 'increase',
+        company: 'Demo Company',
+        items: [
+          {
+            available_uoms: [
+              { conversion_factor: 1, uom: 'Nos', uom_display: '件' },
+            ],
+            current_stock_qty: 0,
+            item_code: 'ITEM-001',
+            item_name: '测试饮料',
+            qty: 10,
+            stock_uom: 'Nos',
+            stock_uom_display: '件',
+            uom: 'Nos',
+            valuation_rate: 70 / 24,
+            valuation_rate_reference: {
+              conversion_factor: 24,
+              rate: 70,
+              stock_unit_rate: 70 / 24,
+              uom: 'Box',
+              uom_display: '箱',
+            },
+            valuation_rate_source: 'standard_buying_reference',
+          },
+        ],
+        posting_date: '2026-09-02',
+        reason: '盘点补录',
+        warehouse: 'Stores - RD',
+      },
+      title: '库存调整草稿',
+      validation: {
+        errors: [],
+        readyForHandoff: true,
+        warnings: ['标准采购参考价建议'],
+      },
+    };
+    mockedGet.mockResolvedValue(inventoryDraft);
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: inventoryDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    expect(
+      Number(
+        (
+          await screen.findByRole<HTMLInputElement>('spinbutton', {
+            name: '库存单位成本',
+          })
+        ).value,
+      ),
+    ).toBeCloseTo(70 / 24);
+    expect(
+      screen.getByText(
+        '当前数值来自标准采购参考价，仅作为本次库存估值建议，请核对后执行。',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/不会创建采购单、供应商应付或采购发票/),
+    ).toBeTruthy();
+    expect(screen.getByText(/70 \/ 箱.*换算系数 24.*每件成本/)).toBeTruthy();
+  });
+
+  it('does not auto-fill conflicting Standard Buying prices from different UOMs', async () => {
+    const inventoryDraft = {
+      ...draft,
+      draftType: 'inventory_adjustment' as const,
+      payload: {
+        adjustment_type: 'increase',
+        company: 'Demo Company',
+        items: [
+          {
+            available_uoms: [
+              { conversion_factor: 24, uom: 'Box', uom_display: '箱' },
+              { conversion_factor: 1, uom: 'Nos', uom_display: '件' },
+            ],
+            current_stock_qty: 5100,
+            item_code: 'ITEM-001',
+            item_name: '测试饮料',
+            qty: 20,
+            stock_uom: 'Nos',
+            stock_uom_display: '件',
+            uom: 'Nos',
+            valuation_rate: null,
+            valuation_rate_reference: {
+              candidates: [
+                {
+                  conversion_factor: 1,
+                  rate: 70,
+                  stock_unit_rate: 70,
+                  uom: 'Nos',
+                  uom_display: '件',
+                },
+                {
+                  conversion_factor: 24,
+                  rate: 70,
+                  stock_unit_rate: 70 / 24,
+                  uom: 'Box',
+                  uom_display: '箱',
+                },
+              ],
+              conflict: true,
+              stock_uom: 'Nos',
+              stock_uom_display: '件',
+            },
+          },
+        ],
+        posting_date: '2026-09-02',
+        reason: '盘点补录',
+        warehouse: 'Stores - RD',
+      },
+      title: '库存调整草稿',
+      validation: {
+        errors: ['库存增加会形成新的库存资产，必须填写有效的库存单位成本。'],
+        readyForHandoff: false,
+        warnings: ['标准采购参考价存在冲突'],
+      },
+    };
+    mockedGet.mockResolvedValue(inventoryDraft);
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: inventoryDraft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    expect(
+      (
+        await screen.findByRole<HTMLInputElement>('spinbutton', {
+          name: '库存单位成本',
+        })
+      ).value,
+    ).toBe('');
+    expect(
+      screen.getByText(
+        '存在多个折算结果不一致的标准采购参考价，无法自动填写库存成本。',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(/70 \/ 件 → 70 \/ 件/)).toBeTruthy();
+    expect(screen.getByText(/70 \/ 箱 → .* \/ 件/)).toBeTruthy();
   });
 
   it.each([

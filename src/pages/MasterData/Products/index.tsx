@@ -13,7 +13,7 @@ import type {
   ProFormInstance,
 } from '@ant-design/pro-components';
 import { PageContainer, ProTable } from '@ant-design/pro-components';
-import { Link } from '@umijs/max';
+import { history, Link } from '@umijs/max';
 import {
   Alert,
   Button,
@@ -732,9 +732,6 @@ const ProductsPage: React.FC = () => {
   const searchFormRef = useRef<ProFormInstance | undefined>(undefined);
   const [form] = Form.useForm<ProductFormValues>();
   const [bulkForm] = Form.useForm<ProductBulkFormValues>();
-  const [editingProduct, setEditingProduct] = useState<ProductSummary | null>(
-    null,
-  );
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [lastQuery, setLastQuery] = useState<ProductListQuery>({});
   const [modalOpen, setModalOpen] = useState(false);
@@ -759,7 +756,6 @@ const ProductsPage: React.FC = () => {
     if (!stored) return;
     try {
       const payload = JSON.parse(stored) as Record<string, unknown>;
-      setEditingProduct(null);
       setUploadedImageUrl(
         typeof payload.image === 'string' ? payload.image : undefined,
       );
@@ -860,7 +856,6 @@ const ProductsPage: React.FC = () => {
   };
 
   const openCreateModal = (barcode?: string) => {
-    setEditingProduct(null);
     setUploadedImageUrl(undefined);
     form.resetFields();
     form.setFieldsValue({
@@ -907,52 +902,13 @@ const ProductsPage: React.FC = () => {
     });
   };
 
-  const openEditModal = (record: ProductSummary) => {
-    setEditingProduct(record);
-    setUploadedImageUrl(undefined);
-    form.setFieldsValue({
-      barcode: record.barcode,
-      brand: record.brand,
-      currency: 'CNY',
-      description: record.description,
-      disabled: record.disabled,
-      itemGroup: record.itemGroup,
-      itemName: record.itemName,
-      retailDefaultUom: record.retailDefaultUom ?? record.stockUom,
-      standardBuyingRate: record.priceSummary?.standardBuyingRate ?? undefined,
-      standardSellingRate:
-        record.priceSummary?.standardSellingRate ??
-        record.priceSummary?.currentRate ??
-        undefined,
-      retailRate: record.priceSummary?.retailRate ?? undefined,
-      stockUom: record.stockUom,
-      uomConversions: record.uomConversions.map((entry) => ({
-        conversionFactor: entry.conversionFactor,
-        uom: entry.uom,
-      })),
-      valuationRate: record.priceSummary?.valuationRate ?? undefined,
-      wholesaleDefaultUom: record.wholesaleDefaultUom ?? record.stockUom,
-      wholesaleRate: record.priceSummary?.wholesaleRate ?? undefined,
-    });
-    setModalOpen(true);
-  };
-
   const handleSubmit = async (values: ProductFormValues) => {
     setSubmitting(true);
     try {
-      if (editingProduct) {
-        await updateProduct(editingProduct.itemCode, {
-          ...values,
-          ...(uploadedImageUrl !== undefined
-            ? { image: uploadedImageUrl }
-            : {}),
-        });
-      } else {
-        await createProduct({
-          ...values,
-          image: uploadedImageUrl,
-        });
-      }
+      await createProduct({
+        ...values,
+        image: uploadedImageUrl,
+      });
       setModalOpen(false);
       setUploadedImageUrl(undefined);
       reload();
@@ -1197,7 +1153,10 @@ const ProductsPage: React.FC = () => {
   };
 
   const columns = buildColumns({
-    onEdit: openEditModal,
+    onEdit: (record) =>
+      history.push(
+        `/master-data/products/${encodeURIComponent(record.itemCode)}/edit?section=basic`,
+      ),
     onToggleDisabled: handleToggleDisabled,
     togglingProduct,
   });
@@ -1471,10 +1430,11 @@ const ProductsPage: React.FC = () => {
         }}
         onOk={() => form.submit()}
         open={modalOpen}
-        title={
-          editingProduct ? `编辑商品 ${editingProduct.itemCode}` : '新增商品'
-        }
-        width={720}
+        title="新增商品"
+        styles={{
+          body: { maxHeight: 'calc(100vh - 180px)', overflowY: 'auto' },
+        }}
+        width={1180}
       >
         <Form<ProductFormValues>
           form={form}
@@ -1483,23 +1443,18 @@ const ProductsPage: React.FC = () => {
         >
           <Form.Item label="商品图片">
             <ItemImageUpload
-              itemCode={editingProduct?.itemCode}
               onChange={(fileUrl) => {
                 setUploadedImageUrl(fileUrl);
               }}
-              value={uploadedImageUrl ?? editingProduct?.imageUrl}
+              value={uploadedImageUrl}
             />
           </Form.Item>
-          {!editingProduct && (
-            <Form.Item label="商品编码" name="itemCode">
-              <Input placeholder="不填则后端自动生成" />
-            </Form.Item>
-          )}
-          {!editingProduct ? (
-            <Form.Item label="公司" name="company">
-              <RemoteLinkSelect doctype="Company" placeholder="选择公司" />
-            </Form.Item>
-          ) : null}
+          <Form.Item label="商品编码" name="itemCode">
+            <Input placeholder="不填则后端自动生成" />
+          </Form.Item>
+          <Form.Item label="公司" name="company">
+            <RemoteLinkSelect doctype="Company" placeholder="选择公司" />
+          </Form.Item>
           <Form.Item
             label="商品名称"
             name="itemName"
@@ -1535,55 +1490,48 @@ const ProductsPage: React.FC = () => {
               </Space.Compact>
             </Form.Item>
           </Space>
-          {!editingProduct ? (
-            <Space size={16} style={{ width: '100%' }}>
-              <Form.Item
-                label="初始库存数量"
-                name="warehouseStockQty"
-                style={{ minWidth: 180 }}
-              >
-                <InputNumber min={0} style={{ width: '100%' }} />
-              </Form.Item>
-              <Form.Item
-                label="初始库存单位"
-                name="warehouseStockUom"
-                style={{ minWidth: 180 }}
-              >
-                <UomSelect />
-              </Form.Item>
-              <Form.Item
-                label="入库仓库"
-                name="warehouse"
-                style={{ minWidth: 240 }}
-              >
-                <RemoteLinkSelect
-                  doctype="Warehouse"
-                  filters={{
-                    company: form.getFieldValue('company'),
-                    disabled: 0,
-                    is_group: 0,
-                  }}
-                  placeholder="有初始库存时必须选择"
-                />
-              </Form.Item>
-            </Space>
-          ) : null}
-          <ProductUomFields
-            form={form}
-            lockStockUom={Boolean(editingProduct)}
-            stockUomDisplay={editingProduct?.stockUomDisplay}
-            uomDisplays={editingProduct?.allUomDisplays}
-          />
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
-              label="标准售价（库存单位）"
+              label="初始库存数量"
+              name="warehouseStockQty"
+              style={{ minWidth: 180 }}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item
+              label="初始库存单位"
+              name="warehouseStockUom"
+              style={{ minWidth: 180 }}
+            >
+              <UomSelect />
+            </Form.Item>
+            <Form.Item
+              label="入库仓库"
+              name="warehouse"
+              style={{ minWidth: 240 }}
+            >
+              <RemoteLinkSelect
+                doctype="Warehouse"
+                filters={{
+                  company: form.getFieldValue('company'),
+                  disabled: 0,
+                  is_group: 0,
+                }}
+                placeholder="有初始库存时必须选择"
+              />
+            </Form.Item>
+          </Space>
+          <ProductUomFields form={form} />
+          <Space size={16} style={{ width: '100%' }}>
+            <Form.Item
+              label="标准销售参考价（库存单位）"
               name="standardSellingRate"
               style={{ minWidth: 160 }}
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
             <Form.Item
-              label="标准采购价（库存单位）"
+              label="标准采购参考价（库存单位）"
               name="standardBuyingRate"
               style={{ minWidth: 160 }}
             >
@@ -1606,7 +1554,7 @@ const ProductsPage: React.FC = () => {
           </Space>
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
-              label="估值价"
+              label="库存估值成本"
               name="valuationRate"
               style={{ minWidth: 160 }}
             >

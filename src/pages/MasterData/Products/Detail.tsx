@@ -1,4 +1,10 @@
-import { DeleteOutlined, PlusOutlined, StarOutlined } from '@ant-design/icons';
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PlusOutlined,
+  StarOutlined,
+  StopOutlined,
+} from '@ant-design/icons';
 import {
   PageContainer,
   ProCard,
@@ -14,24 +20,17 @@ import {
   Empty,
   Form,
   Input,
-  InputNumber,
-  Modal,
   message,
   Popconfirm,
   Select,
   Skeleton,
   Space,
-  Switch,
   Table,
   Tag,
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
-import { CurrencySelect } from '@/components/CurrencySelect';
-import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductImage } from '@/components/ProductImage';
-import { ProductUomFields } from '@/components/ProductUomFields';
-import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import {
   listStockLedgerEntries,
   type StockLedgerEntry,
@@ -40,19 +39,20 @@ import {
   addProductBarcode,
   deleteProductBarcode,
   getProductDetail,
+  listProductPrices,
   type ProductBarcode,
   type ProductPriceEntry,
+  type ProductPriceRecord,
   type ProductSummary,
   type ProductWarehouseStockDetail,
-  type SaveProductPayload,
   setPrimaryProductBarcode,
   setProductDisabled,
-  updateProduct,
+  terminateProductPrice,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
 
-type ProductFormValues = SaveProductPayload;
 type BarcodeFormValues = {
   barcode: string;
   uom: string;
@@ -114,10 +114,6 @@ function hasText(value: string | null | undefined) {
 
 function hasPositiveAmount(value: number | null | undefined) {
   return Number(value ?? 0) > 0;
-}
-
-function editablePositiveAmount(value: number | null | undefined) {
-  return hasPositiveAmount(value) ? Number(value) : undefined;
 }
 
 function buildProductQualityIssues(
@@ -319,14 +315,20 @@ const recentLedgerColumns = [
 ];
 
 function PriceEntriesTable({
+  loadingPrice,
+  onEdit,
+  onTerminate,
   rows,
   title,
 }: {
-  rows: ProductPriceEntry[];
+  loadingPrice?: string;
+  onEdit?: (record: ProductPriceRecord) => void;
+  onTerminate?: (record: ProductPriceRecord) => void;
+  rows: (ProductPriceEntry | ProductPriceRecord)[];
   title: string;
 }) {
   return (
-    <Table<ProductPriceEntry>
+    <Table<ProductPriceEntry | ProductPriceRecord>
       columns={[
         {
           dataIndex: 'priceList',
@@ -351,6 +353,62 @@ function PriceEntriesTable({
           width: 120,
           render: (value) => formatCurrencyValue(value),
         },
+        {
+          dataIndex: 'validFrom',
+          title: '生效日期',
+          width: 120,
+          render: (value) => value || '不限',
+        },
+        {
+          dataIndex: 'validUpto',
+          title: '失效日期',
+          width: 120,
+          render: (value) => value || '长期有效',
+        },
+        ...(onEdit && onTerminate
+          ? [
+              {
+                fixed: 'right' as const,
+                render: (
+                  _: unknown,
+                  record: ProductPriceEntry | ProductPriceRecord,
+                ) => {
+                  if (!('name' in record)) return null;
+                  return (
+                    <Space size={4}>
+                      <Button
+                        icon={<EditOutlined />}
+                        onClick={() => onEdit(record)}
+                        size="small"
+                        type="link"
+                      >
+                        修改
+                      </Button>
+                      <Popconfirm
+                        cancelText="取消"
+                        description="系统会把失效日期设置为今天并保留价格记录，不会物理删除。"
+                        okText="终止价格"
+                        onConfirm={() => onTerminate(record)}
+                        title="终止这条价格？"
+                      >
+                        <Button
+                          danger
+                          icon={<StopOutlined />}
+                          loading={loadingPrice === record.name}
+                          size="small"
+                          type="link"
+                        >
+                          终止
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  );
+                },
+                title: '操作',
+                width: 150,
+              },
+            ]
+          : []),
       ]}
       dataSource={rows}
       locale={{ emptyText: '暂无价格记录' }}
@@ -461,15 +519,18 @@ function BarcodeTable({
 const ProductDetailPage: React.FC = () => {
   const params = useParams();
   const location = useLocation();
-  const [form] = Form.useForm<ProductFormValues>();
   const [barcodeForm] = Form.useForm<BarcodeFormValues>();
   const query = new URLSearchParams(location.search);
   const itemCode = decodeURIComponent(String(params.itemCode ?? ''));
   const company = query.get('company') || undefined;
   const warehouse = query.get('warehouse') || undefined;
-  const [editOpen, setEditOpen] = useState(false);
   const [uomMigrationOpen, setUomMigrationOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [priceEditorOpen, setPriceEditorOpen] = useState(false);
+  const [priceEditorType, setPriceEditorType] = useState<'selling' | 'buying'>(
+    'selling',
+  );
+  const [editingPrice, setEditingPrice] = useState<ProductPriceRecord>();
+  const [terminatingPrice, setTerminatingPrice] = useState<string>();
   const [toggling, setToggling] = useState(false);
   const [barcodeSubmitting, setBarcodeSubmitting] = useState<string>();
 
@@ -480,6 +541,38 @@ const ProductDetailPage: React.FC = () => {
       refreshDeps: [itemCode, company, warehouse],
     },
   );
+
+  const {
+    data: priceCollection,
+    error: priceError,
+    loading: priceLoading,
+    refresh: refreshPrices,
+  } = useRequest(() => listProductPrices(itemCode), {
+    formatResult: (result) => result,
+    refreshDeps: [itemCode],
+  });
+
+  const openPriceEditor = (
+    type: 'selling' | 'buying',
+    record?: ProductPriceRecord,
+  ) => {
+    setPriceEditorType(type);
+    setEditingPrice(record);
+    setPriceEditorOpen(true);
+  };
+
+  const handleTerminatePrice = async (record: ProductPriceRecord) => {
+    setTerminatingPrice(record.name);
+    try {
+      await terminateProductPrice(itemCode, record);
+      refreshPrices();
+      refresh();
+    } catch (caught) {
+      message.error(caught instanceof Error ? caught.message : '终止价格失败');
+    } finally {
+      setTerminatingPrice(undefined);
+    }
+  };
 
   useEffect(() => {
     if (
@@ -505,65 +598,10 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const openEdit = () => {
-    if (!data) {
-      return;
-    }
-    form.resetFields();
-    form.setFieldsValue({
-      barcode: data.barcode,
-      brand: data.brand,
-      currency: 'CNY',
-      description: data.description,
-      disabled: data.disabled,
-      image: data.imageUrl || undefined,
-      itemGroup: data.itemGroup,
-      itemName: data.itemName,
-      retailDefaultUom: data.retailDefaultUom ?? data.stockUom,
-      standardBuyingRate: editablePositiveAmount(
-        data.priceSummary?.standardBuyingRate,
-      ),
-      standardSellingRate:
-        editablePositiveAmount(data.priceSummary?.standardSellingRate) ??
-        editablePositiveAmount(data.priceSummary?.currentRate),
-      retailRate: editablePositiveAmount(data.priceSummary?.retailRate),
-      stockUom: data.stockUom,
-      uomConversions: data.uomConversions.map((entry) => ({
-        conversionFactor: entry.conversionFactor,
-        uom: entry.uom,
-      })),
-      valuationRate: data.priceSummary?.valuationRate ?? undefined,
-      wholesaleDefaultUom: data.wholesaleDefaultUom ?? data.stockUom,
-      wholesaleRate: editablePositiveAmount(data.priceSummary?.wholesaleRate),
-    });
-    setEditOpen(true);
-  };
-
-  const handleEditSubmit = async (values: ProductFormValues) => {
-    if (!data) {
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = { ...values };
-      for (const field of [
-        'standardBuyingRate',
-        'standardSellingRate',
-        'wholesaleRate',
-        'retailRate',
-      ] as const) {
-        if (!form.isFieldTouched(field)) {
-          delete payload[field];
-        }
-      }
-      await updateProduct(data.itemCode, payload);
-      setEditOpen(false);
-      form.resetFields();
-      refresh();
-    } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '保存失败');
-    } finally {
-      setSubmitting(false);
-    }
+    if (!data) return;
+    history.push(
+      `/master-data/products/${encodeURIComponent(data.itemCode)}/edit?section=basic`,
+    );
   };
 
   const handleToggleDisabled = async () => {
@@ -958,7 +996,29 @@ const ProductDetailPage: React.FC = () => {
             </ProCard>
 
             <ProCard split="vertical">
-              <ProCard title="价格">
+              <ProCard
+                extra={
+                  <Space wrap>
+                    <Button
+                      disabled={!priceCollection?.canCreate}
+                      icon={<PlusOutlined />}
+                      onClick={() => openPriceEditor('selling')}
+                      size="small"
+                    >
+                      新增销售价格
+                    </Button>
+                    <Button
+                      disabled={!priceCollection?.canCreate}
+                      icon={<PlusOutlined />}
+                      onClick={() => openPriceEditor('buying')}
+                      size="small"
+                    >
+                      新增采购价格
+                    </Button>
+                  </Space>
+                }
+                title="价格"
+              >
                 <Space
                   orientation="vertical"
                   size={12}
@@ -971,7 +1031,7 @@ const ProductDetailPage: React.FC = () => {
                     <ProDescriptions.Item label="当前价格">
                       {formatCurrencyValue(data.priceSummary?.currentRate)}
                     </ProDescriptions.Item>
-                    <ProDescriptions.Item label="标准售价">
+                    <ProDescriptions.Item label="标准销售参考价">
                       {formatCurrencyValue(
                         data.priceSummary?.standardSellingRate,
                       )}
@@ -982,22 +1042,78 @@ const ProductDetailPage: React.FC = () => {
                     <ProDescriptions.Item label="零售价">
                       {formatCurrencyValue(data.priceSummary?.retailRate)}
                     </ProDescriptions.Item>
-                    <ProDescriptions.Item label="采购价">
+                    <ProDescriptions.Item label="标准采购参考价">
                       {formatCurrencyValue(
                         data.priceSummary?.standardBuyingRate,
                       )}
                     </ProDescriptions.Item>
-                    <ProDescriptions.Item label="估值价">
+                    <ProDescriptions.Item label="库存估值成本">
                       {formatCurrencyValue(data.priceSummary?.valuationRate)}
                     </ProDescriptions.Item>
                   </ProDescriptions>
+                  <Alert
+                    description="上方单值只是常用价格表的摘要；下方价格矩阵才是完整正式记录，同一价格表可以分别维护件价、箱价等不同单位价格。"
+                    showIcon
+                    title="价格按价格表、币种和计价单位分别维护"
+                    type="info"
+                  />
+                  {priceError ? (
+                    <Alert
+                      action={
+                        <Button onClick={refreshPrices} size="small">
+                          重试
+                        </Button>
+                      }
+                      showIcon
+                      title={
+                        priceError instanceof Error
+                          ? priceError.message
+                          : '完整价目表加载失败'
+                      }
+                      type="error"
+                    />
+                  ) : null}
                   <PriceEntriesTable
-                    rows={data.priceSummary?.sellingPrices ?? []}
-                    title="销售价格表"
+                    loadingPrice={terminatingPrice}
+                    onEdit={
+                      priceCollection?.canWrite
+                        ? (record) => openPriceEditor('selling', record)
+                        : undefined
+                    }
+                    onTerminate={
+                      priceCollection?.canWrite
+                        ? handleTerminatePrice
+                        : undefined
+                    }
+                    rows={
+                      priceCollection?.prices.filter(
+                        (row) =>
+                          row.priceListType === 'selling' ||
+                          row.priceListType === 'both',
+                      ) ?? []
+                    }
+                    title={`销售价格矩阵${priceLoading ? '（加载中）' : ''}`}
                   />
                   <PriceEntriesTable
-                    rows={data.priceSummary?.buyingPrices ?? []}
-                    title="采购价格表"
+                    loadingPrice={terminatingPrice}
+                    onEdit={
+                      priceCollection?.canWrite
+                        ? (record) => openPriceEditor('buying', record)
+                        : undefined
+                    }
+                    onTerminate={
+                      priceCollection?.canWrite
+                        ? handleTerminatePrice
+                        : undefined
+                    }
+                    rows={
+                      priceCollection?.prices.filter(
+                        (row) =>
+                          row.priceListType === 'buying' ||
+                          row.priceListType === 'both',
+                      ) ?? []
+                    }
+                    title={`采购价格矩阵${priceLoading ? '（加载中）' : ''}`}
                   />
                 </Space>
               </ProCard>
@@ -1080,114 +1196,23 @@ const ProductDetailPage: React.FC = () => {
           </>
         ) : null}
       </Space>
-      <Modal
-        confirmLoading={submitting}
-        destroyOnHidden
-        onCancel={() => setEditOpen(false)}
-        onOk={() => form.submit()}
-        open={editOpen}
-        title={data ? `编辑商品 ${data.itemCode}` : '编辑商品'}
-        width={760}
-      >
-        <Form<ProductFormValues>
-          form={form}
-          layout="vertical"
-          onFinish={handleEditSubmit}
-        >
-          <Form.Item label="商品图片" name="image">
-            <ItemImageUpload itemCode={data?.itemCode} value={data?.imageUrl} />
-          </Form.Item>
-          <Form.Item
-            label="商品名称"
-            name="itemName"
-            rules={[{ required: true, message: '请输入商品名称' }]}
-          >
-            <Input placeholder="商品名称" />
-          </Form.Item>
-          <Space size={16} style={{ width: '100%' }}>
-            <Form.Item
-              label="商品分类"
-              name="itemGroup"
-              style={{ minWidth: 220 }}
-            >
-              <RemoteLinkSelect
-                doctype="Item Group"
-                placeholder="搜索商品分类"
-              />
-            </Form.Item>
-            <Form.Item label="品牌" name="brand" style={{ minWidth: 180 }}>
-              <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
-            </Form.Item>
-            <Form.Item label="主条码" name="barcode" style={{ minWidth: 240 }}>
-              <Space.Compact block>
-                <Input placeholder="主条码" />
-                <BarcodeScannerButton
-                  buttonProps={{ title: '扫描主条码' }}
-                  label={null}
-                  onScanned={(barcode) =>
-                    form.setFieldValue('barcode', barcode)
-                  }
-                  title="扫描商品主条码"
-                />
-              </Space.Compact>
-            </Form.Item>
-          </Space>
-          <ProductUomFields
-            form={form}
-            lockStockUom
-            stockUomDisplay={data?.stockUomDisplay}
-            uomDisplays={data?.allUomDisplays}
-          />
-          <Space size={16} style={{ width: '100%' }}>
-            <Form.Item
-              label="标准售价（库存单位）"
-              name="standardSellingRate"
-              style={{ minWidth: 160 }}
-            >
-              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item
-              label="标准采购价（库存单位）"
-              name="standardBuyingRate"
-              style={{ minWidth: 160 }}
-            >
-              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item
-              label="批发价（批发默认单位）"
-              name="wholesaleRate"
-              style={{ minWidth: 160 }}
-            >
-              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item
-              label="零售价（零售默认单位）"
-              name="retailRate"
-              style={{ minWidth: 160 }}
-            >
-              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-            </Form.Item>
-          </Space>
-          <Space size={16} style={{ width: '100%' }}>
-            <Form.Item
-              label="估值价"
-              name="valuationRate"
-              style={{ minWidth: 160 }}
-            >
-              <InputNumber min={0} precision={2} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="币种" name="currency" style={{ minWidth: 120 }}>
-              <CurrencySelect />
-            </Form.Item>
-          </Space>
-          <Form.Item label="描述" name="description">
-            <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} />
-          </Form.Item>
-          <Form.Item label="停用" name="disabled" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Form>
-      </Modal>
+      {data ? (
+        <ProductPriceEditorModal
+          collection={priceCollection}
+          defaultType={priceEditorType}
+          editingPrice={editingPrice}
+          onClose={() => {
+            setPriceEditorOpen(false);
+            setEditingPrice(undefined);
+          }}
+          onSaved={() => {
+            refreshPrices();
+            refresh();
+          }}
+          open={priceEditorOpen}
+          product={data}
+        />
+      ) : null}
       <ProductUomMigrationModal
         itemCode={data?.itemCode || itemCode}
         onClose={closeUomMigration}

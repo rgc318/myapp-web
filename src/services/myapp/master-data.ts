@@ -43,6 +43,43 @@ export type ProductPriceEntry = {
   uom?: string | null;
 };
 
+export type ProductPriceRecord = ProductPriceEntry & {
+  modified: string | null;
+  name: string;
+  priceListType: 'selling' | 'buying' | 'both';
+  validFrom: string | null;
+  validUpto: string | null;
+};
+
+export type ProductPriceListOption = {
+  buying: boolean;
+  currency: string | null;
+  name: string;
+  selling: boolean;
+};
+
+export type ProductPriceCollection = {
+  canCreate: boolean;
+  canWrite: boolean;
+  itemCode: string;
+  itemModified: string | null;
+  priceLists: ProductPriceListOption[];
+  prices: ProductPriceRecord[];
+};
+
+export type SaveProductPricePayload = {
+  currency?: string | null;
+  itemCode: string;
+  itemModified?: string | null;
+  priceList: string;
+  priceModified?: string | null;
+  priceName?: string | null;
+  rate: number;
+  uom: string;
+  validFrom?: string | null;
+  validUpto?: string | null;
+};
+
 export type ProductBarcode = {
   barcode: string;
   idx: number;
@@ -824,6 +861,55 @@ function mapPriceEntries(value: unknown): ProductPriceEntry[] {
     .filter((entry): entry is ProductPriceEntry => Boolean(entry));
 }
 
+function mapProductPriceRecord(value: unknown): ProductPriceRecord | null {
+  const row = readObject(value);
+  const name = toOptionalText(row.name);
+  const priceList = toOptionalText(row.price_list);
+  if (!name || !priceList) return null;
+  const priceListType =
+    row.price_list_type === 'buying' || row.price_list_type === 'both'
+      ? row.price_list_type
+      : 'selling';
+  return {
+    currency: toOptionalText(row.currency) ?? '',
+    modified: toOptionalText(row.modified) ?? null,
+    name,
+    priceList,
+    priceListType,
+    rate: toOptionalNumber(row.rate ?? row.price_list_rate),
+    uom: toOptionalText(row.uom),
+    validFrom: toOptionalText(row.valid_from) ?? null,
+    validUpto: toOptionalText(row.valid_upto) ?? null,
+  };
+}
+
+function mapProductPriceCollection(value: unknown): ProductPriceCollection {
+  const row = readObject(value);
+  const permissions = readObject(row.permissions);
+  return {
+    canCreate: Boolean(permissions.can_create),
+    canWrite: Boolean(permissions.can_write),
+    itemCode: toOptionalText(row.item_code) ?? '',
+    itemModified: toOptionalText(row.item_modified) ?? null,
+    priceLists: (Array.isArray(row.price_lists) ? row.price_lists : [])
+      .map((entry): ProductPriceListOption | null => {
+        const priceList = readObject(entry);
+        const name = toOptionalText(priceList.name);
+        if (!name) return null;
+        return {
+          buying: Boolean(Number(priceList.buying ?? 0)),
+          currency: toOptionalText(priceList.currency) ?? null,
+          name,
+          selling: Boolean(Number(priceList.selling ?? 0)),
+        };
+      })
+      .filter((entry): entry is ProductPriceListOption => Boolean(entry)),
+    prices: (Array.isArray(row.prices) ? row.prices : [])
+      .map(mapProductPriceRecord)
+      .filter((entry): entry is ProductPriceRecord => Boolean(entry)),
+  };
+}
+
 function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
   if (!Array.isArray(value)) {
     return [];
@@ -1146,6 +1232,54 @@ export async function getProductDetail(
     }),
   );
   return result.data ? mapProduct(readObject(result.data)) : null;
+}
+
+export async function listProductPrices(itemCode: string) {
+  const result = await callGatewayMethod<unknown>('list_product_prices_v1', {
+    item_code: itemCode,
+  });
+  return mapProductPriceCollection(result.data);
+}
+
+export async function saveProductPrice(payload: SaveProductPricePayload) {
+  return runGatewayMutation<ProductPriceRecord>('upsert_product_price_v1', {
+    payload: definedPayload({
+      currency: toOptionalText(payload.currency),
+      item_code: payload.itemCode,
+      item_modified: toOptionalText(payload.itemModified),
+      price_list: payload.priceList,
+      price_modified: toOptionalText(payload.priceModified),
+      price_name: toOptionalText(payload.priceName),
+      rate: payload.rate,
+      uom: payload.uom,
+      valid_from: toOptionalText(payload.validFrom),
+      valid_upto: toOptionalText(payload.validUpto),
+    }),
+    successMessage: payload.priceName ? '价格已更新' : '价格已新增',
+    transform: (raw) =>
+      mapProductPriceRecord(raw) as ProductPriceRecord,
+  });
+}
+
+export async function terminateProductPrice(
+  itemCode: string,
+  price: Pick<ProductPriceRecord, 'modified' | 'name'>,
+  validUpto?: string | null,
+) {
+  return runGatewayMutation<ProductPriceRecord>(
+    'terminate_product_price_v1',
+    {
+      payload: definedPayload({
+        item_code: itemCode,
+        price_modified: toOptionalText(price.modified),
+        price_name: price.name,
+        valid_upto: toOptionalText(validUpto),
+      }),
+      successMessage: '价格已终止',
+      transform: (raw) =>
+        mapProductPriceRecord(raw) as ProductPriceRecord,
+    },
+  );
 }
 
 export async function assessProductUomMigration(itemCode: string) {

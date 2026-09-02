@@ -337,6 +337,12 @@ export default [
         component: './MasterData/Products',
       },
       {
+        path: '/master-data/products/:itemCode/edit',
+        access: 'canViewProducts',
+        hideInMenu: true,
+        component: './MasterData/Products/Workspace',
+      },
+      {
         path: '/master-data/products/:itemCode',
         access: 'canViewProducts',
         component: './MasterData/Products/Detail',

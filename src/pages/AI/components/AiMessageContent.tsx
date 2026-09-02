@@ -41,6 +41,7 @@ const REPORT_METRIC_LABELS: Record<string, string> = {
 };
 
 type Props = {
+  activity?: boolean;
   content: string;
   citations?: AiCitation[];
   error?: string | null;
@@ -59,6 +60,11 @@ type Props = {
   onOpenProduct: (citation: AiCitation) => void;
   onAdjustProductStock: (citation: AiCitation) => void;
   onPrepareProductUpdate: (citation: AiCitation) => void;
+  isProductActionPending?: (
+    action: 'product_update' | 'inventory_adjustment',
+    citation: AiCitation,
+  ) => boolean;
+  candidateSelectionPending?: (draftId: string) => boolean;
   onSelectDraftProductCandidate: (
     citation: AiCitation,
     candidate: { itemCode: string; itemName: string },
@@ -130,6 +136,8 @@ function CitationCard({
   onAdjustProductStock,
   onPrepareProductUpdate,
   onSelectDraftProductCandidate,
+  isProductActionPending,
+  candidateSelectionPending,
 }: Pick<
   Props,
   | 'onDiscardDraft'
@@ -140,6 +148,8 @@ function CitationCard({
   | 'onAdjustProductStock'
   | 'onPrepareProductUpdate'
   | 'onSelectDraftProductCandidate'
+  | 'isProductActionPending'
+  | 'candidateSelectionPending'
 > & { citation: AiCitation }) {
   const draft = resolveAiDraftCitation(citation);
   const inventoryProductCandidates = draft
@@ -166,12 +176,25 @@ function CitationCard({
         citation.type === 'product' ? (
           <Space size={4}>
             <Button
+              disabled={isProductActionPending?.('product_update', citation)}
+              loading={isProductActionPending?.('product_update', citation)}
               onClick={() => onPrepareProductUpdate(citation)}
               size="small"
             >
               编辑商品资料
             </Button>
-            <Button onClick={() => onAdjustProductStock(citation)} size="small">
+            <Button
+              disabled={isProductActionPending?.(
+                'inventory_adjustment',
+                citation,
+              )}
+              loading={isProductActionPending?.(
+                'inventory_adjustment',
+                citation,
+              )}
+              onClick={() => onAdjustProductStock(citation)}
+              size="small"
+            >
               调整库存
             </Button>
             <Button
@@ -259,9 +282,11 @@ function CitationCard({
                 ? '已执行'
                 : draft?.status === 'discarded'
                   ? '已放弃'
-                  : draft?.status === 'handed_off'
-                    ? '已进入业务编辑器'
-                    : '待复核'}
+                  : draft?.status === 'superseded'
+                    ? '已被替代'
+                    : draft?.status === 'handed_off'
+                      ? '已进入业务编辑器'
+                      : '待复核'}
             </Tag>
           </Space>
           {draft ? <AiDraftCompactSummary draft={draft} /> : null}
@@ -271,7 +296,13 @@ function CitationCard({
               <Space size={[8, 8]} wrap>
                 {inventoryProductCandidates.map((candidate) => (
                   <Button
+                    disabled={candidateSelectionPending?.(
+                      String(citation.id ?? ''),
+                    )}
                     key={candidate.itemCode}
+                    loading={candidateSelectionPending?.(
+                      String(citation.id ?? ''),
+                    )}
                     onClick={() =>
                       onSelectDraftProductCandidate(citation, candidate)
                     }
@@ -286,11 +317,13 @@ function CitationCard({
           <Typography.Text>
             {draft?.status === 'executed'
               ? `已创建正式业务对象 ${targetName || '-'}。`
-              : validation?.readyForHandoff
-                ? draft?.draftType === 'inventory_adjustment'
-                  ? '草稿已通过实时库存校验，可由当前用户确认执行。'
-                  : '草稿已通过后端校验，可由当前用户确认执行。'
-                : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
+              : draft?.status === 'superseded'
+                ? '该重复草稿已被更新的活动草稿替代，仅保留为审计记录。'
+                : validation?.readyForHandoff
+                  ? draft?.draftType === 'inventory_adjustment'
+                    ? '草稿已通过实时库存校验，可由当前用户确认执行。'
+                    : '草稿已通过后端校验，可由当前用户确认执行。'
+                  : '草稿仍有业务对象、商品、数量、单位、仓库或原因需要人工确认。'}
           </Typography.Text>
           {draft?.modified ? (
             <Typography.Text type="secondary">
@@ -368,6 +401,7 @@ function CitationCard({
 }
 
 export function AiMessageContent({
+  activity = false,
   content,
   citations = [],
   error,
@@ -386,6 +420,8 @@ export function AiMessageContent({
   onOpenProduct,
   onAdjustProductStock,
   onPrepareProductUpdate,
+  isProductActionPending,
+  candidateSelectionPending,
   onSelectDraftProductCandidate,
   onRefreshBusinessResult,
   onRetry,
@@ -412,6 +448,11 @@ export function AiMessageContent({
 
   return (
     <div className={styles.messageBody}>
+      {activity ? (
+        <Tag bordered={false} color="default">
+          历史业务操作
+        </Tag>
+      ) : null}
       {businessResultSet ? (
         <BusinessResultPanel
           onOpenDocument={onOpenBusinessDocument}
@@ -515,6 +556,8 @@ export function AiMessageContent({
               onAdjustProductStock={onAdjustProductStock}
               onPrepareProductUpdate={onPrepareProductUpdate}
               onSelectDraftProductCandidate={onSelectDraftProductCandidate}
+              isProductActionPending={isProductActionPending}
+              candidateSelectionPending={candidateSelectionPending}
             />
           ))}
         </div>

@@ -128,7 +128,7 @@ describe('AiMessageContent', () => {
       expect.objectContaining({ id: 'AI-DRAFT-1' }),
     );
     expect(screen.getByText('迪莫')).toBeTruthy();
-    expect(screen.getByText('标准 5.00 元')).toBeTruthy();
+    expect(screen.getByText('销售参考 5.00 元')).toBeTruthy();
     expect(screen.getByText(/最近校验：2026-07-24 10:10:00/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: '确认执行' })).toBeNull();
   });
@@ -166,6 +166,78 @@ describe('AiMessageContent', () => {
     expect(onPrepareProductUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'ITEM-001', type: 'product' }),
     );
+  });
+
+  it('disables repeated product actions while the same action is pending', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [
+          {
+            data: { company: 'Demo Company', price: 88, qty: 4 },
+            href: null,
+            id: 'ITEM-001',
+            label: '测试商品',
+            type: 'product',
+          },
+        ],
+        content: '找到商品',
+        isProductActionPending: (action: string) => action === 'product_update',
+      }),
+    );
+
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: /编辑商品资料/,
+      }).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', { name: '调整库存' })
+        .disabled,
+    ).toBe(false);
+  });
+
+  it('marks legacy deterministic messages as business activity', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        activity: true,
+        content: '编辑商品资料：ITEM-001',
+      }),
+    );
+
+    expect(screen.getByText('历史业务操作')).toBeTruthy();
+  });
+
+  it('renders superseded duplicate drafts as read-only audit records', () => {
+    render(
+      React.createElement(AiMessageContent, {
+        ...baseProps,
+        citations: [
+          {
+            data: {
+              draft_type: 'product_setup',
+              status: 'superseded',
+              validation: {
+                errors: [],
+                ready_for_handoff: true,
+                warnings: [],
+              },
+              version: 1,
+            },
+            href: null,
+            id: 'AI-DRAFT-OLD',
+            label: '重复草稿',
+            type: 'ai_draft',
+          },
+        ],
+        content: '历史草稿',
+      }),
+    );
+
+    expect(screen.getByText('已被替代')).toBeTruthy();
+    expect(screen.getByText(/仅保留为审计记录/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: '完善草稿' })).toBeNull();
   });
 
   it('delegates a no-model refresh for this result set', () => {

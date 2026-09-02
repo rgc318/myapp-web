@@ -89,7 +89,7 @@ describe('ProductUomMigrationModal', () => {
     mockedExecute.mockReset();
   });
 
-  it('shows the assessment and requires manual price mapping', async () => {
+  it('preloads the current configuration and uses explicit price actions', async () => {
     mockedAssess.mockResolvedValue(assessment());
 
     render(
@@ -106,11 +106,14 @@ describe('ProductUomMigrationModal', () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText('历史流水保持不变')).toBeTruthy();
     expect(screen.getByText('新商品单位配置区')).toBeTruthy();
-    expect(screen.getByText('添加新价格')).toBeTruthy();
+    expect(screen.getByText('从当前配置开始纠正')).toBeTruthy();
+    expect(screen.getByText('当前单位配置')).toBeTruthy();
+    expect(screen.getByText('＋ 新增价格行')).toBeTruthy();
+    expect(screen.getByText(/是否迁移仍需逐条选择/)).toBeTruthy();
+    expect(screen.getByText('必须选择')).toBeTruthy();
     expect(
       (screen.getByLabelText('新商品编码（建议值）') as HTMLInputElement).value,
     ).toBe('ITEM-NEW');
-    expect(screen.getByText('必须选择')).toBeTruthy();
     expect(
       screen
         .getByRole('button', { name: '预览并确认纠正' })

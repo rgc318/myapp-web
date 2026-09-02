@@ -55,6 +55,68 @@ describe('AI draft conflict form helpers', () => {
     );
   });
 
+  it('round-trips inventory valuation cost and maps cost validation to its field', () => {
+    const draft = {
+      company: 'Demo Company',
+      draftType: 'inventory_adjustment',
+      payload: {
+        adjustment_type: 'increase',
+        company: 'Demo Company',
+        items: [
+          {
+            current_stock_qty: 0,
+            item_code: 'ITEM-001',
+            qty: 200,
+            stock_uom: 'Nos',
+            target_stock_qty: 4800,
+            uom: 'Box',
+            valuation_rate: 2.5,
+            valuation_rate_source: 'standard_buying_reference',
+          },
+        ],
+        posting_date: '2026-09-01',
+        reason: '盘点补录',
+        warehouse: 'Stores - RD',
+      },
+      validation: {
+        errors: [],
+        readyForHandoff: true,
+        warnings: [],
+      },
+    } as unknown as AiDraft;
+
+    const values = getAiDraftFormValues(draft);
+    expect(values.valuationRate).toBe(2.5);
+    expect(buildAiDraftPayload(draft, values)).toEqual(
+      expect.objectContaining({
+        valuation_rate: 2.5,
+        valuation_rate_source: 'standard_buying_reference',
+      }),
+    );
+
+    const invalidDraft = {
+      ...draft,
+      payload: {
+        ...draft.payload,
+        items: [
+          {
+            ...((draft.payload.items as Record<string, unknown>[])[0] ?? {}),
+            valuation_rate: null,
+          },
+        ],
+      },
+      validation: {
+        errors: ['库存增加会形成新的库存资产，必须填写有效的库存单位成本。'],
+        readyForHandoff: false,
+        warnings: [],
+      },
+    } as unknown as AiDraft;
+    expect(getAiDraftFormFieldIssues(invalidDraft)).toContainEqual({
+      message: '库存增加会形成新的库存资产，必须填写有效的库存单位成本。',
+      name: 'valuationRate',
+    });
+  });
+
   it('keeps unresolved product master-data queries separate from selected values', () => {
     const draft = {
       company: 'Demo Company',

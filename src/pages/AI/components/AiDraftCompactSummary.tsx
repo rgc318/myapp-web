@@ -159,7 +159,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
       value: (
         <Space size={[12, 0]} wrap>
           <span>
-            标准{' '}
+            销售参考{' '}
             {formatCurrencyValue(
               currencyValue(payload.standard_selling_rate),
               currency,
@@ -177,7 +177,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
             {formatCurrencyValue(currencyValue(payload.retail_rate), currency)}
           </span>
           <span>
-            成本{' '}
+            采购参考{' '}
             {formatCurrencyValue(
               currencyValue(
                 payload.standard_buying_rate ?? payload.valuation_rate,

@@ -107,6 +107,7 @@ export type AiPreparedDraftResult = {
   conversationId: string;
   draft: AiDraft;
   messages: AiPreparedDraftMessage[];
+  outcome: 'created' | 'reused' | 'updated';
 };
 
 export class AiDraftVersionConflictError extends Error {
@@ -356,6 +357,7 @@ export type AiConversationMessage = AiChatMessage & {
   run: AiRunSummary | null;
   feedback: AiPersistedFeedback | null;
   creation: string | null;
+  messageKind: 'chat' | 'activity';
 };
 
 export type AiConversationMessagePagination = {
@@ -1064,6 +1066,7 @@ function mapConversationMessage(value: unknown): AiConversationMessage {
     name: String(row.name ?? ''),
     sequence: toNumber(row.sequence),
     role: row.role === 'assistant' ? 'assistant' : 'user',
+    messageKind: row.message_kind === 'activity' ? 'activity' : 'chat',
     content: String(row.content ?? ''),
     attachments: Array.isArray(row.attachments)
       ? row.attachments.map(mapAiAttachment)
@@ -1618,6 +1621,12 @@ function mapPreparedDraftResult(value: unknown): AiPreparedDraftResult {
     messages: Array.isArray(data.messages)
       ? data.messages.map(mapPreparedDraftMessage)
       : [],
+    outcome:
+      data.outcome === 'reused'
+        ? 'reused'
+        : data.outcome === 'updated'
+          ? 'updated'
+          : 'created',
   };
 }
 
@@ -1625,9 +1634,17 @@ async function prepareAiProductActionDraft(
   method:
     | 'prepare_ai_product_update_draft_v1'
     | 'prepare_ai_inventory_adjustment_draft_v1',
-  payload: { company: string; conversationId: string; itemCode: string },
+  payload: {
+    company: string;
+    conversationId: string;
+    idempotencyKey?: string;
+    itemCode: string;
+  },
 ): Promise<AiPreparedDraftResult> {
   const result = await runGatewayMutation<Record<string, unknown>>(method, {
+    ...(payload.idempotencyKey
+      ? { idempotencyKey: payload.idempotencyKey }
+      : {}),
     notifyError: false,
     payload: {
       company: payload.company,
@@ -1641,6 +1658,7 @@ async function prepareAiProductActionDraft(
 export async function prepareAiProductUpdateDraft(payload: {
   company: string;
   conversationId: string;
+  idempotencyKey?: string;
   itemCode: string;
 }): Promise<AiPreparedDraftResult> {
   return prepareAiProductActionDraft(
@@ -1652,6 +1670,7 @@ export async function prepareAiProductUpdateDraft(payload: {
 export async function prepareAiInventoryAdjustmentDraft(payload: {
   company: string;
   conversationId: string;
+  idempotencyKey?: string;
   itemCode: string;
 }): Promise<AiPreparedDraftResult> {
   return prepareAiProductActionDraft(

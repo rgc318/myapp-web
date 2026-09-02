@@ -64,7 +64,6 @@ import {
   type AiConversationMessage,
   type AiConversationMessagePagination,
   type AiDraft,
-  type AiPreparedDraftResult,
   type AiRunSummary,
   type AiScenario,
   type AiSelectableModel,
@@ -134,6 +133,7 @@ type ChatRow = AiMessageRow & {
   modelAlias?: string | null;
   modelSelection?: 'auto' | 'fixed';
   requestedModelDisplay?: string | null;
+  messageKind?: 'chat' | 'activity';
 };
 
 function confirmProductSuccessor(sourceItem: string, activeItem: string) {
@@ -281,6 +281,7 @@ function mapConversationMessages(items: AiConversationMessage[]): ChatRow[] {
   return items.map((item) => ({
     id: item.name,
     role: item.role,
+    messageKind: item.messageKind,
     content: item.content,
     attachments: item.attachments,
     citations: item.citations,
@@ -415,7 +416,18 @@ export default function AiPage() {
   );
   const streamAbortRef = useRef<AbortController | null>(null);
   const submitInFlightRef = useRef(false);
-  const productActionInFlightRef = useRef(false);
+  const productActionInFlightRef = useRef<Map<string, Promise<void>>>(
+    new Map(),
+  );
+  const candidateSelectionInFlightRef = useRef<Map<string, Promise<void>>>(
+    new Map(),
+  );
+  const [pendingProductActionKeys, setPendingProductActionKeys] = useState<
+    Set<string>
+  >(new Set());
+  const [pendingCandidateDraftIds, setPendingCandidateDraftIds] = useState<
+    Set<string>
+  >(new Set());
   const attachmentUploadQueueRef = useRef<Promise<void>>(Promise.resolve());
   const pendingAttachmentsRef = useRef<AiAttachment[]>([]);
   const pendingAttachmentsByConversationRef = useRef<
@@ -1024,142 +1036,141 @@ export default function AiPage() {
     if (targetId) void openConversation(targetId);
   }, []);
 
-  const appendPreparedDraftMessages = (result: AiPreparedDraftResult) => {
-    const preparedRows: ChatRow[] = result.messages.map((item) => ({
-      citations: item.citations,
-      content: item.content,
-      id: item.name || `${Date.now()}-${item.role}`,
-      role: item.role,
-      scenario: item.scenario,
-      sequence: item.sequence,
-    }));
-    setMessages((current) => {
-      const existingIds = new Set(current.map((item) => item.id));
-      return [
-        ...current,
-        ...preparedRows.filter((item) => !existingIds.has(item.id)),
-      ];
-    });
-  };
-
-  const prepareProductActionDraft = async (
+  const productActionKey = (
     action: 'product_update' | 'inventory_adjustment',
     context: {
       company: string | null;
       conversationId: string | null;
       itemCode: string;
     },
-  ) => {
-    if (productActionInFlightRef.current) return;
+  ) =>
+    [context.conversationId, context.company, action, context.itemCode]
+      .map((value) => String(value ?? '').trim())
+      .join('\u001f');
+
+  const prepareProductActionDraft = (
+    action: 'product_update' | 'inventory_adjustment',
+    context: {
+      company: string | null;
+      conversationId: string | null;
+      itemCode: string;
+    },
+  ): Promise<void> => {
     if (selectedConversationStatus === 'archived') {
       message.info('归档会话只读，请新建会话后再执行商品操作。');
-      return;
+      return Promise.resolve();
     }
     if (!context.company || !context.conversationId || !context.itemCode) {
       message.warning('缺少商品、公司或来源会话，无法准备业务草稿。');
-      return;
+      return Promise.resolve();
     }
-    productActionInFlightRef.current = true;
-    try {
-      const resolution = await resolveActiveProduct(context.itemCode);
-      if (resolution.activeDisabled) {
-        message.warning('该商品已停用，且没有可用的继任商品。');
-        return;
+    const targetCompany = context.company;
+    const targetConversationId = context.conversationId;
+    const targetItemCode = context.itemCode;
+    const actionKey = productActionKey(action, context);
+    const existing = productActionInFlightRef.current.get(actionKey);
+    if (existing) return existing;
+    setPendingProductActionKeys((current) => new Set(current).add(actionKey));
+    const idempotencyKey = `web-ai-product-action-${Date.now()}-${Math.random()
+      .toString(16)
+      .slice(2)}`;
+    const operation = (async () => {
+      try {
+        const resolution = await resolveActiveProduct(targetItemCode);
+        if (resolution.activeDisabled) {
+          message.warning('该商品已停用，且没有可用的继任商品。');
+          return;
+        }
+        if (
+          resolution.changed &&
+          resolution.requiresConfirmation &&
+          !(await confirmProductSuccessor(
+            resolution.requestedItemCode,
+            resolution.activeItemCode,
+          ))
+        ) {
+          return;
+        }
+        const activeItemCode = resolution.activeItemCode;
+        const result =
+          action === 'product_update'
+            ? await prepareAiProductUpdateDraft({
+                company: targetCompany,
+                conversationId: targetConversationId,
+                idempotencyKey,
+                itemCode: activeItemCode,
+              })
+            : await prepareAiInventoryAdjustmentDraft({
+                company: targetCompany,
+                conversationId: targetConversationId,
+                idempotencyKey,
+                itemCode: activeItemCode,
+              });
+        await refreshConversations();
+        if (activeConversationIdRef.current !== targetConversationId) {
+          message.info('业务草稿已准备，可从对应会话或草稿中心继续处理。');
+          return;
+        }
+        if (result.outcome === 'reused') {
+          message.info('已打开现有待处理草稿，未重复创建。');
+        }
+        setEditingDraftId(result.draft.name);
+      } catch (caught) {
+        message.error(
+          caught instanceof Error ? caught.message : '业务草稿准备失败',
+        );
+      } finally {
+        productActionInFlightRef.current.delete(actionKey);
+        setPendingProductActionKeys((current) => {
+          const next = new Set(current);
+          next.delete(actionKey);
+          return next;
+        });
       }
-      if (
-        resolution.changed &&
-        resolution.requiresConfirmation &&
-        !(await confirmProductSuccessor(
-          resolution.requestedItemCode,
-          resolution.activeItemCode,
-        ))
-      ) {
-        return;
-      }
-      const activeItemCode = resolution.activeItemCode;
-      const result =
-        action === 'product_update'
-          ? await prepareAiProductUpdateDraft({
-              company: context.company,
-              conversationId: context.conversationId,
-              itemCode: activeItemCode,
-            })
-          : await prepareAiInventoryAdjustmentDraft({
-              company: context.company,
-              conversationId: context.conversationId,
-              itemCode: activeItemCode,
-            });
-      appendPreparedDraftMessages(result);
-      setEditingDraftId(result.draft.name);
-      await refreshConversations();
-    } catch (caught) {
-      message.error(
-        caught instanceof Error ? caught.message : '业务草稿准备失败',
-      );
-    } finally {
-      productActionInFlightRef.current = false;
-    }
+    })();
+    productActionInFlightRef.current.set(actionKey, operation);
+    return operation;
   };
 
   const selectInventoryDraftCandidate = async (
     targetDraft: AiDraft,
     candidate: InventoryDraftProductCandidate,
     selectionText: string,
-  ) => {
-    if (submitInFlightRef.current || loading) return;
-    const optimisticUser = createMessage('user', selectionText);
-    const optimisticAssistant = createMessage(
-      'assistant',
-      '正在续接原库存草稿…',
+  ): Promise<void> => {
+    const selectionKey = `${targetDraft.name}\u001f${targetDraft.version}`;
+    const existing = candidateSelectionInFlightRef.current.get(selectionKey);
+    if (existing) return existing;
+    setPendingCandidateDraftIds((current) =>
+      new Set(current).add(targetDraft.name),
     );
-    submitInFlightRef.current = true;
-    setLoading(true);
-    setComposerDraft('', conversationId);
-    setMessages((current) => [...current, optimisticUser, optimisticAssistant]);
-    try {
-      const result = await selectAiDraftProductCandidate({
-        draftId: targetDraft.name,
-        expectedVersion: targetDraft.version,
-        itemCode: candidate.itemCode,
-        selectionText,
-      });
-      applyUpdatedDraft(result.draft);
-      const preparedRows: ChatRow[] = result.messages.map((item) => ({
-        citations: item.citations,
-        content: item.content,
-        id: item.name,
-        role: item.role,
-        scenario: item.scenario,
-        sequence: item.sequence,
-      }));
-      setMessages((current) => {
-        const withoutOptimistic = current.filter(
-          (item) =>
-            item.id !== optimisticUser.id && item.id !== optimisticAssistant.id,
+    const operation = (async () => {
+      try {
+        const result = await selectAiDraftProductCandidate({
+          draftId: targetDraft.name,
+          expectedVersion: targetDraft.version,
+          itemCode: candidate.itemCode,
+          selectionText,
+        });
+        applyUpdatedDraft(result.draft);
+        setEditingDraftId(result.draft.name);
+        await refreshConversations();
+      } catch (caught) {
+        message.error(
+          caught instanceof Error
+            ? caught.message
+            : '商品选择失败，请刷新草稿后重试。',
         );
-        return [...withoutOptimistic, ...preparedRows];
-      });
-      setEditingDraftId(result.draft.name);
-      await refreshConversations();
-    } catch (caught) {
-      setMessages((current) =>
-        current.map((item) =>
-          item.id === optimisticAssistant.id
-            ? {
-                ...item,
-                content: '',
-                error:
-                  caught instanceof Error
-                    ? caught.message
-                    : '商品选择失败，请刷新草稿后重试。',
-              }
-            : item,
-        ),
-      );
-    } finally {
-      submitInFlightRef.current = false;
-      setLoading(false);
-    }
+      } finally {
+        candidateSelectionInFlightRef.current.delete(selectionKey);
+        setPendingCandidateDraftIds((current) => {
+          const next = new Set(current);
+          next.delete(targetDraft.name);
+          return next;
+        });
+      }
+    })();
+    candidateSelectionInFlightRef.current.set(selectionKey, operation);
+    return operation;
   };
 
   const submit = async (
@@ -2194,7 +2205,7 @@ export default function AiPage() {
             {item.title}
           </Typography.Text>
           <Typography.Text className={styles.conversationMeta} type="secondary">
-            {item.messageCount} 条消息 · {updatedAt}
+            {item.messageCount} 条记录 · {updatedAt}
             {item.company ? ` · ${item.company}` : ''}
           </Typography.Text>
           {item.pendingDraftCount > 0 ? (
@@ -2288,13 +2299,18 @@ export default function AiPage() {
 
   const bubbleItems: BubbleItemType[] = messages.map((item, index) => ({
     key: item.id,
-    role: item.role === 'user' ? 'user' : 'ai',
+    role:
+      item.messageKind === 'activity'
+        ? 'ai'
+        : item.role === 'user'
+          ? 'user'
+          : 'ai',
     status:
       loading && item.role === 'assistant' && index === messages.length - 1
         ? 'updating'
         : 'success',
     content:
-      item.role === 'user' ? (
+      item.role === 'user' && item.messageKind !== 'activity' ? (
         <Space align="end" orientation="vertical" size={8}>
           {item.attachments?.length ? (
             <Image.PreviewGroup>
@@ -2313,6 +2329,7 @@ export default function AiPage() {
         </Space>
       ) : (
         <AiMessageContent
+          activity={item.messageKind === 'activity'}
           citations={item.citations}
           content={item.content}
           error={item.error}
@@ -2357,6 +2374,18 @@ export default function AiPage() {
               itemCode,
             });
           }}
+          isProductActionPending={(action, citation) =>
+            pendingProductActionKeys.has(
+              productActionKey(action, {
+                company: effectiveCompany,
+                conversationId,
+                itemCode: String(citation.id ?? '').trim(),
+              }),
+            )
+          }
+          candidateSelectionPending={(draftId) =>
+            pendingCandidateDraftIds.has(draftId)
+          }
           onSelectDraftProductCandidate={(citation, candidate) => {
             const targetDraft = resolveAiDraftCitation(citation);
             if (!targetDraft) return;
@@ -2633,7 +2662,7 @@ export default function AiPage() {
                       onClick={() => void loadOlderMessages()}
                       size="small"
                     >
-                      加载更早消息（已显示 {messages.length} /{' '}
+                      加载更早记录（已显示 {messages.length} /{' '}
                       {Math.max(messagePagination.total, messages.length)}）
                     </Button>
                   </div>
@@ -2642,7 +2671,7 @@ export default function AiPage() {
                     className={styles.messageHistoryBar}
                     type="secondary"
                   >
-                    已显示最近 {messages.length} 条消息
+                    已显示最近 {messages.length} 条记录
                   </Typography.Text>
                 ) : null}
                 <Bubble.List

@@ -161,7 +161,7 @@ export function ProductUomMigrationModal({
           barcodeMappings: result.barcodes.map((row) => ({
             action: undefined,
             sourceName: row.name ?? '',
-            targetUom: undefined,
+            targetUom: row.uom ?? result.source.stockUom,
           })),
           confirmDisableSource: false,
           confirmHistoryPreserved: false,
@@ -173,13 +173,18 @@ export function ProductUomMigrationModal({
           priceMappings: result.prices.map((row) => ({
             action: undefined,
             sourceName: row.name,
-            targetUom: undefined,
+            targetUom: row.uom ?? result.source.stockUom,
           })),
-          retailDefaultUom: undefined,
+          retailDefaultUom:
+            result.source.retailDefaultUom ?? result.source.stockUom,
           strategy: result.recommendedStrategy ?? 'replacement',
-          stockUom: undefined,
-          uomConversions: [],
-          wholesaleDefaultUom: undefined,
+          stockUom: result.source.stockUom,
+          uomConversions: result.source.uomConversions.map((row) => ({
+            conversionFactor: row.conversionFactor,
+            uom: row.uom,
+          })),
+          wholesaleDefaultUom:
+            result.source.wholesaleDefaultUom ?? result.source.stockUom,
         });
       })
       .catch((caught) => {
@@ -460,6 +465,46 @@ export function ProductUomMigrationModal({
               </ProCard>
 
               <ProCard title="商品与正确单位">
+                <Alert
+                  description="下方已经载入当前单位、换算和默认单位。没有问题的内容保持不变，只修改确认错误的部分；保存前系统仍会重新校验库存、历史和价格条码引用。"
+                  showIcon
+                  title="从当前配置开始纠正"
+                  type="info"
+                />
+                <ProDescriptions
+                  bordered
+                  column={2}
+                  size="small"
+                  style={{ marginTop: 12, marginBottom: 16 }}
+                  title="当前单位配置"
+                >
+                  <ProDescriptions.Item label="库存基准单位">
+                    {resolveDisplayUom(
+                      assessment.source.stockUom,
+                      assessment.source.stockUomDisplay,
+                    )}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="批发默认单位">
+                    {assessment.source.wholesaleDefaultUom
+                      ? resolveDisplayUom(assessment.source.wholesaleDefaultUom)
+                      : '-'}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="零售默认单位">
+                    {assessment.source.retailDefaultUom
+                      ? resolveDisplayUom(assessment.source.retailDefaultUom)
+                      : '-'}
+                  </ProDescriptions.Item>
+                  <ProDescriptions.Item label="当前换算">
+                    {assessment.source.uomConversions
+                      .map(
+                        (row) =>
+                          `1 ${resolveDisplayUom(row.uom)} = ${formatNumber(
+                            row.conversionFactor,
+                          )} ${resolveDisplayUom(assessment.source.stockUom)}`,
+                      )
+                      .join('；') || '-'}
+                  </ProDescriptions.Item>
+                </ProDescriptions>
                 {strategy === 'replacement' ? (
                   <Space size={16} style={{ width: '100%' }}>
                     <Form.Item
@@ -504,9 +549,13 @@ export function ProductUomMigrationModal({
 
               <ProCard title="价格单位人工映射">
                 <Alert
-                  description="可保留原金额、手工指定新金额或跳过旧价格；下方还可以新增不依赖旧记录的价格。错误旧单位没有可信换算关系，因此系统不会自动推算。"
+                  description={
+                    strategy === 'in_place'
+                      ? '当前价格和原单位已经带入，但处理动作仍需逐条选择。你可以保持金额、修改单位或金额；“终止旧价格”会设置失效日期并保留审计，不会物理删除记录。'
+                      : '当前价格和建议目标单位已经带入，但是否迁移仍需逐条选择。“不迁移”只是不复制到继任商品，旧价格仍保留在停用源商品上。'
+                  }
                   showIcon
-                  title="在同一迁移向导中完成价格重建"
+                  title="逐条确认价格处理结果"
                   type="info"
                 />
                 <Table<ProductUomMigrationPrice>
@@ -543,13 +592,25 @@ export function ProductUomMigrationModal({
                           >
                             <Select
                               options={[
-                                { label: '保留原金额', value: 'copy' },
-                                { label: '手工指定新价格', value: 'manual' },
                                 {
                                   label:
                                     strategy === 'in_place'
-                                      ? '停止使用此价格'
-                                      : '跳过此价格',
+                                      ? '保持金额并确认单位'
+                                      : '迁移并保持原金额',
+                                  value: 'copy',
+                                },
+                                {
+                                  label:
+                                    strategy === 'in_place'
+                                      ? '修改单位或金额'
+                                      : '迁移并重新定价',
+                                  value: 'manual',
+                                },
+                                {
+                                  label:
+                                    strategy === 'in_place'
+                                      ? '终止这条旧价格'
+                                      : '不迁移（保留在源商品）',
                                   value: 'skip',
                                 },
                               ]}
@@ -645,7 +706,9 @@ export function ProductUomMigrationModal({
                       size={8}
                       style={{ marginTop: 16, width: '100%' }}
                     >
-                      <Typography.Text strong>直接新增价格</Typography.Text>
+                      <Typography.Text strong>
+                        新增独立价格（不依赖旧记录）
+                      </Typography.Text>
                       {fields.map((field) => (
                         <Space align="start" key={field.key} wrap>
                           <Form.Item
@@ -721,7 +784,7 @@ export function ProductUomMigrationModal({
                         }
                         type="dashed"
                       >
-                        添加新价格
+                        ＋ 新增价格行
                       </Button>
                     </Space>
                   )}
@@ -736,7 +799,7 @@ export function ProductUomMigrationModal({
                       : '迁移会从源商品移除条码并原子地绑定到继任商品；保留则条码继续指向停用的源商品。'
                   }
                   showIcon
-                  title="每条条码必须明确选择"
+                  title="现有条码数据已带入，但处理动作仍需逐条确认"
                   type="info"
                 />
                 <Table
@@ -981,7 +1044,14 @@ export function ProductUomMigrationModal({
                   ? `${previewValues.strategy === 'in_place' ? '改绑' : '迁移'} ${previewValues.barcodeMappings.filter((row) => row.action === 'move').length} 条，保留 ${previewValues.barcodeMappings.filter((row) => row.action === 'keep').length} 条`
                   : '源商品没有条码，无需处理'}
               </ProDescriptions.Item>
-              <ProDescriptions.Item label="跳过旧价格" span={2}>
+              <ProDescriptions.Item
+                label={
+                  previewValues.strategy === 'in_place'
+                    ? '本次终止旧价格'
+                    : '不迁移的源价格'
+                }
+                span={2}
+              >
                 {
                   previewValues.priceMappings.filter(
                     (row) => row.action === 'skip',
