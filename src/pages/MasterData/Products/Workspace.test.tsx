@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App, Modal } from 'antd';
 import React from 'react';
+import { MyAppApiError } from '@/services/myapp/api-client';
 import {
   getProductDetail,
   listProductChangeHistory,
@@ -131,6 +132,7 @@ const product = {
     },
   ],
   brand: '测试品牌',
+  canWrite: true,
   description: '测试描述',
   disabled: false,
   globalWarehouseStockDetails: [],
@@ -220,7 +222,66 @@ describe('ProductMaintenanceWorkspace', () => {
     await waitFor(() => {
       expect(mockedUpdateProduct).toHaveBeenCalledWith(
         'ITEM-001',
-        expect.objectContaining({ itemName: '测试商品（新）' }),
+        expect.objectContaining({
+          itemModified: '2026-09-02 10:00:00',
+          itemName: '测试商品（新）',
+        }),
+      );
+    });
+  });
+
+  it('opens the workspace in read-only mode without Item write permission', async () => {
+    mockedGetProductDetail.mockResolvedValue({
+      ...product,
+      canWrite: false,
+    } as never);
+
+    renderWorkspace();
+
+    expect(await screen.findByText('当前商品以只读模式打开')).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>('商品名称').disabled).toBe(
+      true,
+    );
+    expect(
+      screen.getAllByRole<HTMLButtonElement>('button', {
+        name: /保存商品资料/,
+      })[0].disabled,
+    ).toBe(true);
+    expect(mockedUpdateProduct).not.toHaveBeenCalled();
+  });
+
+  it('keeps a version conflict visible and reloads the latest product on demand', async () => {
+    mockedUpdateProduct.mockRejectedValueOnce(
+      new MyAppApiError('商品资料已被其他人修改，请刷新最新资料后重新编辑。', {
+        code: 'DOCUMENT_VERSION_CONFLICT',
+        data: { conflict_type: 'document_modified' },
+      }),
+    );
+    mockedGetProductDetail
+      .mockResolvedValueOnce(product as never)
+      .mockResolvedValueOnce({
+        ...product,
+        itemName: '服务器最新商品名称',
+        modified: '2026-09-02 11:00:00',
+      } as never);
+
+    renderWorkspace();
+    fireEvent.change(await screen.findByLabelText('商品名称'), {
+      target: { value: '本地待保存名称' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /保存商品资料/ })[0]);
+
+    expect(
+      await screen.findByText(
+        '商品资料已被其他人修改，请刷新最新资料后重新编辑。',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '刷新最新资料' }));
+
+    await waitFor(() => {
+      expect(mockedGetProductDetail).toHaveBeenCalledTimes(2);
+      expect(screen.getByLabelText<HTMLInputElement>('商品名称').value).toBe(
+        '服务器最新商品名称',
       );
     });
   });

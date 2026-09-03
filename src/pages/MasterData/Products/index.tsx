@@ -922,7 +922,11 @@ const ProductsPage: React.FC = () => {
   const handleToggleDisabled = async (record: ProductSummary) => {
     setTogglingProduct(record.itemCode);
     try {
-      await setProductDisabled(record.itemCode, !record.disabled);
+      await setProductDisabled(
+        record.itemCode,
+        !record.disabled,
+        record.modified,
+      );
       reload();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '操作失败');

@@ -23,11 +23,13 @@ type ProductUomConversion = NonNullable<
 >[number];
 
 export function ProductUomFields({
+  disabled = false,
   form,
   lockStockUom = false,
   stockUomDisplay,
   uomDisplays = {},
 }: {
+  disabled?: boolean;
   form: FormInstance<SaveProductPayload>;
   lockStockUom?: boolean;
   stockUomDisplay?: string | null;
@@ -115,7 +117,10 @@ export function ProductUomFields({
         name="stockUom"
         rules={[{ required: true, message: '请选择库存基准单位' }]}
       >
-        <UomSelect disabled={lockStockUom} displayValue={stockUomDisplay} />
+        <UomSelect
+          disabled={disabled || lockStockUom}
+          displayValue={stockUomDisplay}
+        />
       </Form.Item>
       <Form.List name="uomConversions">
         {(fields, { add, remove }) => (
@@ -146,7 +151,10 @@ export function ProductUomFields({
                     ]}
                     style={{ minWidth: 240, marginBottom: 0 }}
                   >
-                    <UomSelect displayValue={uomDisplays[rowUom]} />
+                    <UomSelect
+                      disabled={disabled || isStockUom}
+                      displayValue={uomDisplays[rowUom]}
+                    />
                   </Form.Item>
                   <Form.Item
                     {...field}
@@ -166,7 +174,7 @@ export function ProductUomFields({
                     style={{ minWidth: 220, marginBottom: 0 }}
                   >
                     <InputNumber
-                      disabled={isStockUom}
+                      disabled={disabled || isStockUom}
                       min={0.000001}
                       precision={6}
                       style={{ width: '100%' }}
@@ -174,7 +182,7 @@ export function ProductUomFields({
                   </Form.Item>
                   <Button
                     danger
-                    disabled={isStockUom}
+                    disabled={disabled || isStockUom}
                     icon={<MinusCircleOutlined />}
                     style={{ marginTop: field.name === 0 ? 30 : 0 }}
                     type="text"
@@ -185,6 +193,7 @@ export function ProductUomFields({
             })}
             <Button
               block
+              disabled={disabled}
               icon={<PlusOutlined />}
               type="dashed"
               onClick={() =>
@@ -204,6 +213,7 @@ export function ProductUomFields({
         >
           <Select
             allowClear
+            disabled={disabled}
             options={defaultOptions}
             placeholder="从商品单位中选择"
           />
@@ -215,6 +225,7 @@ export function ProductUomFields({
         >
           <Select
             allowClear
+            disabled={disabled}
             options={defaultOptions}
             placeholder="从商品单位中选择"
           />

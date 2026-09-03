@@ -43,6 +43,7 @@ describe('ProductDetailDrawer', () => {
       barcode: '',
       barcodes: [],
       brand: 'Brand A',
+      canWrite: true,
       description: '测试商品',
       disabled: false,
       imageUrl: '',

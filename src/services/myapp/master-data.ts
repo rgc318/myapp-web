@@ -236,6 +236,7 @@ export type ProductSummary = {
   barcode: string;
   barcodes: ProductBarcode[];
   brand: string;
+  canWrite: boolean;
   description: string;
   disabled: boolean;
   imageUrl: string;
@@ -316,7 +317,9 @@ export type SaveProductPayload = {
   wholesaleRate?: number | null;
 };
 
-export type UpdateProductPayload = Partial<SaveProductPayload>;
+export type UpdateProductPayload = Partial<SaveProductPayload> & {
+  itemModified?: string | null;
+};
 
 export type CreateProductAndStockPayload = {
   defaultWarehouse?: string | null;
@@ -477,6 +480,7 @@ export type LinkOptionFilters = Record<string, string | number | boolean | null 
 
 function mapProduct(row: Record<string, any>): ProductSummary {
   const allUoms = mapUomNames(row.all_uoms);
+  const permissions = readObject(row.permissions);
   const stockUom = String(row.stock_uom ?? row.uom ?? '');
 
   return {
@@ -485,6 +489,7 @@ function mapProduct(row: Record<string, any>): ProductSummary {
     barcode: String(row.barcode ?? ''),
     barcodes: mapProductBarcodes(row.barcodes, row.barcode),
     brand: String(row.brand ?? ''),
+    canWrite: Boolean(permissions.can_write),
     description: String(row.description ?? ''),
     disabled: Boolean(row.disabled),
     imageUrl: resolveMediaUrl(
@@ -1642,15 +1647,24 @@ export async function updateProduct(
     payload: definedPayload({
       ...productSavePayload(payload),
       item_code: itemCode,
+      item_modified: toOptionalText(payload.itemModified),
     }),
     successMessage: '商品已更新',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }
 
-export async function setProductDisabled(itemCode: string, disabled: boolean) {
+export async function setProductDisabled(
+  itemCode: string,
+  disabled: boolean,
+  itemModified?: string | null,
+) {
   return runGatewayMutation<ProductSummary>('disable_product_v2', {
-    payload: { disabled: disabled ? 1 : 0, item_code: itemCode },
+    payload: compactPayload({
+      disabled: disabled ? 1 : 0,
+      item_code: itemCode,
+      item_modified: toOptionalText(itemModified),
+    }),
     successMessage: disabled ? '商品已停用' : '商品已启用',
     transform: (raw) => mapProduct(readObject(raw)),
   });
@@ -1683,12 +1697,17 @@ export async function bulkUpdateProducts(
 export async function addProductBarcode(
   itemCode: string,
   barcode: string,
-  options: { setPrimary?: boolean; uom?: string | null } = {},
+  options: {
+    itemModified?: string | null;
+    setPrimary?: boolean;
+    uom?: string | null;
+  } = {},
 ) {
   return runGatewayMutation<ProductSummary>('add_product_barcode_v2', {
     payload: compactPayload({
       barcode,
       item_code: itemCode,
+      item_modified: toOptionalText(options.itemModified),
       set_primary: options.setPrimary ? 1 : 0,
       uom: toOptionalText(options.uom),
     }),
@@ -1700,17 +1719,30 @@ export async function addProductBarcode(
 export async function setPrimaryProductBarcode(
   itemCode: string,
   barcode: string,
+  options: { itemModified?: string | null } = {},
 ) {
   return runGatewayMutation<ProductSummary>('set_primary_product_barcode_v2', {
-    payload: { barcode, item_code: itemCode },
+    payload: compactPayload({
+      barcode,
+      item_code: itemCode,
+      item_modified: toOptionalText(options.itemModified),
+    }),
     successMessage: '主条码已更新',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }
 
-export async function deleteProductBarcode(itemCode: string, barcode: string) {
+export async function deleteProductBarcode(
+  itemCode: string,
+  barcode: string,
+  options: { itemModified?: string | null } = {},
+) {
   return runGatewayMutation<ProductSummary>('delete_product_barcode_v2', {
-    payload: { barcode, item_code: itemCode },
+    payload: compactPayload({
+      barcode,
+      item_code: itemCode,
+      item_modified: toOptionalText(options.itemModified),
+    }),
     successMessage: '条码已删除',
     transform: (raw) => mapProduct(readObject(raw)),
   });

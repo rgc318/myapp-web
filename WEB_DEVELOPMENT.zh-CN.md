@@ -294,6 +294,8 @@ Web 商品模块当前按企业级主数据维护界面建设，不只复刻移�
 - 有价格维护权限时，详情页可以新增价格、修改金额或有效期、终止旧价格。现有价格的价格表、币种和单位作为定位键锁定；定位键错误时应新增正确价格并终止旧记录，不在前端静默改写身份。终止通过设置 `valid_upto` 保留审计，不等同于物理删除。
 - 销售和采购价格在工作区使用完整价格矩阵维护，不再把四个价格摘要混入普通资料表单；新增、修改和终止均按单条 Item Price 执行并保留权限与审计边界。
 - 工作区使用 URL 页签、顶部与底部保存入口、sticky 保存状态、`beforeunload` 和离开确认保护未保存修改；价格与条码即时动作不伪装成普通资料保存。
+- 商品详情映射 `permissions.can_write` 为 `ProductSummary.canWrite`。无目标 Item 写权限时，工作区明确展示只读提示并禁用普通资料、单位、估值、条码和保存动作；价格矩阵继续按独立的 Item Price 权限判断，避免把两类权限混为一谈。
+- 普通资料保存、列表启停和条码即时动作携带读取时的 `modified`。后端返回 `DOCUMENT_VERSION_CONFLICT` 时，工作区保留持久错误提示并提供“刷新最新资料”，不得静默覆盖其他用户的修改，也不得只显示会消失的 toast。
 - 变更历史页签调用 `list_product_change_history_v1`，统一展示商品 Version、价格创建/修改/终止、条码/单位差异和商品纠正审计；页面不得根据当前值自行推测历史。
 - AI 商品快捷窗口同时展示实时单位换算、完整价目表和条码，回答时快照仍与当前实时数据分开展示。
 - 商品列表工具栏支持摄像头扫码搜索；命中停用商品时自动切换状态筛选，未命中时只提示用户确认新建并预填条码，不自动创建商品或调用外部条码数据源
@@ -305,6 +307,7 @@ Web 商品模块当前按企业级主数据维护界面建设，不只复刻移�
 - 选品弹窗使用 `searchProducts`，底层调用 `search_product_v2`
 - 详情使用 `getProductDetail`，底层调用 `get_product_detail_v2`
 - 创建 / 更新商品通过 `createProduct` / `updateProduct` 写入后端 `create_product_v2` / `update_product_v2`
+- `updateProduct` 使用 `itemModified` 映射 `item_modified`；`setProductDisabled` 和三个条码方法也接受同一版本字段。
 - 批量启停通过 `bulkSetProductsDisabled` 顺序复用 `disable_product_v2`
 - 批量修改分类 / 品牌通过 `bulkUpdateProducts` 顺序复用 `update_product_v2` 的局部更新能力，未传字段不得被前端补空导致误清空
 - 批量导入通过页面侧 CSV 解析和 ProTable 预览完成；`导入动作=create` 调用 `createProduct`，`导入动作=update` 按商品编码调用 `updateProduct`

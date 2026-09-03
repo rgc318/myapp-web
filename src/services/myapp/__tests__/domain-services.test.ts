@@ -1106,6 +1106,8 @@ describe('myapp domain services', () => {
         ],
         item_code: 'SKU-1',
         item_name: 'Camera',
+        modified: '2026-09-03 10:00:00',
+        permissions: { can_write: 1 },
         stock_uom: 'Nos',
       },
       meta: {},
@@ -1122,6 +1124,7 @@ describe('myapp domain services', () => {
       { barcode: 'BAR-001', idx: 1, isPrimary: true, name: 'ROW-1' },
       { barcode: 'BAR-002', idx: 2, isPrimary: false, name: 'ROW-2' },
     ]);
+    expect(result?.canWrite).toBe(true);
   });
 
   it('maps the complete unit-aware product price matrix', async () => {
@@ -3456,6 +3459,7 @@ describe('myapp domain services', () => {
 
     await updateProduct('ITEM-001', {
       brand: 'Brand B',
+      itemModified: '2026-09-03 10:00:00',
       itemGroup: 'Products',
     });
 
@@ -3465,6 +3469,7 @@ describe('myapp domain services', () => {
         brand: 'Brand B',
         item_code: 'ITEM-001',
         item_group: 'Products',
+        item_modified: '2026-09-03 10:00:00',
       },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
@@ -3510,11 +3515,16 @@ describe('myapp domain services', () => {
     });
 
     await addProductBarcode('ITEM-001', 'BAR-002', {
+      itemModified: '2026-09-03 10:00:00',
       setPrimary: true,
       uom: 'Box',
     });
-    await setPrimaryProductBarcode('ITEM-001', 'BAR-002');
-    await deleteProductBarcode('ITEM-001', 'BAR-002');
+    await setPrimaryProductBarcode('ITEM-001', 'BAR-002', {
+      itemModified: '2026-09-03 10:01:00',
+    });
+    await deleteProductBarcode('ITEM-001', 'BAR-002', {
+      itemModified: '2026-09-03 10:02:00',
+    });
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
@@ -3522,6 +3532,7 @@ describe('myapp domain services', () => {
       {
         barcode: 'BAR-002',
         item_code: 'ITEM-001',
+        item_modified: '2026-09-03 10:00:00',
         set_primary: 1,
         uom: 'Box',
       },
@@ -3530,13 +3541,21 @@ describe('myapp domain services', () => {
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       2,
       'set_primary_product_barcode_v2',
-      { barcode: 'BAR-002', item_code: 'ITEM-001' },
+      {
+        barcode: 'BAR-002',
+        item_code: 'ITEM-001',
+        item_modified: '2026-09-03 10:01:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       3,
       'delete_product_barcode_v2',
-      { barcode: 'BAR-002', item_code: 'ITEM-001' },
+      {
+        barcode: 'BAR-002',
+        item_code: 'ITEM-001',
+        item_modified: '2026-09-03 10:02:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
   });

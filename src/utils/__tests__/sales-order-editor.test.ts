@@ -16,6 +16,7 @@ const product: ProductSummary = {
   barcode: '',
   barcodes: [],
   brand: '',
+  canWrite: true,
   description: '',
   disabled: false,
   imageUrl: '',

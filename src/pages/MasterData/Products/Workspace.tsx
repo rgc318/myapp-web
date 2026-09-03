@@ -33,11 +33,12 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
+import { MyAppApiError } from '@/services/myapp/api-client';
 import {
   addProductBarcode,
   deleteProductBarcode,
@@ -90,6 +91,17 @@ function workspacePath(itemCode: string, section: WorkspaceSection) {
 
 function detailPath(itemCode: string) {
   return `/master-data/products/${encodeURIComponent(itemCode)}`;
+}
+
+function isDocumentVersionConflict(error: unknown) {
+  return (
+    error instanceof MyAppApiError &&
+    (error.code === 'DOCUMENT_VERSION_CONFLICT' ||
+      (typeof error.data === 'object' &&
+        error.data !== null &&
+        'conflict_type' in error.data &&
+        error.data.conflict_type === 'document_modified'))
+  );
 }
 
 function ProductPriceSection({
@@ -256,9 +268,11 @@ function ProductPriceSection({
 }
 
 function ProductBarcodeSection({
+  onVersionConflict,
   product,
   refreshProduct,
 }: {
+  onVersionConflict: (error: unknown) => boolean;
   product: ProductSummary;
   refreshProduct: () => void;
 }) {
@@ -273,13 +287,18 @@ function ProductBarcodeSection({
     setAction('add');
     try {
       await addProductBarcode(product.itemCode, values.barcode, {
+        itemModified: product.modified,
         uom: values.uom,
       });
       form.setFieldsValue({ barcode: '', uom: product.stockUom });
       message.success('条码已新增');
       refreshProduct();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '新增条码失败');
+      if (!onVersionConflict(caught)) {
+        message.error(
+          caught instanceof Error ? caught.message : '新增条码失败',
+        );
+      }
     } finally {
       setAction(undefined);
     }
@@ -288,13 +307,17 @@ function ProductBarcodeSection({
   const handlePrimary = async (record: ProductBarcode) => {
     setAction(`primary:${record.barcode}`);
     try {
-      await setPrimaryProductBarcode(product.itemCode, record.barcode);
+      await setPrimaryProductBarcode(product.itemCode, record.barcode, {
+        itemModified: product.modified,
+      });
       message.success('主条码已更新');
       refreshProduct();
     } catch (caught) {
-      message.error(
-        caught instanceof Error ? caught.message : '设置主条码失败',
-      );
+      if (!onVersionConflict(caught)) {
+        message.error(
+          caught instanceof Error ? caught.message : '设置主条码失败',
+        );
+      }
     } finally {
       setAction(undefined);
     }
@@ -303,11 +326,17 @@ function ProductBarcodeSection({
   const handleDelete = async (record: ProductBarcode) => {
     setAction(`delete:${record.barcode}`);
     try {
-      await deleteProductBarcode(product.itemCode, record.barcode);
+      await deleteProductBarcode(product.itemCode, record.barcode, {
+        itemModified: product.modified,
+      });
       message.success('条码已删除');
       refreshProduct();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '删除条码失败');
+      if (!onVersionConflict(caught)) {
+        message.error(
+          caught instanceof Error ? caught.message : '删除条码失败',
+        );
+      }
     } finally {
       setAction(undefined);
     }
@@ -322,6 +351,14 @@ function ProductBarcodeSection({
           title="条码与单位绑定"
           type="info"
         />
+        {!product.canWrite ? (
+          <Alert
+            description="你可以查看条码与对应单位，但当前账号不能新增、设为主条码或删除。"
+            showIcon
+            title="商品条码只读"
+            type="warning"
+          />
+        ) : null}
         <Form<BarcodeFormValues>
           form={form}
           layout="inline"
@@ -332,9 +369,12 @@ function ProductBarcodeSection({
             rules={[{ required: true, message: '请输入条码' }]}
           >
             <Space.Compact style={{ width: 340 }}>
-              <Input placeholder="新增条码" />
+              <Input disabled={!product.canWrite} placeholder="新增条码" />
               <BarcodeScannerButton
-                buttonProps={{ title: '扫描新增条码' }}
+                buttonProps={{
+                  disabled: !product.canWrite,
+                  title: '扫描新增条码',
+                }}
                 label={null}
                 onScanned={(barcode) => form.setFieldValue('barcode', barcode)}
                 title="扫描新增商品条码"
@@ -346,6 +386,7 @@ function ProductBarcodeSection({
             rules={[{ required: true, message: '请选择对应单位' }]}
           >
             <Select
+              disabled={!product.canWrite}
               options={product.allUoms.map((uom) => ({
                 label: resolveDisplayUom(uom, product.allUomDisplays[uom]),
                 value: uom,
@@ -353,7 +394,12 @@ function ProductBarcodeSection({
               style={{ width: 180 }}
             />
           </Form.Item>
-          <Button htmlType="submit" loading={action === 'add'} type="primary">
+          <Button
+            disabled={!product.canWrite}
+            htmlType="submit"
+            loading={action === 'add'}
+            type="primary"
+          >
             新增条码
           </Button>
         </Form>
@@ -377,7 +423,7 @@ function ProductBarcodeSection({
               render: (_, record) => (
                 <Space size={4}>
                   <Button
-                    disabled={record.isPrimary}
+                    disabled={!product.canWrite || record.isPrimary}
                     icon={<StarOutlined />}
                     loading={action === `primary:${record.barcode}`}
                     onClick={() => handlePrimary(record)}
@@ -393,6 +439,7 @@ function ProductBarcodeSection({
                   >
                     <Button
                       danger
+                      disabled={!product.canWrite}
                       icon={<DeleteOutlined />}
                       loading={action === `delete:${record.barcode}`}
                       type="link"
@@ -553,6 +600,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
   const [form] = Form.useForm<ProductFormValues>();
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [versionConflict, setVersionConflict] = useState<string>();
   const [uomMigrationOpen, setUomMigrationOpen] = useState(
     query.get('uom_migration') === '1',
   );
@@ -583,6 +631,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
       wholesaleDefaultUom: data.wholesaleDefaultUom ?? data.stockUom,
     });
     setDirty(false);
+    setVersionConflict(undefined);
   }, [data, form]);
 
   useEffect(() => {
@@ -611,18 +660,48 @@ const ProductMaintenanceWorkspace: React.FC = () => {
   };
 
   const handleSave = async (values: ProductFormValues) => {
-    if (!data) return;
+    if (!data?.canWrite) return;
     setSaving(true);
     try {
-      await updateProduct(data.itemCode, values);
+      await updateProduct(data.itemCode, {
+        ...values,
+        itemModified: data.modified,
+      });
       setDirty(false);
+      setVersionConflict(undefined);
       message.success('商品资料已保存');
       refresh();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '商品保存失败');
+      if (isDocumentVersionConflict(caught)) {
+        setVersionConflict(
+          caught instanceof Error
+            ? caught.message
+            : '商品资料已发生变化，请刷新最新资料。',
+        );
+      } else {
+        message.error(
+          caught instanceof Error ? caught.message : '商品保存失败',
+        );
+      }
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleVersionConflict = useCallback((caught: unknown) => {
+    if (!isDocumentVersionConflict(caught)) return false;
+    setVersionConflict(
+      caught instanceof Error
+        ? caught.message
+        : '商品资料已发生变化，请刷新最新资料。',
+    );
+    return true;
+  }, []);
+
+  const handleRefreshLatest = () => {
+    setDirty(false);
+    setVersionConflict(undefined);
+    refresh();
   };
 
   const tabItems = useMemo(() => {
@@ -640,6 +719,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
             <ProCard title="基本资料">
               <Form.Item label="商品图片" name="image">
                 <ItemImageUpload
+                  disabled={!data.canWrite}
                   itemCode={data.itemCode}
                   value={data.imageUrl}
                 />
@@ -649,7 +729,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                 name="itemName"
                 rules={[{ required: true, message: '请输入商品名称' }]}
               >
-                <Input />
+                <Input disabled={!data.canWrite} />
               </Form.Item>
               <Space size={16} style={{ width: '100%' }} wrap>
                 <Form.Item
@@ -658,12 +738,17 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                   style={{ minWidth: 260 }}
                 >
                   <RemoteLinkSelect
+                    disabled={!data.canWrite}
                     doctype="Item Group"
                     placeholder="搜索商品分类"
                   />
                 </Form.Item>
                 <Form.Item label="品牌" name="brand" style={{ minWidth: 220 }}>
-                  <RemoteLinkSelect doctype="Brand" placeholder="搜索品牌" />
+                  <RemoteLinkSelect
+                    disabled={!data.canWrite}
+                    doctype="Brand"
+                    placeholder="搜索品牌"
+                  />
                 </Form.Item>
                 <Form.Item
                   label="主条码兼容字段"
@@ -671,9 +756,12 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                   style={{ minWidth: 300 }}
                 >
                   <Space.Compact block>
-                    <Input placeholder="主条码" />
+                    <Input disabled={!data.canWrite} placeholder="主条码" />
                     <BarcodeScannerButton
-                      buttonProps={{ title: '扫描主条码' }}
+                      buttonProps={{
+                        disabled: !data.canWrite,
+                        title: '扫描主条码',
+                      }}
                       label={null}
                       onScanned={(barcode) =>
                         form.setFieldValue('barcode', barcode)
@@ -684,10 +772,13 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                 </Form.Item>
               </Space>
               <Form.Item label="描述" name="description">
-                <Input.TextArea autoSize={{ maxRows: 6, minRows: 3 }} />
+                <Input.TextArea
+                  autoSize={{ maxRows: 6, minRows: 3 }}
+                  disabled={!data.canWrite}
+                />
               </Form.Item>
               <Form.Item label="停用" name="disabled" valuePropName="checked">
-                <Switch />
+                <Switch disabled={!data.canWrite} />
               </Form.Item>
             </ProCard>
           </Space>
@@ -702,6 +793,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
               extra={
                 <Button
                   danger
+                  disabled={!data.canWrite}
                   icon={<WarningOutlined />}
                   onClick={() => setUomMigrationOpen(true)}
                 >
@@ -711,6 +803,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
               title="单位与包装"
             >
               <ProductUomFields
+                disabled={!data.canWrite}
                 form={form}
                 lockStockUom
                 stockUomDisplay={data.stockUomDisplay}
@@ -746,7 +839,11 @@ const ProductMaintenanceWorkspace: React.FC = () => {
       },
       {
         children: (
-          <ProductBarcodeSection product={data} refreshProduct={refresh} />
+          <ProductBarcodeSection
+            onVersionConflict={handleVersionConflict}
+            product={data}
+            refreshProduct={refresh}
+          />
         ),
         key: 'barcodes',
         label: '条码',
@@ -792,7 +889,12 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                 type="warning"
               />
               <Form.Item label="库存估值成本" name="valuationRate">
-                <InputNumber min={0} precision={6} style={{ width: 260 }} />
+                <InputNumber
+                  disabled={!data.canWrite}
+                  min={0}
+                  precision={6}
+                  style={{ width: 260 }}
+                />
               </Form.Item>
             </ProCard>
             <ProCard title="分仓库存">
@@ -824,7 +926,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
         label: '变更历史',
       },
     ];
-  }, [data, form, refresh]);
+  }, [data, form, handleVersionConflict, refresh]);
 
   if (loading && !data) {
     return (
@@ -864,6 +966,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
           返回详情
         </Button>,
         <Button
+          disabled={!data.canWrite}
           key="save"
           loading={saving}
           onClick={() => form.submit()}
@@ -881,8 +984,35 @@ const ProductMaintenanceWorkspace: React.FC = () => {
         form={form}
         layout="vertical"
         onFinish={handleSave}
-        onValuesChange={() => setDirty(true)}
+        onValuesChange={() => {
+          if (data.canWrite) setDirty(true);
+        }}
       >
+        {!data.canWrite ? (
+          <Alert
+            banner
+            description="你可以查看基本资料、单位、库存估值和变更历史；价格是否可维护仍以对应价目表权限为准。"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title="当前商品以只读模式打开"
+            type="warning"
+          />
+        ) : null}
+        {versionConflict ? (
+          <Alert
+            action={
+              <Button onClick={handleRefreshLatest} type="primary">
+                刷新最新资料
+              </Button>
+            }
+            banner
+            description="为避免覆盖其他人的修改，本次保存或条码操作已被阻止。刷新会放弃当前未保存内容并载入服务器最新版本。"
+            showIcon
+            style={{ marginBottom: 16 }}
+            title={versionConflict}
+            type="error"
+          />
+        ) : null}
         {dirty ? (
           <Alert
             banner
@@ -926,9 +1056,14 @@ const ProductMaintenanceWorkspace: React.FC = () => {
         >
           <Space>
             <Typography.Text type="secondary">
-              {dirty ? '有未保存修改' : '当前资料已保存'}
+              {!data.canWrite
+                ? '当前为只读模式'
+                : dirty
+                  ? '有未保存修改'
+                  : '当前资料已保存'}
             </Typography.Text>
             <Button
+              disabled={!data.canWrite}
               loading={saving}
               onClick={() => form.submit()}
               type="primary"
@@ -946,7 +1081,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
           setUomMigrationOpen(false);
           history.push(workspacePath(newItemCode, 'units'));
         }}
-        open={uomMigrationOpen}
+        open={data.canWrite && uomMigrationOpen}
       />
     </PageContainer>
   );
