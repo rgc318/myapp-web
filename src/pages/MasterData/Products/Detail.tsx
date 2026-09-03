@@ -50,6 +50,7 @@ import {
   terminateProductPrice,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
 
@@ -423,12 +424,14 @@ function PriceEntriesTable({
 }
 
 function BarcodeTable({
+  canWrite,
   loading,
   onDelete,
   onSetPrimary,
   rows,
   uomDisplays,
 }: {
+  canWrite: boolean;
   loading?: string;
   onDelete: (record: ProductBarcode) => void;
   onSetPrimary: (record: ProductBarcode) => void;
@@ -472,7 +475,7 @@ function BarcodeTable({
       width: 180,
       render: (_, record) => [
         <Button
-          disabled={record.isPrimary}
+          disabled={!canWrite || record.isPrimary}
           icon={<StarOutlined />}
           key="primary"
           loading={loading === `primary:${record.barcode}`}
@@ -491,6 +494,7 @@ function BarcodeTable({
         >
           <Button
             danger
+            disabled={!canWrite}
             icon={<DeleteOutlined />}
             loading={loading === `delete:${record.barcode}`}
             size="small"
@@ -533,6 +537,7 @@ const ProductDetailPage: React.FC = () => {
   const [terminatingPrice, setTerminatingPrice] = useState<string>();
   const [toggling, setToggling] = useState(false);
   const [barcodeSubmitting, setBarcodeSubmitting] = useState<string>();
+  const [versionConflict, setVersionConflict] = useState<string>();
 
   const { data, error, loading, refresh } = useRequest(
     () => getProductDetail(itemCode, { company, warehouse }),
@@ -586,6 +591,7 @@ const ProductDetailPage: React.FC = () => {
   useEffect(() => {
     if (!data) return;
     barcodeForm.setFieldsValue({ barcode: '', uom: data.stockUom });
+    setVersionConflict(undefined);
   }, [barcodeForm, data]);
 
   const closeUomMigration = () => {
@@ -598,29 +604,35 @@ const ProductDetailPage: React.FC = () => {
   };
 
   const openEdit = () => {
-    if (!data) return;
+    if (!data?.canWrite) return;
     history.push(
       `/master-data/products/${encodeURIComponent(data.itemCode)}/edit?section=basic`,
     );
   };
 
   const handleToggleDisabled = async () => {
-    if (!data) {
+    if (!data?.canWrite) {
       return;
     }
     setToggling(true);
     try {
-      await setProductDisabled(data.itemCode, !data.disabled);
+      await setProductDisabled(data.itemCode, !data.disabled, data.modified);
       refresh();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '操作失败');
+      if (isDocumentVersionConflict(caught)) {
+        setVersionConflict(
+          caught instanceof Error ? caught.message : '商品资料已发生变化。',
+        );
+      } else {
+        message.error(caught instanceof Error ? caught.message : '操作失败');
+      }
     } finally {
       setToggling(false);
     }
   };
 
   const handleAddBarcode = async (values: BarcodeFormValues) => {
-    if (!data) {
+    if (!data?.canWrite) {
       return;
     }
     const barcode = values.barcode?.trim();
@@ -630,44 +642,73 @@ const ProductDetailPage: React.FC = () => {
     }
     setBarcodeSubmitting('add');
     try {
-      await addProductBarcode(data.itemCode, barcode, { uom: values.uom });
+      await addProductBarcode(data.itemCode, barcode, {
+        itemModified: data.modified,
+        uom: values.uom,
+      });
       barcodeForm.resetFields();
       barcodeForm.setFieldsValue({ barcode: '', uom: data.stockUom });
       refresh();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '新增条码失败');
+      if (isDocumentVersionConflict(caught)) {
+        setVersionConflict(
+          caught instanceof Error ? caught.message : '商品资料已发生变化。',
+        );
+      } else {
+        message.error(
+          caught instanceof Error ? caught.message : '新增条码失败',
+        );
+      }
     } finally {
       setBarcodeSubmitting(undefined);
     }
   };
 
   const handleSetPrimaryBarcode = async (record: ProductBarcode) => {
-    if (!data) {
+    if (!data?.canWrite) {
       return;
     }
     setBarcodeSubmitting(`primary:${record.barcode}`);
     try {
-      await setPrimaryProductBarcode(data.itemCode, record.barcode);
+      await setPrimaryProductBarcode(data.itemCode, record.barcode, {
+        itemModified: data.modified,
+      });
       refresh();
     } catch (caught) {
-      message.error(
-        caught instanceof Error ? caught.message : '设置主条码失败',
-      );
+      if (isDocumentVersionConflict(caught)) {
+        setVersionConflict(
+          caught instanceof Error ? caught.message : '商品资料已发生变化。',
+        );
+      } else {
+        message.error(
+          caught instanceof Error ? caught.message : '设置主条码失败',
+        );
+      }
     } finally {
       setBarcodeSubmitting(undefined);
     }
   };
 
   const handleDeleteBarcode = async (record: ProductBarcode) => {
-    if (!data) {
+    if (!data?.canWrite) {
       return;
     }
     setBarcodeSubmitting(`delete:${record.barcode}`);
     try {
-      await deleteProductBarcode(data.itemCode, record.barcode);
+      await deleteProductBarcode(data.itemCode, record.barcode, {
+        itemModified: data.modified,
+      });
       refresh();
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '删除条码失败');
+      if (isDocumentVersionConflict(caught)) {
+        setVersionConflict(
+          caught instanceof Error ? caught.message : '商品资料已发生变化。',
+        );
+      } else {
+        message.error(
+          caught instanceof Error ? caught.message : '删除条码失败',
+        );
+      }
     } finally {
       setBarcodeSubmitting(undefined);
     }
@@ -683,12 +724,17 @@ const ProductDetailPage: React.FC = () => {
         >
           返回商品列表
         </Button>,
-        <Button disabled={!data} key="edit" onClick={openEdit} type="primary">
+        <Button
+          disabled={!data?.canWrite}
+          key="edit"
+          onClick={openEdit}
+          type="primary"
+        >
           编辑商品
         </Button>,
         <Button
           danger
-          disabled={!data}
+          disabled={!data?.canWrite}
           key="uom-migration"
           onClick={() => setUomMigrationOpen(true)}
         >
@@ -702,7 +748,11 @@ const ProductDetailPage: React.FC = () => {
             onConfirm={handleToggleDisabled}
             title={`${data.disabled ? '启用' : '停用'}商品 ${data.itemName || data.itemCode}？`}
           >
-            <Button danger={!data.disabled} loading={toggling}>
+            <Button
+              danger={!data.disabled}
+              disabled={!data.canWrite}
+              loading={toggling}
+            >
               {data.disabled ? '启用商品' : '停用商品'}
             </Button>
           </Popconfirm>
@@ -743,7 +793,36 @@ const ProductDetailPage: React.FC = () => {
             description={
               error instanceof Error ? error.message : '请稍后重试。'
             }
-            message="商品详情加载失败"
+            title="商品详情加载失败"
+            showIcon
+            type="error"
+          />
+        ) : null}
+
+        {data && !data.canWrite ? (
+          <Alert
+            description="当前账号可以查看商品资料、库存与价格；编辑、启停、条码和单位纠正操作已禁用。价格维护仍按独立的 Item Price 权限判断。"
+            title="当前商品为只读"
+            showIcon
+            type="warning"
+          />
+        ) : null}
+
+        {versionConflict ? (
+          <Alert
+            action={
+              <Button
+                onClick={() => {
+                  setVersionConflict(undefined);
+                  refresh();
+                }}
+                type="primary"
+              >
+                刷新最新资料
+              </Button>
+            }
+            description="本次操作已被阻止，避免覆盖其他人的修改。"
+            title={versionConflict}
             showIcon
             type="error"
           />
@@ -831,7 +910,11 @@ const ProductDetailPage: React.FC = () => {
                           ? `${issues.length} 项待处理`
                           : '无需处理'}
                       </Tag>
-                      <Button size="small" onClick={openEdit}>
+                      <Button
+                        disabled={!data.canWrite}
+                        size="small"
+                        onClick={openEdit}
+                      >
                         编辑资料
                       </Button>
                       <Button
@@ -864,14 +947,18 @@ const ProductDetailPage: React.FC = () => {
                                   处理库存
                                 </Button>
                               ) : (
-                                <Button size="small" onClick={openEdit}>
+                                <Button
+                                  disabled={!data.canWrite}
+                                  size="small"
+                                  onClick={openEdit}
+                                >
                                   补充资料
                                 </Button>
                               )
                             }
                             description={issue.description}
                             key={issue.key}
-                            message={issue.title}
+                            title={issue.title}
                             showIcon
                             type={issue.type}
                           />
@@ -880,7 +967,7 @@ const ProductDetailPage: React.FC = () => {
                     ) : (
                       <Alert
                         description="商品主档案、价格、单位和库存状态未发现明显缺口。"
-                        message="资料状态良好"
+                        title="资料状态良好"
                         showIcon
                         type="success"
                       />
@@ -930,7 +1017,11 @@ const ProductDetailPage: React.FC = () => {
                   <ProDescriptions.Item label="采购商品">
                     {data.isPurchaseItem === false ? '否' : '是'}
                   </ProDescriptions.Item>
-                  <ProDescriptions.Item label="最后修改" dataIndex="modified" />
+                  <ProDescriptions.Item
+                    label="最后修改"
+                    dataIndex="modified"
+                    span={2}
+                  />
                   <ProDescriptions.Item label="描述" span={2}>
                     {data.description || '-'}
                   </ProDescriptions.Item>
@@ -950,9 +1041,12 @@ const ProductDetailPage: React.FC = () => {
                     rules={[{ required: true, message: '请输入条码' }]}
                   >
                     <Space.Compact style={{ width: 300 }}>
-                      <Input placeholder="新增条码" />
+                      <Input disabled={!data.canWrite} placeholder="新增条码" />
                       <BarcodeScannerButton
-                        buttonProps={{ title: '扫描新增条码' }}
+                        buttonProps={{
+                          disabled: !data.canWrite,
+                          title: '扫描新增条码',
+                        }}
                         label={null}
                         onScanned={(barcode) =>
                           barcodeForm.setFieldValue('barcode', barcode)
@@ -966,6 +1060,7 @@ const ProductDetailPage: React.FC = () => {
                     rules={[{ required: true, message: '请选择条码对应单位' }]}
                   >
                     <Select
+                      disabled={!data.canWrite}
                       options={data.allUoms.map((uom) => ({
                         label: productUomDisplay(uom, data.allUomDisplays[uom]),
                         value: uom,
@@ -976,6 +1071,7 @@ const ProductDetailPage: React.FC = () => {
                   </Form.Item>
                   <Form.Item>
                     <Button
+                      disabled={!data.canWrite}
                       htmlType="submit"
                       icon={<PlusOutlined />}
                       loading={barcodeSubmitting === 'add'}
@@ -986,6 +1082,7 @@ const ProductDetailPage: React.FC = () => {
                   </Form.Item>
                 </Form>
                 <BarcodeTable
+                  canWrite={data.canWrite}
                   loading={barcodeSubmitting}
                   onDelete={handleDeleteBarcode}
                   onSetPrimary={handleSetPrimaryBarcode}
@@ -1047,7 +1144,7 @@ const ProductDetailPage: React.FC = () => {
                         data.priceSummary?.standardBuyingRate,
                       )}
                     </ProDescriptions.Item>
-                    <ProDescriptions.Item label="库存估值成本">
+                    <ProDescriptions.Item label="库存估值成本" span={2}>
                       {formatCurrencyValue(data.priceSummary?.valuationRate)}
                     </ProDescriptions.Item>
                   </ProDescriptions>
@@ -1128,7 +1225,7 @@ const ProductDetailPage: React.FC = () => {
                       data.wholesaleDefaultUomDisplay,
                     )}
                   </ProDescriptions.Item>
-                  <ProDescriptions.Item label="零售默认单位">
+                  <ProDescriptions.Item label="零售默认单位" span={2}>
                     {productUomDisplay(
                       data.retailDefaultUom,
                       data.retailDefaultUomDisplay,
@@ -1222,7 +1319,7 @@ const ProductDetailPage: React.FC = () => {
             `/master-data/products/${encodeURIComponent(newItemCode)}`,
           );
         }}
-        open={uomMigrationOpen}
+        open={Boolean(data?.canWrite && uomMigrationOpen)}
       />
     </PageContainer>
   );

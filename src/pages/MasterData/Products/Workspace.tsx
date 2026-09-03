@@ -38,7 +38,6 @@ import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
 import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
-import { MyAppApiError } from '@/services/myapp/api-client';
 import {
   addProductBarcode,
   deleteProductBarcode,
@@ -55,6 +54,7 @@ import {
   updateProduct,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
 
@@ -91,17 +91,6 @@ function workspacePath(itemCode: string, section: WorkspaceSection) {
 
 function detailPath(itemCode: string) {
   return `/master-data/products/${encodeURIComponent(itemCode)}`;
-}
-
-function isDocumentVersionConflict(error: unknown) {
-  return (
-    error instanceof MyAppApiError &&
-    (error.code === 'DOCUMENT_VERSION_CONFLICT' ||
-      (typeof error.data === 'object' &&
-        error.data !== null &&
-        'conflict_type' in error.data &&
-        error.data.conflict_type === 'document_modified'))
-  );
 }
 
 function ProductPriceSection({
