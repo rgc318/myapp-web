@@ -53,7 +53,14 @@ import {
   updateProduct,
 } from '@/services/myapp/master-data';
 import { getMutationErrorMessage } from '@/services/myapp/mutation';
+import { downloadCsv } from '@/utils/csv-export';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  buildProductExportCsvRows,
+  fetchProductExportRows,
+  ProductExportChangedError,
+  ProductExportLimitError,
+} from '@/utils/product-export';
 import {
   buildProductImportRows,
   canPreflightProductImportRow,
@@ -67,7 +74,6 @@ import {
 import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 
 const PAGE_SIZE = 20;
-const EXPORT_LIMIT = 1000;
 
 type ProductFormValues = SaveProductPayload;
 type ProductListQuery = {
@@ -88,14 +94,6 @@ function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
     maximumFractionDigits: 2,
   }).format(value ?? 0);
-}
-
-function formatBarcodeList(record: ProductSummary) {
-  const barcodes = record.barcodes.map((row) => row.barcode).filter(Boolean);
-  if (barcodes.length) {
-    return barcodes.join(' / ');
-  }
-  return record.barcode || '';
 }
 
 function buildProductListOptions(
@@ -136,24 +134,6 @@ function normalizeProductListQuery(
     stockScope: String(params.stockScope ?? 'all'),
     warehouseFilter: toOptionalText(params.warehouseFilter) ?? undefined,
   };
-}
-
-function csvCell(value: string | number | null | undefined) {
-  const text = String(value ?? '');
-  return `"${text.replaceAll('"', '""')}"`;
-}
-
-function downloadCsv(filename: string, rows: string[][]) {
-  const content = rows.map((row) => row.map(csvCell).join(',')).join('\n');
-  const blob = new Blob([`\uFEFF${content}`], {
-    type: 'text/csv;charset=utf-8',
-  });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 function buildColumns({
@@ -482,6 +462,10 @@ const ProductsPage: React.FC = () => {
     result: ProductBulkMutationResult;
   }>();
   const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    loaded: number;
+    total: number;
+  }>();
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importPreflighting, setImportPreflighting] = useState(false);
   const [importRows, setImportRows] = useState<ProductImportRow[]>([]);
@@ -772,53 +756,47 @@ const ProductsPage: React.FC = () => {
 
   const handleExport = async () => {
     setExporting(true);
+    setExportProgress({ loaded: 0, total: 0 });
     try {
-      const result = await listProducts({
-        ...buildProductListOptions(lastQuery, EXPORT_LIMIT, 1),
-        limit: EXPORT_LIMIT,
-        start: 0,
-      });
-      downloadCsv('products.csv', [
-        [
-          '商品编码',
-          '商品名称',
-          '规格',
-          '分类',
-          '品牌',
-          '主条码',
-          '全部条码',
-          '库存',
-          '总库存',
-          '单位',
-          '标准售价',
-          '批发价',
-          '零售价',
-          '采购价',
-          '状态',
-        ],
-        ...result.items.map((item) => [
-          item.itemCode,
-          item.itemName,
-          item.specification,
-          item.itemGroup,
-          item.brand,
-          item.barcode,
-          formatBarcodeList(item),
-          String(item.stockQty ?? ''),
-          String(item.totalQty ?? ''),
-          resolveDisplayUom(item.stockUom, item.stockUomDisplay),
-          String(item.priceSummary?.standardSellingRate ?? ''),
-          String(item.priceSummary?.wholesaleRate ?? ''),
-          String(item.priceSummary?.retailRate ?? ''),
-          String(item.priceSummary?.standardBuyingRate ?? ''),
-          item.disabled ? '停用' : '启用',
-        ]),
-      ]);
-      message.success(`已导出 ${result.items.length} 条商品`);
+      const products = await fetchProductExportRows(
+        buildProductListOptions(lastQuery, PAGE_SIZE, 1),
+        {
+          listProducts,
+          onProgress: (loaded, total) => setExportProgress({ loaded, total }),
+        },
+      );
+      downloadCsv(
+        'products.csv',
+        buildProductExportCsvRows(products, {
+          brand: lastQuery.brandFilter,
+          company: lastQuery.company,
+          disabled:
+            lastQuery.disabledFilter === 'disabled'
+              ? 'disabled'
+              : lastQuery.disabledFilter === 'all'
+                ? 'all'
+                : 'enabled',
+          itemGroup: lastQuery.itemGroupFilter,
+          searchKey: lastQuery.searchKey,
+          stockScope: lastQuery.stockScope === 'in_stock' ? 'in_stock' : 'all',
+          warehouse: lastQuery.warehouseFilter,
+        }),
+      );
+      message.success(`已完整导出 ${products.length} 条商品`);
     } catch (caught) {
-      message.error(caught instanceof Error ? caught.message : '导出失败');
+      if (caught instanceof ProductExportLimitError) {
+        Modal.warning({
+          content: `当前浏览器导出最多支持 ${caught.maxRows} 条。请增加商品状态、分类、品牌、公司、仓库或关键词筛选后再导出；更大数据量应使用后端异步导出任务。`,
+          title: `当前筛选结果共 ${caught.total} 条，未生成截断文件`,
+        });
+      } else if (caught instanceof ProductExportChangedError) {
+        message.warning(caught.message);
+      } else {
+        message.error(caught instanceof Error ? caught.message : '导出失败');
+      }
     } finally {
       setExporting(false);
+      setExportProgress(undefined);
     }
   };
 
@@ -1093,7 +1071,9 @@ const ProductsPage: React.FC = () => {
             loading={exporting}
             onClick={handleExport}
           >
-            导出
+            {exporting && exportProgress?.total
+              ? `导出 ${exportProgress.loaded}/${exportProgress.total}`
+              : '导出'}
           </Button>,
         ]}
       />

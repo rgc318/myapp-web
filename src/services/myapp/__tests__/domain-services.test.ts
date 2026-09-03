@@ -926,6 +926,16 @@ describe('myapp domain services', () => {
         data: [
           {
             brand: 'Brand',
+            barcode: '690000000001',
+            barcodes: [
+              {
+                barcode: '690000000001',
+                idx: 1,
+                is_primary: 1,
+                name: 'BARCODE-ROW-1',
+                uom: 'Nos',
+              },
+            ],
             image: '/files/item.png',
             item_code: 'SKU-1',
             item_name: 'Camera',
@@ -979,12 +989,24 @@ describe('myapp domain services', () => {
       inStockOnly: true,
       itemGroup: 'Products',
       searchKey: 'Camera',
+      sortBy: 'name',
+      sortOrder: 'asc',
     });
 
     expect(result.items[0]).toMatchObject({
       imageUrl: 'http://api.example.test/files/item.png',
       itemCode: 'SKU-1',
       itemName: 'Camera',
+      barcode: '690000000001',
+      barcodes: [
+        {
+          barcode: '690000000001',
+          idx: 1,
+          isPrimary: true,
+          name: 'BARCODE-ROW-1',
+          uom: 'Nos',
+        },
+      ],
       price: 19.9,
       retailDefaultUom: 'Nos',
       totalQty: 5,
@@ -1015,6 +1037,8 @@ describe('myapp domain services', () => {
         in_stock_only: 1,
         item_group: 'Products',
         search_key: 'Camera',
+        sort_by: 'name',
+        sort_order: 'asc',
       }),
     );
   });

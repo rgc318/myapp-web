@@ -27,6 +27,8 @@ export type ProductListOptions = ListOptions & {
   inStockOnly?: boolean;
   itemGroup?: string;
   itemContext?: 'sales' | 'purchase' | 'inventory' | 'any';
+  sortBy?: 'modified' | 'creation' | 'item_name' | 'name';
+  sortOrder?: 'asc' | 'desc';
   warehouse?: string;
 };
 
@@ -1271,6 +1273,8 @@ export async function listProducts(options: ProductListOptions = {}) {
       item_group: toOptionalText(options.itemGroup),
       limit: options.limit ?? 40,
       search_key: toOptionalText(options.searchKey),
+      sort_by: options.sortBy,
+      sort_order: options.sortOrder,
       start: options.start ?? 0,
       warehouse: toOptionalText(options.warehouse),
     }),
