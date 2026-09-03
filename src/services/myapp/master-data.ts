@@ -1613,13 +1613,24 @@ function productSavePayload(
   });
 }
 
-export async function createProduct(payload: SaveProductPayload) {
+type ProductMutationOptions = {
+  idempotencyKey?: string;
+  notifyError?: boolean;
+  notifySuccess?: boolean;
+};
+
+export async function createProduct(
+  payload: SaveProductPayload,
+  options: ProductMutationOptions = {},
+) {
   return runGatewayMutation<ProductSummary>('create_product_v2', {
+    idempotencyKey: options.idempotencyKey,
+    notifyError: options.notifyError,
     payload: definedPayload({
       ...productSavePayload(payload, { includeEmptyFields: true }),
       item_code: payload.itemCode ?? undefined,
     }),
-    successMessage: '商品已创建',
+    successMessage: options.notifySuccess === false ? undefined : '商品已创建',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }
@@ -1652,16 +1663,17 @@ export async function createProductAndStock(
 export async function updateProduct(
   itemCode: string,
   payload: UpdateProductPayload,
-  options: { notifyError?: boolean } = {},
+  options: ProductMutationOptions = {},
 ) {
   return runGatewayMutation<ProductSummary>('update_product_v2', {
+    idempotencyKey: options.idempotencyKey,
     notifyError: options.notifyError,
     payload: definedPayload({
       ...productSavePayload(payload),
       item_code: itemCode,
       item_modified: toOptionalText(payload.itemModified),
     }),
-    successMessage: '商品已更新',
+    successMessage: options.notifySuccess === false ? undefined : '商品已更新',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }
@@ -1670,16 +1682,22 @@ export async function setProductDisabled(
   itemCode: string,
   disabled: boolean,
   itemModified?: string | null,
-  options: { notifyError?: boolean } = {},
+  options: ProductMutationOptions = {},
 ) {
   return runGatewayMutation<ProductSummary>('disable_product_v2', {
+    idempotencyKey: options.idempotencyKey,
     notifyError: options.notifyError,
     payload: compactPayload({
       disabled: disabled ? 1 : 0,
       item_code: itemCode,
       item_modified: toOptionalText(itemModified),
     }),
-    successMessage: disabled ? '商品已停用' : '商品已启用',
+    successMessage:
+      options.notifySuccess === false
+        ? undefined
+        : disabled
+          ? '商品已停用'
+          : '商品已启用',
     transform: (raw) => mapProduct(readObject(raw)),
   });
 }
@@ -1695,7 +1713,7 @@ export async function bulkSetProductsDisabled(
         target.itemCode,
         disabled,
         target.itemModified,
-        { notifyError: false },
+        { notifyError: false, notifySuccess: false },
       );
       result.succeeded.push(response.data);
     } catch (caught) {
@@ -1718,7 +1736,7 @@ export async function bulkUpdateProducts(
       const response = await updateProduct(target.itemCode, {
         ...payload,
         itemModified: target.itemModified,
-      }, { notifyError: false });
+      }, { notifyError: false, notifySuccess: false });
       result.succeeded.push(response.data);
     } catch (caught) {
       result.failed.push({

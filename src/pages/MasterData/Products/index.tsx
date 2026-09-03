@@ -37,11 +37,13 @@ import { ProductImage } from '@/components/ProductImage';
 import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import { UomSelect } from '@/components/UomSelect';
+import { createIdempotencyKey } from '@/services/myapp/api-client';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import {
   bulkSetProductsDisabled,
   bulkUpdateProducts,
   createProduct,
+  getProductDetail,
   listProducts,
   type ProductBulkMutationResult,
   type ProductSummary,
@@ -50,7 +52,19 @@ import {
   setProductDisabled,
   updateProduct,
 } from '@/services/myapp/master-data';
+import { getMutationErrorMessage } from '@/services/myapp/mutation';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  buildProductImportRows,
+  canPreflightProductImportRow,
+  executeProductImportRows,
+  getProductImportRowIssue,
+  isProductImportRowExecutable,
+  type ProductImportRow,
+  parseProductImportCsv,
+  preflightProductImportRows,
+} from '@/utils/product-import';
+import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 
 const PAGE_SIZE = 20;
 const EXPORT_LIMIT = 1000;
@@ -69,25 +83,6 @@ type ProductBulkFormValues = {
   brand?: string | null;
   itemGroup?: string | null;
 };
-type ProductImportAction = 'create' | 'update';
-type ProductImportStatus = 'pending' | 'success' | 'error';
-type ProductImportRowBase = {
-  action: ProductImportAction;
-  error?: string;
-  itemCode?: string | null;
-  itemName: string;
-  line: number;
-  status: ProductImportStatus;
-};
-type ProductImportRow =
-  | (ProductImportRowBase & {
-      action: 'create';
-      payload: SaveProductPayload;
-    })
-  | (ProductImportRowBase & {
-      action: 'update';
-      payload: Partial<SaveProductPayload>;
-    });
 
 function formatNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('zh-CN', {
@@ -101,265 +96,6 @@ function formatBarcodeList(record: ProductSummary) {
     return barcodes.join(' / ');
   }
   return record.barcode || '';
-}
-
-function normalizeCsvHeader(value: string) {
-  return value
-    .trim()
-    .replace(/^\uFEFF/, '')
-    .toLowerCase();
-}
-
-function splitCsvLine(line: string) {
-  const cells: string[] = [];
-  let current = '';
-  let quoted = false;
-
-  for (let index = 0; index < line.length; index += 1) {
-    const char = line[index];
-    const nextChar = line[index + 1];
-    if (char === '"' && quoted && nextChar === '"') {
-      current += '"';
-      index += 1;
-      continue;
-    }
-    if (char === '"') {
-      quoted = !quoted;
-      continue;
-    }
-    if (char === ',' && !quoted) {
-      cells.push(current.trim());
-      current = '';
-      continue;
-    }
-    current += char;
-  }
-
-  cells.push(current.trim());
-  return cells;
-}
-
-function parseCsv(text: string) {
-  const lines = text
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .split('\n')
-    .filter((line) => line.trim());
-  if (lines.length < 2) {
-    return [];
-  }
-  const headers = splitCsvLine(lines[0]).map(normalizeCsvHeader);
-  return lines.slice(1).map((line, index) => {
-    const cells = splitCsvLine(line);
-    return headers.reduce<Record<string, string>>(
-      (row, header, cellIndex) => {
-        row[header] = cells[cellIndex]?.trim() ?? '';
-        return row;
-      },
-      { __line: String(index + 2) },
-    );
-  });
-}
-
-function readCsvField(row: Record<string, string>, keys: string[]) {
-  for (const key of keys) {
-    const value = row[normalizeCsvHeader(key)]?.trim();
-    if (value) {
-      return value;
-    }
-  }
-  return undefined;
-}
-
-function readCsvNumber(row: Record<string, string>, keys: string[]) {
-  const value = readCsvField(row, keys);
-  if (!value) {
-    return undefined;
-  }
-  const parsed = Number(value.replaceAll(',', ''));
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function readCsvBoolean(row: Record<string, string>, keys: string[]) {
-  const value = readCsvField(row, keys)?.toLowerCase();
-  if (!value) {
-    return undefined;
-  }
-  if (['1', 'true', 'yes', 'y', '停用', '禁用', 'disabled'].includes(value)) {
-    return true;
-  }
-  if (['0', 'false', 'no', 'n', '启用', 'enabled'].includes(value)) {
-    return false;
-  }
-  return undefined;
-}
-
-function mapImportAction(value?: string): ProductImportAction {
-  const normalized = value?.trim().toLowerCase();
-  if (normalized === 'update' || normalized === '更新') {
-    return 'update';
-  }
-  return 'create';
-}
-
-function setOptionalTextPayload<K extends keyof SaveProductPayload>(
-  payload: Partial<SaveProductPayload>,
-  key: K,
-  value: SaveProductPayload[K] | undefined,
-) {
-  if (value !== undefined) {
-    payload[key] = value;
-  }
-}
-
-function setOptionalNumberPayload<K extends keyof SaveProductPayload>(
-  payload: Partial<SaveProductPayload>,
-  key: K,
-  value: SaveProductPayload[K] | undefined,
-) {
-  if (value !== undefined) {
-    payload[key] = value;
-  }
-}
-
-function buildImportRows(
-  rawRows: Record<string, string>[],
-): ProductImportRow[] {
-  return rawRows.map((row) => {
-    const action = mapImportAction(readCsvField(row, ['action', '导入动作']));
-    const itemCode = readCsvField(row, ['itemCode', 'item_code', '商品编码']);
-    const itemName =
-      readCsvField(row, ['itemName', 'item_name', '商品名称']) ?? '';
-    const stockUom =
-      readCsvField(row, ['stockUom', 'stock_uom', '库存单位']) ?? 'Nos';
-    const barcode = readCsvField(row, ['barcode', '主条码', '条码']);
-    const brand = readCsvField(row, ['brand', '品牌']);
-    const currency = readCsvField(row, ['currency', '币种']);
-    const description = readCsvField(row, ['description', '描述']);
-    const disabled = readCsvBoolean(row, ['disabled', '停用']);
-    const itemGroup = readCsvField(row, [
-      'itemGroup',
-      'item_group',
-      '商品分类',
-    ]);
-    const retailDefaultUom = readCsvField(row, [
-      'retailDefaultUom',
-      'retail_default_uom',
-      '零售默认单位',
-    ]);
-    const retailRate = readCsvNumber(row, [
-      'retailRate',
-      'retail_rate',
-      '零售价',
-    ]);
-    const standardBuyingRate = readCsvNumber(row, [
-      'standardBuyingRate',
-      'standard_buying_rate',
-      '标准采购价',
-      '采购价',
-    ]);
-    const standardSellingRate = readCsvNumber(row, [
-      'standardSellingRate',
-      'standard_rate',
-      '标准售价',
-    ]);
-    const valuationRate = readCsvNumber(row, [
-      'valuationRate',
-      'valuation_rate',
-      '估值价',
-    ]);
-    const wholesaleDefaultUom = readCsvField(row, [
-      'wholesaleDefaultUom',
-      'wholesale_default_uom',
-      '批发默认单位',
-    ]);
-    const wholesaleRate = readCsvNumber(row, [
-      'wholesaleRate',
-      'wholesale_rate',
-      '批发价',
-    ]);
-
-    if (action === 'update') {
-      const payload: Partial<SaveProductPayload> = {};
-      setOptionalTextPayload(payload, 'barcode', barcode);
-      setOptionalTextPayload(payload, 'brand', brand);
-      setOptionalTextPayload(payload, 'currency', currency);
-      setOptionalTextPayload(payload, 'description', description);
-      setOptionalTextPayload(payload, 'itemGroup', itemGroup);
-      setOptionalTextPayload(payload, 'itemName', itemName || undefined);
-      setOptionalTextPayload(payload, 'retailDefaultUom', retailDefaultUom);
-      setOptionalTextPayload(
-        payload,
-        'stockUom',
-        readCsvField(row, ['stockUom', 'stock_uom', '库存单位']),
-      );
-      setOptionalTextPayload(
-        payload,
-        'wholesaleDefaultUom',
-        wholesaleDefaultUom,
-      );
-      setOptionalNumberPayload(payload, 'retailRate', retailRate);
-      setOptionalNumberPayload(
-        payload,
-        'standardBuyingRate',
-        standardBuyingRate,
-      );
-      setOptionalNumberPayload(
-        payload,
-        'standardSellingRate',
-        standardSellingRate,
-      );
-      setOptionalNumberPayload(payload, 'valuationRate', valuationRate);
-      setOptionalNumberPayload(payload, 'wholesaleRate', wholesaleRate);
-      if (disabled !== undefined) {
-        payload.disabled = disabled;
-      }
-      const error = !itemCode
-        ? '更新商品必须填写商品编码'
-        : Object.keys(payload).length === 0
-          ? '更新商品必须至少填写一个更新字段'
-          : undefined;
-      return {
-        action,
-        error,
-        itemCode,
-        itemName,
-        line: Number(row.__line ?? 0),
-        payload,
-        status: error ? 'error' : 'pending',
-      };
-    }
-
-    const payload: SaveProductPayload = {
-      barcode: barcode ?? null,
-      brand: brand ?? null,
-      currency: currency ?? 'CNY',
-      description: description ?? null,
-      disabled,
-      itemCode: itemCode ?? null,
-      itemGroup: itemGroup ?? null,
-      itemName,
-      retailDefaultUom: retailDefaultUom ?? stockUom,
-      retailRate,
-      standardBuyingRate,
-      standardSellingRate,
-      stockUom,
-      valuationRate,
-      wholesaleDefaultUom: wholesaleDefaultUom ?? stockUom,
-      wholesaleRate,
-    };
-    const error =
-      !itemName && action === 'create' ? '新增商品必须填写商品名称' : undefined;
-    return {
-      action,
-      error,
-      itemCode,
-      itemName,
-      line: Number(row.__line ?? 0),
-      payload,
-      status: error ? 'error' : 'pending',
-    };
-  });
 }
 
 function buildProductListOptions(
@@ -747,6 +483,7 @@ const ProductsPage: React.FC = () => {
   }>();
   const [exporting, setExporting] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importPreflighting, setImportPreflighting] = useState(false);
   const [importRows, setImportRows] = useState<ProductImportRow[]>([]);
   const [importSubmitting, setImportSubmitting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -758,7 +495,16 @@ const ProductsPage: React.FC = () => {
     itemCode: product.itemCode,
     itemModified: product.modified,
   }));
-  const validImportRows = importRows.filter((row) => !row.error);
+  const executableImportRows = importRows.filter(isProductImportRowExecutable);
+  const importSuccessCount = importRows.filter(
+    (row) => row.status === 'success',
+  ).length;
+  const importFailureCount = importRows.filter(
+    (row) => row.status === 'error' || row.status === 'invalid',
+  ).length;
+  const importUpdateRowsToPreflight = importRows.filter(
+    canPreflightProductImportRow,
+  );
 
   useEffect(() => {
     const draftId = new URLSearchParams(window.location.search).get('ai_draft');
@@ -1141,11 +887,15 @@ const ProductsPage: React.FC = () => {
   const handleImportFile = async (file: File) => {
     try {
       const text = await file.text();
-      const rows = buildImportRows(parseCsv(text));
+      const rows = buildProductImportRows(parseProductImportCsv(text), () =>
+        createIdempotencyKey('web-product-import-row'),
+      );
       setImportRows(rows);
       setImportModalOpen(true);
       if (!rows.length) {
         message.warning('未读取到可导入的商品行');
+      } else {
+        await handlePreflightImportRows(rows);
       }
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '读取 CSV 失败');
@@ -1153,42 +903,52 @@ const ProductsPage: React.FC = () => {
     return Upload.LIST_IGNORE;
   };
 
+  const handlePreflightImportRows = async (rows: ProductImportRow[]) => {
+    if (!rows.some(canPreflightProductImportRow)) {
+      return;
+    }
+    setImportPreflighting(true);
+    try {
+      const rowsAfterPreflight = await preflightProductImportRows(rows, {
+        createRequestId: () =>
+          createIdempotencyKey('web-product-import-update-row'),
+        formatError: getMutationErrorMessage,
+        getProduct: getProductDetail,
+        onRowsChange: setImportRows,
+      });
+      setImportRows(rowsAfterPreflight);
+    } finally {
+      setImportPreflighting(false);
+    }
+  };
+
   const handleRunImport = async () => {
-    if (!validImportRows.length) {
+    if (!executableImportRows.length) {
       message.warning('没有可执行的导入行');
       return;
     }
     setImportSubmitting(true);
-    const nextRows = [...importRows];
     try {
-      for (const row of nextRows) {
-        if (row.error) {
-          continue;
-        }
-        try {
-          if (row.action === 'update') {
-            await updateProduct(String(row.itemCode), row.payload);
-          } else {
-            await createProduct(row.payload);
-          }
-          row.status = 'success';
-          row.error = undefined;
-        } catch (caught) {
-          row.status = 'error';
-          row.error = caught instanceof Error ? caught.message : '导入失败';
-        }
-        setImportRows([...nextRows]);
+      const result = await executeProductImportRows(importRows, {
+        createProduct,
+        formatError: getMutationErrorMessage,
+        isVersionConflict: isDocumentVersionConflict,
+        onRowsChange: setImportRows,
+        updateProduct,
+      });
+      setImportRows(result.rows);
+      if (result.failed) {
+        message.warning(
+          `本次完成：成功 ${result.succeeded} 行，失败 ${result.failed} 行，跳过 ${result.skipped} 行`,
+        );
+      } else {
+        message.success(
+          `本次完成：成功 ${result.succeeded} 行，跳过 ${result.skipped} 行`,
+        );
       }
-      const successCount = nextRows.filter(
-        (row) => row.status === 'success',
-      ).length;
-      const errorCount = nextRows.filter(
-        (row) => row.status === 'error',
-      ).length;
-      message.success(
-        `导入完成：成功 ${successCount} 行，失败 ${errorCount} 行`,
-      );
-      reload();
+      if (result.succeeded) {
+        reload();
+      }
     } finally {
       setImportSubmitting(false);
     }
@@ -1392,12 +1152,18 @@ const ProductsPage: React.FC = () => {
       </Modal>
       <Modal
         cancelText="关闭"
-        confirmLoading={importSubmitting}
+        cancelButtonProps={{
+          disabled: importPreflighting || importSubmitting,
+        }}
+        confirmLoading={importPreflighting || importSubmitting}
         destroyOnHidden
         okButtonProps={{
-          disabled: !validImportRows.length,
+          disabled:
+            importPreflighting ||
+            importSubmitting ||
+            !executableImportRows.length,
         }}
-        okText="开始导入"
+        okText={importSuccessCount ? '继续导入可重试行' : '开始导入'}
         onCancel={() => setImportModalOpen(false)}
         onOk={handleRunImport}
         open={importModalOpen}
@@ -1406,7 +1172,7 @@ const ProductsPage: React.FC = () => {
       >
         <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <Alert
-            message="CSV 导入按行执行；导入动作为 create 时创建商品，为 update 时按商品编码更新商品。"
+            title="CSV 按行独立执行：更新行会先校验商品权限并锁定当前版本；已成功行不会重复执行，失败行不会回滚其他成功记录。"
             showIcon
             type="info"
           />
@@ -1417,8 +1183,16 @@ const ProductsPage: React.FC = () => {
             >
               下载模板
             </Button>
+            <Button
+              disabled={importSubmitting || !importUpdateRowsToPreflight.length}
+              loading={importPreflighting}
+              onClick={() => handlePreflightImportRows(importRows)}
+            >
+              重新预检更新行
+            </Button>
             <Typography.Text type="secondary">
-              已读取 {importRows.length} 行，可执行 {validImportRows.length} 行
+              共 {importRows.length} 行，可执行 {executableImportRows.length}{' '}
+              行，已成功 {importSuccessCount} 行，失败 {importFailureCount} 行
             </Typography.Text>
           </Space>
           <ProTable<ProductImportRow>
@@ -1474,17 +1248,36 @@ const ProductsPage: React.FC = () => {
                   if (record.status === 'success') {
                     return <Tag color="green">成功</Tag>;
                   }
-                  if (record.status === 'error') {
-                    return <Tag color="red">失败</Tag>;
+                  if (record.status === 'ready') {
+                    return <Tag color="blue">可执行</Tag>;
                   }
-                  return <Tag>待导入</Tag>;
+                  if (record.status === 'validating') {
+                    return <Tag color="processing">预检中</Tag>;
+                  }
+                  if (record.status === 'running') {
+                    return <Tag color="processing">执行中</Tag>;
+                  }
+                  if (record.status === 'invalid') {
+                    return <Tag color="red">格式错误</Tag>;
+                  }
+                  if (record.status === 'error') {
+                    return isProductImportRowExecutable(record) ? (
+                      <Tag color="orange">可重试</Tag>
+                    ) : (
+                      <Tag color="red">失败</Tag>
+                    );
+                  }
+                  return <Tag>待预检</Tag>;
                 },
               },
               {
                 title: '提示',
-                dataIndex: 'error',
                 ellipsis: true,
-                renderText: (value) => value || '-',
+                renderText: (_, record) =>
+                  getProductImportRowIssue(record) ||
+                  (record.status === 'success'
+                    ? '该行已完成，后续执行会自动跳过'
+                    : '-'),
               },
             ]}
             dataSource={importRows}
