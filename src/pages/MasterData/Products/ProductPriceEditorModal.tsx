@@ -17,6 +17,10 @@ import {
   saveProductPrice,
 } from '@/services/myapp/master-data';
 import { resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  resolvePriceListDisplay,
+  resolvePriceListOptionLabel,
+} from '@/utils/price-list-display';
 
 type ProductPriceFormValues = {
   currency?: string;
@@ -52,7 +56,7 @@ export function ProductPriceEditorModal({
         .filter((row) => (defaultType === 'buying' ? row.buying : row.selling))
         .map((row) => ({
           currency: row.currency,
-          label: row.name,
+          label: resolvePriceListOptionLabel(row.name),
           value: row.name,
         })),
     [collection?.priceLists, defaultType],
@@ -117,7 +121,11 @@ export function ProductPriceEditorModal({
       onCancel={onClose}
       onOk={() => form.submit()}
       open={open}
-      title={editingPrice ? `修改价格 · ${editingPrice.priceList}` : '新增价格'}
+      title={
+        editingPrice
+          ? `修改价格 · ${resolvePriceListDisplay(editingPrice.priceList)}`
+          : '新增价格'
+      }
       width={760}
     >
       <Alert

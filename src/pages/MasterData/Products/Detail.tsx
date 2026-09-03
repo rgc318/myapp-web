@@ -50,6 +50,7 @@ import {
   terminateProductPrice,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { resolvePriceListDisplay } from '@/utils/price-list-display';
 import {
   assessProductQuality,
   type ProductQualityAction,
@@ -222,6 +223,9 @@ function PriceEntriesTable({
       columns={[
         {
           dataIndex: 'priceList',
+          render: (value) => (
+            <span title={value}>{resolvePriceListDisplay(value)}</span>
+          ),
           title: '价格表',
         },
         {
@@ -1039,7 +1043,9 @@ const ProductDetailPage: React.FC = () => {
                 >
                   <ProDescriptions column={2}>
                     <ProDescriptions.Item label="当前价格表">
-                      {data.priceSummary?.currentPriceList || '-'}
+                      {resolvePriceListDisplay(
+                        data.priceSummary?.currentPriceList,
+                      )}
                     </ProDescriptions.Item>
                     <ProDescriptions.Item label="当前价格">
                       {formatCurrencyValue(data.priceSummary?.currentRate)}

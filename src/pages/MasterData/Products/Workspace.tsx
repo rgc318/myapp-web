@@ -54,6 +54,7 @@ import {
   updateProduct,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { resolvePriceListDisplay } from '@/utils/price-list-display';
 import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
@@ -162,7 +163,13 @@ function ProductPriceSection({
       >
         <Table<ProductPriceRecord>
           columns={[
-            { dataIndex: 'priceList', title: '价格表' },
+            {
+              dataIndex: 'priceList',
+              render: (value) => (
+                <span title={value}>{resolvePriceListDisplay(value)}</span>
+              ),
+              title: '价格表',
+            },
             {
               dataIndex: 'uom',
               render: (value) =>

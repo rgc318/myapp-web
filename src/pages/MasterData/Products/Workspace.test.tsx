@@ -325,7 +325,7 @@ describe('ProductMaintenanceWorkspace', () => {
     });
     renderWorkspace();
 
-    expect(await screen.findByText('Standard Selling')).toBeTruthy();
+    expect(await screen.findByText('标准销售')).toBeTruthy();
     expect(
       screen.getByRole<HTMLButtonElement>('button', { name: /新增销售价格/ })
         .disabled,
