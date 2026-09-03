@@ -101,7 +101,7 @@ describe('ProductDetailDrawer', () => {
     expect(screen.getByText('测试商品')).toBeTruthy();
     expect(screen.getByText('商品图片')).toBeTruthy();
     expect(screen.getByText('完整价目表')).toBeTruthy();
-    expect(screen.getByText('Wholesale')).toBeTruthy();
+    expect(screen.getByText('批发')).toBeTruthy();
     expect(screen.getByRole('img', { name: '商品图片：无图片' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /上传图片/ })).toBeTruthy();
     expect(

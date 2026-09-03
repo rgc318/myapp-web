@@ -10,6 +10,7 @@ import {
 import dayjs, { type Dayjs } from 'dayjs';
 import React, { useEffect, useMemo, useState } from 'react';
 import { CurrencySelect } from '@/components/CurrencySelect';
+import { PriceListName } from '@/components/PriceListName';
 import {
   type ProductPriceCollection,
   type ProductPriceRecord,
@@ -17,10 +18,7 @@ import {
   saveProductPrice,
 } from '@/services/myapp/master-data';
 import { resolveDisplayUom } from '@/utils/myapp-display';
-import {
-  resolvePriceListDisplay,
-  resolvePriceListOptionLabel,
-} from '@/utils/price-list-display';
+import { resolvePriceListOptionLabel } from '@/utils/price-list-display';
 
 type ProductPriceFormValues = {
   currency?: string;
@@ -122,9 +120,13 @@ export function ProductPriceEditorModal({
       onOk={() => form.submit()}
       open={open}
       title={
-        editingPrice
-          ? `修改价格 · ${resolvePriceListDisplay(editingPrice.priceList)}`
-          : '新增价格'
+        editingPrice ? (
+          <>
+            修改价格 · <PriceListName code={editingPrice.priceList} />
+          </>
+        ) : (
+          '新增价格'
+        )
       }
       width={760}
     >

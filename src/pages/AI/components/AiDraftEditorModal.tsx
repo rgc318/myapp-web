@@ -397,8 +397,8 @@ export function AiDraftEditorModal({
   const inventoryValuationReferenceHelp =
     inventoryValuationReferenceFactor > 0 &&
     inventoryValuationReferenceFactor !== 1
-      ? `已将 Standard Buying 的 ${inventoryValuationReference.rate ?? '-'} / ${inventoryValuationReference.uom_display ?? inventoryValuationReference.uom ?? '-'} 按换算系数 ${inventoryValuationReferenceFactor} 折算为每${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}成本。`
-      : '已从 Standard Buying 的标准采购参考价带出。';
+      ? `已将标准采购（Standard Buying）的 ${inventoryValuationReference.rate ?? '-'} / ${inventoryValuationReference.uom_display ?? inventoryValuationReference.uom ?? '-'} 按换算系数 ${inventoryValuationReferenceFactor} 折算为每${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}成本。`
+      : '已从标准采购（Standard Buying）的标准采购参考价带出。';
   const inventoryValuationRateHelp = inventoryValuationReferenceConflict
     ? '检测到多个标准采购参考价折算后不一致，因此没有自动填写。请确认正确的采购计价单位，或按本次库存的实际来源手工填写。'
     : inventoryValuationRateSource === 'standard_buying_reference'
@@ -1052,7 +1052,7 @@ export function AiDraftEditorModal({
                   <Form.Item
                     label="标准销售参考价"
                     name="standardSellingRate"
-                    extra="写入 Standard Selling，仅在没有匹配到更具体的客户、渠道或价格表规则时作为销售兜底参考；不等同于批发价或零售价。"
+                    extra="写入标准销售（Standard Selling），仅在没有匹配到更具体的客户、渠道或价格表规则时作为销售兜底参考；不等同于批发价或零售价。"
                   >
                     <InputNumber
                       min={0}
@@ -1063,7 +1063,7 @@ export function AiDraftEditorModal({
                   <Form.Item
                     label="批发价"
                     name="wholesaleRate"
-                    extra="写入 Wholesale 价格表，供批发销售模式默认取价。"
+                    extra="写入批发（Wholesale）价格表，供批发销售模式默认取价。"
                   >
                     <InputNumber
                       min={0}
@@ -1074,7 +1074,7 @@ export function AiDraftEditorModal({
                   <Form.Item
                     label="零售价"
                     name="retailRate"
-                    extra="写入 Retail 价格表，供零售销售模式默认取价。"
+                    extra="写入零售（Retail）价格表，供零售销售模式默认取价。"
                   >
                     <InputNumber
                       min={0}
@@ -1087,8 +1087,8 @@ export function AiDraftEditorModal({
                     name="standardBuyingRate"
                     extra={
                       hasOpeningStock
-                        ? '写入 Standard Buying，并作为当前初始库存估值的建议来源；请按实际取得成本核对，销售价格不会参与库存计价。'
-                        : '写入 Standard Buying，作为没有供应商合同价、数量阶梯价或采购价格表时的采购兜底参考；它不是库存实时估值。'
+                        ? '写入标准采购（Standard Buying），并作为当前初始库存估值的建议来源；请按实际取得成本核对，销售价格不会参与库存计价。'
+                        : '写入标准采购（Standard Buying），作为没有供应商合同价、数量阶梯价或采购价格表时的采购兜底参考；它不是库存实时估值。'
                     }
                     required={hasOpeningStock}
                     rules={[

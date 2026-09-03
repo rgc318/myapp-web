@@ -36,6 +36,7 @@ import {
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { PriceListName } from '@/components/PriceListName';
 import { ProductUomFields } from '@/components/ProductUomFields';
 import { RemoteLinkSelect } from '@/components/RemoteLinkSelect';
 import {
@@ -54,7 +55,7 @@ import {
   updateProduct,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
-import { resolvePriceListDisplay } from '@/utils/price-list-display';
+import { resolvePriceListReferenceDisplay } from '@/utils/price-list-display';
 import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
@@ -165,10 +166,9 @@ function ProductPriceSection({
           columns={[
             {
               dataIndex: 'priceList',
-              render: (value) => (
-                <span title={value}>{resolvePriceListDisplay(value)}</span>
-              ),
+              render: (value) => <PriceListName code={value} />,
               title: '价格表',
+              width: 130,
             },
             {
               dataIndex: 'uom',
@@ -240,7 +240,7 @@ function ProductPriceSection({
           loading={loading}
           pagination={false}
           rowKey="name"
-          scroll={{ x: 900 }}
+          scroll={{ x: 990 }}
           size="small"
         />
       </ProCard>
@@ -532,7 +532,11 @@ function ProductHistorySection({ product }: { product: ProductSummary }) {
               <Space orientation="vertical" size={0}>
                 <Typography.Text strong>{record.title}</Typography.Text>
                 <Typography.Text type="secondary">
-                  {record.summary || record.sourceName}
+                  {record.category === 'price'
+                    ? resolvePriceListReferenceDisplay(
+                        record.summary || record.sourceName,
+                      )
+                    : record.summary || record.sourceName}
                 </Typography.Text>
               </Space>
             ),

@@ -31,6 +31,7 @@ import {
 } from 'antd';
 import React, { useRef, useState } from 'react';
 import { CurrencySelect } from '@/components/CurrencySelect';
+import { PriceListName } from '@/components/PriceListName';
 import type { PageResult } from '@/services/myapp/api-utils';
 import { toOptionalText } from '@/services/myapp/api-utils';
 import type {
@@ -1056,6 +1057,7 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
           </Space>
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item
+              extra="这里保存价格表的稳定标识；详情和业务页面会按当前语言显示本地化名称。"
               label="默认价格表"
               name="defaultPriceList"
               style={{ flex: 1 }}
@@ -1175,7 +1177,9 @@ const PartyManagementPage: React.FC<PartyManagementPageProps> = ({
                       {
                         title: '默认价格表',
                         dataIndex: 'defaultPriceList',
-                        renderText: (value) => value || '-',
+                        render: (_, record) => (
+                          <PriceListName code={record.defaultPriceList} />
+                        ),
                       },
                       {
                         title: '付款条款',

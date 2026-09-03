@@ -19,6 +19,7 @@ import {
   Typography,
 } from 'antd';
 import React, { useEffect, useMemo, useState } from 'react';
+import { PriceListName } from '@/components/PriceListName';
 import { ProductUomFields } from '@/components/ProductUomFields';
 import {
   assessProductUomMigration,
@@ -28,6 +29,10 @@ import {
   type SaveProductPayload,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  resolvePriceListDisplay,
+  resolvePriceListOptionLabel,
+} from '@/utils/price-list-display';
 
 type MigrationFormValues = SaveProductPayload & {
   barcodeMappings: {
@@ -101,7 +106,7 @@ function findDuplicatePricePlan(
   for (const row of rows) {
     const key = `${row.priceList}\u0000${row.currency}\u0000${row.targetUom}`;
     if (seen.has(key)) {
-      return `${row.priceList} / ${row.currency || '默认币种'} / ${resolveDisplayUom(
+      return `${resolvePriceListDisplay(row.priceList)} / ${row.currency || '默认币种'} / ${resolveDisplayUom(
         row.targetUom,
       )}`;
     }
@@ -143,7 +148,10 @@ export function ProductUomMigrationModal({
       'Standard Buying',
       ...(assessment?.prices.map((price) => price.priceList) ?? []),
     ]);
-    return [...names].map((name) => ({ label: name, value: name }));
+    return [...names].map((name) => ({
+      label: resolvePriceListOptionLabel(name),
+      value: name,
+    }));
   }, [assessment]);
 
   useEffect(() => {
@@ -560,7 +568,12 @@ export function ProductUomMigrationModal({
                 />
                 <Table<ProductUomMigrationPrice>
                   columns={[
-                    { dataIndex: 'priceList', title: '价格表' },
+                    {
+                      dataIndex: 'priceList',
+                      render: (value) => <PriceListName code={value} />,
+                      title: '价格表',
+                      width: 120,
+                    },
                     {
                       dataIndex: 'uom',
                       render: (value) => resolveDisplayUom(value),
@@ -1062,7 +1075,12 @@ export function ProductUomMigrationModal({
             </ProDescriptions>
             <Table
               columns={[
-                { dataIndex: 'priceList', title: '价格表' },
+                {
+                  dataIndex: 'priceList',
+                  render: (value) => <PriceListName code={value} />,
+                  title: '价格表',
+                  width: 120,
+                },
                 { dataIndex: 'currency', title: '币种' },
                 {
                   dataIndex: 'uom',

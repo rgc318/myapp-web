@@ -1,6 +1,7 @@
 import {
   resolvePriceListDisplay,
   resolvePriceListOptionLabel,
+  resolvePriceListReferenceDisplay,
 } from '../price-list-display';
 
 describe('price list display', () => {
@@ -12,6 +13,9 @@ describe('price list display', () => {
     expect(resolvePriceListOptionLabel('Standard Selling')).toBe(
       '标准销售（Standard Selling）',
     );
+    expect(resolvePriceListReferenceDisplay('Standard Selling · 件')).toBe(
+      '标准销售 · 件',
+    );
   });
 
   it('supports traditional Chinese and preserves custom price list names', () => {
@@ -19,6 +23,9 @@ describe('price list display', () => {
       '標準採購',
     );
     expect(resolvePriceListDisplay('VIP 2026')).toBe('VIP 2026');
+    expect(resolvePriceListReferenceDisplay('VIP 2026 · 件')).toBe(
+      'VIP 2026 · 件',
+    );
     expect(resolvePriceListDisplay('Retail', 'en-US')).toBe('Retail');
   });
 });

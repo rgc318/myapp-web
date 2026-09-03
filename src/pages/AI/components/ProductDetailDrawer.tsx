@@ -18,6 +18,7 @@ import {
 import dayjs from 'dayjs';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { PriceListName } from '@/components/PriceListName';
 import { ProductImage } from '@/components/ProductImage';
 import type { AiCitation } from '@/services/myapp/ai';
 import {
@@ -352,7 +353,12 @@ export function ProductDetailDrawer({
               ) : null}
               <Table
                 columns={[
-                  { dataIndex: 'priceList', title: '价格表' },
+                  {
+                    dataIndex: 'priceList',
+                    render: (value) => <PriceListName code={value} />,
+                    title: '价格表',
+                    width: 120,
+                  },
                   {
                     dataIndex: 'priceListType',
                     render: (value) =>

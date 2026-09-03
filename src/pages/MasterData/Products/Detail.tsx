@@ -30,6 +30,7 @@ import {
 } from 'antd';
 import React, { useEffect, useState } from 'react';
 import { BarcodeScannerButton } from '@/components/BarcodeScannerButton';
+import { PriceListName } from '@/components/PriceListName';
 import { ProductImage } from '@/components/ProductImage';
 import {
   listStockLedgerEntries,
@@ -50,7 +51,6 @@ import {
   terminateProductPrice,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
-import { resolvePriceListDisplay } from '@/utils/price-list-display';
 import {
   assessProductQuality,
   type ProductQualityAction,
@@ -223,10 +223,9 @@ function PriceEntriesTable({
       columns={[
         {
           dataIndex: 'priceList',
-          render: (value) => (
-            <span title={value}>{resolvePriceListDisplay(value)}</span>
-          ),
+          render: (value) => <PriceListName code={value} />,
           title: '价格表',
+          width: 112,
         },
         {
           dataIndex: 'uom',
@@ -310,6 +309,7 @@ function PriceEntriesTable({
       rowKey={(record) =>
         `${record.priceList}:${record.uom ?? ''}:${record.currency}`
       }
+      scroll={{ x: 832 }}
       size="small"
       title={() => title}
     />
@@ -1043,9 +1043,9 @@ const ProductDetailPage: React.FC = () => {
                 >
                   <ProDescriptions column={2}>
                     <ProDescriptions.Item label="当前价格表">
-                      {resolvePriceListDisplay(
-                        data.priceSummary?.currentPriceList,
-                      )}
+                      <PriceListName
+                        code={data.priceSummary?.currentPriceList}
+                      />
                     </ProDescriptions.Item>
                     <ProDescriptions.Item label="当前价格">
                       {formatCurrencyValue(data.priceSummary?.currentRate)}
