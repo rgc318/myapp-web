@@ -50,6 +50,10 @@ import {
   terminateProductPrice,
 } from '@/services/myapp/master-data';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import {
+  assessProductQuality,
+  type ProductQualityAction,
+} from '@/utils/product-quality';
 import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 import { ProductPriceEditorModal } from './ProductPriceEditorModal';
 import { ProductUomMigrationModal } from './ProductUomMigrationModal';
@@ -57,13 +61,6 @@ import { ProductUomMigrationModal } from './ProductUomMigrationModal';
 type BarcodeFormValues = {
   barcode: string;
   uom: string;
-};
-type ProductQualityIssue = {
-  action?: 'edit' | 'inventory';
-  description: string;
-  key: string;
-  title: string;
-  type: 'error' | 'warning' | 'info';
 };
 
 function formatNumber(value: number | null | undefined) {
@@ -109,125 +106,17 @@ function signedText(value: number) {
   return <span style={{ color }}>{`${prefix}${formatNumber(value)}`}</span>;
 }
 
-function hasText(value: string | null | undefined) {
-  return Boolean(value?.trim());
-}
-
-function hasPositiveAmount(value: number | null | undefined) {
-  return Number(value ?? 0) > 0;
-}
-
-function buildProductQualityIssues(
-  product: ProductSummary,
-): ProductQualityIssue[] {
-  const issues: ProductQualityIssue[] = [];
-  const totalQty = Number(product.totalQty ?? product.stockQty ?? 0);
-
-  if (!hasText(product.imageUrl)) {
-    issues.push({
-      action: 'edit',
-      description: '缺少商品图片会降低选品和现场识别效率。',
-      key: 'image',
-      title: '未维护商品图片',
-      type: 'info',
-    });
-  }
-  if (!hasText(product.itemGroup)) {
-    issues.push({
-      action: 'edit',
-      description: '商品分类会影响筛选、选品和经营报表分层。',
-      key: 'item-group',
-      title: '未维护商品分类',
-      type: 'warning',
-    });
-  }
-  if (!hasText(product.brand)) {
-    issues.push({
-      action: 'edit',
-      description: '品牌信息缺失会影响采购、销售和商品分析维度。',
-      key: 'brand',
-      title: '未维护品牌',
-      type: 'info',
-    });
-  }
-  if (!hasText(product.barcode)) {
-    issues.push({
-      action: 'edit',
-      description: '缺少主条码会影响扫码选品和移动端现场操作。',
-      key: 'barcode',
-      title: '未维护主条码',
-      type: 'warning',
-    });
-  }
-  if (!hasText(product.stockUom)) {
-    issues.push({
-      action: 'edit',
-      description: '库存单位是销售、采购、库存换算的基础字段。',
-      key: 'stock-uom',
-      title: '未维护库存单位',
-      type: 'error',
-    });
-  }
-  if (!product.uomConversions.length) {
-    issues.push({
-      action: 'edit',
-      description: '缺少单位换算会影响多单位销售、采购和库存核算。',
-      key: 'uom-conversion',
-      title: '未维护单位换算',
-      type: 'warning',
-    });
-  }
-  if (!hasPositiveAmount(product.priceSummary?.standardSellingRate)) {
-    issues.push({
-      action: 'edit',
-      description: '缺少标准售价会影响销售录单和报价参考。',
-      key: 'selling-price',
-      title: '未维护标准售价',
-      type: 'warning',
-    });
-  }
-  if (!hasPositiveAmount(product.priceSummary?.standardBuyingRate)) {
-    issues.push({
-      action: 'edit',
-      description: '缺少采购价会影响采购录单、成本估算和毛利分析。',
-      key: 'buying-price',
-      title: '未维护标准采购价',
-      type: 'warning',
-    });
-  }
-  if (product.disabled && totalQty > 0) {
-    issues.push({
-      action: 'inventory',
-      description: '停用商品仍有库存，建议确认是否需要清仓、调拨或继续启用。',
-      key: 'disabled-with-stock',
-      title: '停用商品仍有库存',
-      type: 'warning',
-    });
-  }
-  if (totalQty < 0) {
-    issues.push({
-      action: 'inventory',
-      description: '负库存会影响成本和可售库存判断，应优先核对库存流水。',
-      key: 'negative-stock',
-      title: '存在负库存',
-      type: 'error',
-    });
-  }
-
-  return issues;
-}
-
-function qualityScore(issues: ProductQualityIssue[]) {
-  const penalty = issues.reduce((total, issue) => {
-    if (issue.type === 'error') {
-      return total + 25;
-    }
-    if (issue.type === 'warning') {
-      return total + 15;
-    }
-    return total + 8;
-  }, 0);
-  return Math.max(0, 100 - penalty);
+function qualityActionLabel(action: ProductQualityAction) {
+  const labels: Record<ProductQualityAction, string> = {
+    basic: '完善资料',
+    units: '检查单位',
+    'selling-prices': '维护销售价格',
+    'buying-prices': '维护采购价格',
+    barcodes: '维护条码',
+    inventory: '处理库存',
+    ledger: '查看流水',
+  };
+  return labels[action];
 }
 
 function WarehouseStockTable({
@@ -603,11 +492,38 @@ const ProductDetailPage: React.FC = () => {
     );
   };
 
+  const openWorkspaceSection = (section: string) => {
+    if (!data) return;
+    history.push(
+      `/master-data/products/${encodeURIComponent(data.itemCode)}/edit?section=${section}`,
+    );
+  };
+
   const openEdit = () => {
     if (!data?.canWrite) return;
-    history.push(
-      `/master-data/products/${encodeURIComponent(data.itemCode)}/edit?section=basic`,
-    );
+    openWorkspaceSection('basic');
+  };
+
+  const canHandleQualityAction = (action: ProductQualityAction) => {
+    if (!data) return false;
+    if (action === 'inventory' || action === 'ledger') return true;
+    if (action === 'selling-prices' || action === 'buying-prices') {
+      return Boolean(priceCollection?.canCreate || priceCollection?.canWrite);
+    }
+    return data.canWrite;
+  };
+
+  const handleQualityAction = (action: ProductQualityAction) => {
+    if (!data) return;
+    if (action === 'ledger') {
+      history.push(ledgerPath(data.itemCode, warehouse));
+      return;
+    }
+    if (action === 'inventory') {
+      history.push('/inventory/adjustments');
+      return;
+    }
+    openWorkspaceSection(action);
   };
 
   const handleToggleDisabled = async () => {
@@ -883,8 +799,9 @@ const ProductDetailPage: React.FC = () => {
 
             <ProCard title="资料质量">
               {(() => {
-                const issues = buildProductQualityIssues(data);
-                const score = qualityScore(issues);
+                const assessment = assessProductQuality(data, {
+                  prices: priceCollection?.prices,
+                });
                 return (
                   <Space
                     orientation="vertical"
@@ -894,22 +811,34 @@ const ProductDetailPage: React.FC = () => {
                     <Space wrap>
                       <Tag
                         color={
-                          score >= 85 ? 'green' : score >= 70 ? 'gold' : 'red'
+                          assessment.status === 'healthy'
+                            ? 'green'
+                            : assessment.status === 'attention'
+                              ? 'gold'
+                              : 'red'
                         }
                       >
-                        资料完整度 {score}%
+                        {assessment.status === 'healthy'
+                          ? '治理状态良好'
+                          : assessment.status === 'attention'
+                            ? '治理状态需关注'
+                            : '治理状态异常'}
                       </Tag>
-                      <Tag
-                        color={
-                          issues.some((issue) => issue.type === 'error')
-                            ? 'red'
-                            : 'blue'
-                        }
-                      >
-                        {issues.length
-                          ? `${issues.length} 项待处理`
-                          : '无需处理'}
-                      </Tag>
+                      {assessment.errorCount ? (
+                        <Tag color="red">
+                          {assessment.errorCount} 项数据错误
+                        </Tag>
+                      ) : null}
+                      {assessment.warningCount ? (
+                        <Tag color="gold">
+                          {assessment.warningCount} 项业务风险
+                        </Tag>
+                      ) : null}
+                      {assessment.suggestionCount ? (
+                        <Tag color="blue">
+                          {assessment.suggestionCount} 项可选完善建议
+                        </Tag>
+                      ) : null}
                       <Button
                         disabled={!data.canWrite}
                         size="small"
@@ -924,43 +853,30 @@ const ProductDetailPage: React.FC = () => {
                         库存处理
                       </Button>
                     </Space>
-                    {issues.length ? (
+                    {assessment.issues.length ? (
                       <Space
                         orientation="vertical"
                         size={8}
                         style={{ width: '100%' }}
                       >
-                        {issues.map((issue) => (
+                        {assessment.issues.map((issue) => (
                           <Alert
                             action={
-                              issue.action === 'inventory' ? (
-                                <Button
-                                  size="small"
-                                  onClick={() =>
-                                    history.push(
-                                      issue.key === 'negative-stock'
-                                        ? ledgerPath(data.itemCode, warehouse)
-                                        : '/inventory/adjustments',
-                                    )
-                                  }
-                                >
-                                  处理库存
-                                </Button>
-                              ) : (
-                                <Button
-                                  disabled={!data.canWrite}
-                                  size="small"
-                                  onClick={openEdit}
-                                >
-                                  补充资料
-                                </Button>
-                              )
+                              <Button
+                                disabled={!canHandleQualityAction(issue.action)}
+                                size="small"
+                                onClick={() =>
+                                  handleQualityAction(issue.action)
+                                }
+                              >
+                                {qualityActionLabel(issue.action)}
+                              </Button>
                             }
                             description={issue.description}
                             key={issue.key}
                             title={issue.title}
                             showIcon
-                            type={issue.type}
+                            type={issue.severity}
                           />
                         ))}
                       </Space>

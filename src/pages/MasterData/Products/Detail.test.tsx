@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { history } from '@umijs/max';
 import { App } from 'antd';
 import React from 'react';
 import { listStockLedgerEntries } from '@/services/myapp/inventory';
@@ -84,6 +85,7 @@ const mockedGetProductDetail = jest.mocked(getProductDetail);
 const mockedListProductPrices = jest.mocked(listProductPrices);
 const mockedListStockLedgerEntries = jest.mocked(listStockLedgerEntries);
 const mockedSetProductDisabled = jest.mocked(setProductDisabled);
+const mockedHistoryPush = history.push as jest.Mock;
 const originalGetComputedStyle = window.getComputedStyle;
 
 const product = {
@@ -198,5 +200,24 @@ describe('ProductDetailPage permissions and concurrency', () => {
         },
       );
     });
+  });
+
+  it('separates optional enrichment from data errors and routes fixes precisely', async () => {
+    renderPage();
+
+    expect(await screen.findByText('治理状态良好')).toBeTruthy();
+    expect(screen.queryByText(/资料完整度/)).toBeNull();
+    expect(screen.getByText('尚未维护条码（可选）')).toBeTruthy();
+    expect(screen.getByText('尚未维护采购参考价（可选）')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '维护条码' }));
+    expect(mockedHistoryPush).toHaveBeenCalledWith(
+      '/master-data/products/ITEM-001/edit?section=barcodes',
+    );
+    expect(
+      screen.getByRole<HTMLButtonElement>('button', {
+        name: '维护采购价格',
+      }).disabled,
+    ).toBe(true);
   });
 });

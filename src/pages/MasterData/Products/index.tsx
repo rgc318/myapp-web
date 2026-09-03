@@ -71,6 +71,7 @@ import {
   parseProductImportCsv,
   preflightProductImportRows,
 } from '@/utils/product-import';
+import { assessProductQuality } from '@/utils/product-quality';
 import { isDocumentVersionConflict } from '@/utils/product-version-conflict';
 
 const PAGE_SIZE = 20;
@@ -399,6 +400,42 @@ function buildColumns({
       width: 120,
       render: (_, record) =>
         formatCurrencyValue(record.priceSummary?.standardBuyingRate),
+    },
+    {
+      title: '资料质量',
+      key: 'quality',
+      search: false,
+      width: 110,
+      render: (_, record) => {
+        const assessment = assessProductQuality(record);
+        const detail = [
+          assessment.errorCount ? `${assessment.errorCount} 项错误` : '',
+          assessment.warningCount ? `${assessment.warningCount} 项风险` : '',
+          assessment.suggestionCount
+            ? `${assessment.suggestionCount} 项建议`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('，');
+        return (
+          <Tag
+            color={
+              assessment.status === 'healthy'
+                ? 'green'
+                : assessment.status === 'attention'
+                  ? 'gold'
+                  : 'red'
+            }
+            title={detail || '未发现明显问题'}
+          >
+            {assessment.status === 'healthy'
+              ? '良好'
+              : assessment.status === 'attention'
+                ? '需关注'
+                : '异常'}
+          </Tag>
+        );
+      },
     },
     {
       title: '状态',
@@ -1010,7 +1047,7 @@ const ProductsPage: React.FC = () => {
             setSelectedProducts(rows);
           },
         }}
-        scroll={{ x: 1460 }}
+        scroll={{ x: 1580 }}
         search={{
           defaultCollapsed: false,
           labelWidth: 88,
