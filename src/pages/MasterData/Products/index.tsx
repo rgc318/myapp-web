@@ -43,6 +43,7 @@ import {
   bulkUpdateProducts,
   createProduct,
   listProducts,
+  type ProductBulkMutationResult,
   type ProductSummary,
   type SaveProductPayload,
   searchProducts,
@@ -733,10 +734,17 @@ const ProductsPage: React.FC = () => {
   const [form] = Form.useForm<ProductFormValues>();
   const [bulkForm] = Form.useForm<ProductBulkFormValues>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<ProductSummary[]>(
+    [],
+  );
   const [lastQuery, setLastQuery] = useState<ProductListQuery>({});
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{
+    action: string;
+    result: ProductBulkMutationResult;
+  }>();
   const [exporting, setExporting] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importRows, setImportRows] = useState<ProductImportRow[]>([]);
@@ -746,6 +754,10 @@ const ProductsPage: React.FC = () => {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string>();
 
   const selectedItemCodes = selectedRowKeys.map(String);
+  const selectedTargets = selectedProducts.map((product) => ({
+    itemCode: product.itemCode,
+    itemModified: product.modified,
+  }));
   const validImportRows = importRows.filter((row) => !row.error);
 
   useEffect(() => {
@@ -940,12 +952,25 @@ const ProductsPage: React.FC = () => {
       message.warning('请先选择商品');
       return;
     }
+    if (selectedTargets.length !== selectedItemCodes.length) {
+      message.warning('部分选中商品版本已失效，请刷新列表后重新选择');
+      return;
+    }
     setBulkSubmitting(true);
     try {
-      await bulkSetProductsDisabled(selectedItemCodes, disabled);
-      message.success(
-        `${selectedItemCodes.length} 个商品已${disabled ? '停用' : '启用'}`,
-      );
+      const result = await bulkSetProductsDisabled(selectedTargets, disabled);
+      setBulkResult({ action: disabled ? '批量停用' : '批量启用', result });
+      if (result.failed.length) {
+        message.warning(
+          `已处理 ${result.succeeded.length} 个，${result.failed.length} 个失败，请查看结果明细。`,
+        );
+      } else {
+        message.success(
+          `${result.succeeded.length} 个商品已${disabled ? '停用' : '启用'}`,
+        );
+      }
+      setSelectedRowKeys([]);
+      setSelectedProducts([]);
       reload();
     } catch (caught) {
       message.error(caught instanceof Error ? caught.message : '批量操作失败');
@@ -970,13 +995,26 @@ const ProductsPage: React.FC = () => {
       message.warning('请选择要修改的分类或品牌');
       return;
     }
+    if (selectedTargets.length !== selectedItemCodes.length) {
+      message.warning('部分选中商品版本已失效，请刷新列表后重新选择');
+      return;
+    }
     setBulkSubmitting(true);
     try {
-      await bulkUpdateProducts(selectedItemCodes, {
+      const result = await bulkUpdateProducts(selectedTargets, {
         ...(itemGroup ? { itemGroup } : {}),
         ...(brand ? { brand } : {}),
       });
-      message.success(`${selectedItemCodes.length} 个商品已更新`);
+      setBulkResult({ action: '批量修改', result });
+      if (result.failed.length) {
+        message.warning(
+          `已更新 ${result.succeeded.length} 个，${result.failed.length} 个失败，请查看结果明细。`,
+        );
+      } else {
+        message.success(`${result.succeeded.length} 个商品已更新`);
+      }
+      setSelectedRowKeys([]);
+      setSelectedProducts([]);
       setBulkModalOpen(false);
       reload();
     } catch (caught) {
@@ -1227,8 +1265,12 @@ const ProductsPage: React.FC = () => {
         }}
         rowKey="itemCode"
         rowSelection={{
+          preserveSelectedRowKeys: true,
           selectedRowKeys,
-          onChange: (keys) => setSelectedRowKeys(keys),
+          onChange: (keys, rows) => {
+            setSelectedRowKeys(keys);
+            setSelectedProducts(rows);
+          },
         }}
         scroll={{ x: 1460 }}
         search={{
@@ -1295,6 +1337,59 @@ const ProductsPage: React.FC = () => {
           </Button>,
         ]}
       />
+      <Modal
+        cancelButtonProps={{ style: { display: 'none' } }}
+        onCancel={() => setBulkResult(undefined)}
+        onOk={() => setBulkResult(undefined)}
+        open={Boolean(bulkResult)}
+        title={`${bulkResult?.action ?? '批量操作'}结果`}
+        width={720}
+      >
+        <Alert
+          description={`成功 ${bulkResult?.result.succeeded.length ?? 0} 个，失败 ${bulkResult?.result.failed.length ?? 0} 个。批量操作按商品逐条提交，不会因单条失败回滚已经成功的商品。`}
+          showIcon
+          style={{ marginBottom: 16 }}
+          title={
+            bulkResult?.result.failed.length
+              ? '部分商品未处理成功'
+              : '全部处理成功'
+          }
+          type={bulkResult?.result.failed.length ? 'warning' : 'success'}
+        />
+        <ProTable
+          columns={[
+            { dataIndex: 'itemCode', title: '商品编码' },
+            {
+              dataIndex: 'status',
+              render: (_, row) =>
+                row.error ? (
+                  <Tag color="red">失败</Tag>
+                ) : (
+                  <Tag color="green">成功</Tag>
+                ),
+              title: '结果',
+              width: 100,
+            },
+            {
+              dataIndex: 'error',
+              renderText: (value) => value || '-',
+              title: '说明',
+            },
+          ]}
+          dataSource={[
+            ...(bulkResult?.result.succeeded.map((product) => ({
+              error: '',
+              itemCode: product.itemCode,
+            })) ?? []),
+            ...(bulkResult?.result.failed ?? []),
+          ]}
+          pagination={false}
+          rowKey="itemCode"
+          search={false}
+          size="small"
+          toolBarRender={false}
+        />
+      </Modal>
       <Modal
         cancelText="关闭"
         confirmLoading={importSubmitting}

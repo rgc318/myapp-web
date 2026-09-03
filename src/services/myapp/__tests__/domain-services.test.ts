@@ -127,6 +127,7 @@ import {
 jest.mock('../api-client', () => ({
   callGatewayMethod: jest.fn(),
   createIdempotencyKey: jest.fn(() => 'web-test-key'),
+  MyAppApiError: class MyAppApiError extends Error {},
 }));
 
 jest.mock('../api-base', () => ({
@@ -3480,33 +3481,74 @@ describe('myapp domain services', () => {
       data: { item_code: 'ITEM-001', item_name: '新品', stock_uom: 'Nos' },
     });
 
-    await bulkUpdateProducts(['ITEM-001', 'ITEM-002'], { brand: 'Brand B' });
-    await bulkSetProductsDisabled(['ITEM-001', 'ITEM-002'], true);
+    const targets = [
+      { itemCode: 'ITEM-001', itemModified: '2026-09-03 10:00:00' },
+      { itemCode: 'ITEM-002', itemModified: '2026-09-03 10:01:00' },
+    ];
+    await bulkUpdateProducts(targets, { brand: 'Brand B' });
+    await bulkSetProductsDisabled(targets, true);
 
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       1,
       'update_product_v2',
-      { brand: 'Brand B', item_code: 'ITEM-001' },
+      {
+        brand: 'Brand B',
+        item_code: 'ITEM-001',
+        item_modified: '2026-09-03 10:00:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       2,
       'update_product_v2',
-      { brand: 'Brand B', item_code: 'ITEM-002' },
+      {
+        brand: 'Brand B',
+        item_code: 'ITEM-002',
+        item_modified: '2026-09-03 10:01:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       3,
       'disable_product_v2',
-      { disabled: 1, item_code: 'ITEM-001' },
+      {
+        disabled: 1,
+        item_code: 'ITEM-001',
+        item_modified: '2026-09-03 10:00:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
     expect(mockedCallGatewayMethod).toHaveBeenNthCalledWith(
       4,
       'disable_product_v2',
-      { disabled: 1, item_code: 'ITEM-002' },
+      {
+        disabled: 1,
+        item_code: 'ITEM-002',
+        item_modified: '2026-09-03 10:01:00',
+      },
       expect.objectContaining({ idempotencyKey: 'web-test-key' }),
     );
+  });
+
+  it('returns itemized partial failures for bulk product maintenance', async () => {
+    mockedCallGatewayMethod
+      .mockResolvedValueOnce({
+        data: { item_code: 'ITEM-001', item_name: '商品一', stock_uom: 'Nos' },
+      })
+      .mockRejectedValueOnce(new Error('商品资料已被其他人修改'));
+
+    const result = await bulkUpdateProducts(
+      [
+        { itemCode: 'ITEM-001', itemModified: '2026-09-03 10:00:00' },
+        { itemCode: 'ITEM-002', itemModified: '2026-09-03 10:01:00' },
+      ],
+      { brand: 'Brand B' },
+    );
+
+    expect(result.succeeded).toHaveLength(1);
+    expect(result.failed).toEqual([
+      { error: '商品资料已被其他人修改', itemCode: 'ITEM-002' },
+    ]);
   });
 
   it('runs product barcode mutations through gateway', async () => {

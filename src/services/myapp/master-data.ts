@@ -321,6 +321,16 @@ export type UpdateProductPayload = Partial<SaveProductPayload> & {
   itemModified?: string | null;
 };
 
+export type ProductBulkMutationTarget = {
+  itemCode: string;
+  itemModified?: string | null;
+};
+
+export type ProductBulkMutationResult = {
+  failed: { error: string; itemCode: string }[];
+  succeeded: ProductSummary[];
+};
+
 export type CreateProductAndStockPayload = {
   defaultWarehouse?: string | null;
   description?: string | null;
@@ -1642,8 +1652,10 @@ export async function createProductAndStock(
 export async function updateProduct(
   itemCode: string,
   payload: UpdateProductPayload,
+  options: { notifyError?: boolean } = {},
 ) {
   return runGatewayMutation<ProductSummary>('update_product_v2', {
+    notifyError: options.notifyError,
     payload: definedPayload({
       ...productSavePayload(payload),
       item_code: itemCode,
@@ -1658,8 +1670,10 @@ export async function setProductDisabled(
   itemCode: string,
   disabled: boolean,
   itemModified?: string | null,
+  options: { notifyError?: boolean } = {},
 ) {
   return runGatewayMutation<ProductSummary>('disable_product_v2', {
+    notifyError: options.notifyError,
     payload: compactPayload({
       disabled: disabled ? 1 : 0,
       item_code: itemCode,
@@ -1671,27 +1685,49 @@ export async function setProductDisabled(
 }
 
 export async function bulkSetProductsDisabled(
-  itemCodes: string[],
+  targets: ProductBulkMutationTarget[],
   disabled: boolean,
-) {
-  const results: ProductSummary[] = [];
-  for (const itemCode of itemCodes) {
-    const result = await setProductDisabled(itemCode, disabled);
-    results.push(result.data);
+): Promise<ProductBulkMutationResult> {
+  const result: ProductBulkMutationResult = { failed: [], succeeded: [] };
+  for (const target of targets) {
+    try {
+      const response = await setProductDisabled(
+        target.itemCode,
+        disabled,
+        target.itemModified,
+        { notifyError: false },
+      );
+      result.succeeded.push(response.data);
+    } catch (caught) {
+      result.failed.push({
+        error: caught instanceof Error ? caught.message : '操作失败',
+        itemCode: target.itemCode,
+      });
+    }
   }
-  return results;
+  return result;
 }
 
 export async function bulkUpdateProducts(
-  itemCodes: string[],
+  targets: ProductBulkMutationTarget[],
   payload: UpdateProductPayload,
-) {
-  const results: ProductSummary[] = [];
-  for (const itemCode of itemCodes) {
-    const result = await updateProduct(itemCode, payload);
-    results.push(result.data);
+): Promise<ProductBulkMutationResult> {
+  const result: ProductBulkMutationResult = { failed: [], succeeded: [] };
+  for (const target of targets) {
+    try {
+      const response = await updateProduct(target.itemCode, {
+        ...payload,
+        itemModified: target.itemModified,
+      }, { notifyError: false });
+      result.succeeded.push(response.data);
+    } catch (caught) {
+      result.failed.push({
+        error: caught instanceof Error ? caught.message : '更新失败',
+        itemCode: target.itemCode,
+      });
+    }
   }
-  return results;
+  return result;
 }
 
 export async function addProductBarcode(
