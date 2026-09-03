@@ -11,6 +11,8 @@ import {
   Select,
   Space,
   Spin,
+  Table,
+  Tag,
   Typography,
 } from 'antd';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,6 +23,7 @@ import {
 } from '@/components';
 import { CurrencySelect } from '@/components/CurrencySelect';
 import { ItemImageUpload } from '@/components/ItemImageUpload';
+import { PriceListName } from '@/components/PriceListName';
 import { UomSelect } from '@/components/UomSelect';
 import {
   type AiDraft,
@@ -67,6 +70,15 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   wholesale_rate: '批发价',
 };
 
+const INVENTORY_REASON_PRESETS = [
+  '盘点盘盈',
+  '盘点盘亏',
+  '期初库存校准',
+  '历史数据纠正',
+  '单位或包装换算纠正',
+  '破损、报废或过期损耗',
+];
+
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -76,6 +88,14 @@ function objectValue(value: unknown): Record<string, unknown> {
 function productStateValue(value: unknown) {
   if (value === null || value === undefined || value === '') return '未设置';
   return String(value);
+}
+
+function formatInventoryNumber(value: unknown, precision = 6) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return '-';
+  return number.toLocaleString('zh-CN', {
+    maximumFractionDigits: precision,
+  });
 }
 
 function unresolvedSelectionQuery(
@@ -274,6 +294,16 @@ export function AiDraftEditorModal({
   const adjustmentType = Form.useWatch('adjustmentType', form);
   const inventoryQuantity = Form.useWatch('quantity', form);
   const inventoryUom = Form.useWatch('uom', form);
+  const inventoryValuationInputUom = Form.useWatch('valuationInputUom', form);
+  const inventoryValuationRate = Form.useWatch('valuationRate', form);
+  const inventoryValuationRateSource = Form.useWatch(
+    'valuationRateSource',
+    form,
+  );
+  const inventoryValuationReferenceId = Form.useWatch(
+    'valuationReferenceId',
+    form,
+  );
   const selectedBrand = Form.useWatch('brand', form);
   const selectedItemCode = Form.useWatch('itemCode', form);
   const selectedItemGroup = Form.useWatch('itemGroup', form);
@@ -372,40 +402,120 @@ export function AiDraftEditorModal({
   const inventoryNeedsValuationRate =
     inventoryTargetStockQty !== null &&
     inventoryTargetStockQty > inventoryCurrentStockQty;
-  const inventoryValuationRateSource = String(
-    inventorySourceItem.valuation_rate_source ?? '',
-  );
-  const inventoryValuationReference = objectValue(
-    inventorySourceItem.valuation_rate_reference,
-  );
-  const inventoryValuationReferenceConflict =
-    inventoryValuationReference.conflict === true;
-  const inventoryValuationConflictDetails = Array.isArray(
-    inventoryValuationReference.candidates,
+  const inventoryValuationCandidates = Array.isArray(
+    inventorySourceItem.valuation_rate_candidates,
   )
-    ? inventoryValuationReference.candidates
-        .map(objectValue)
-        .map(
-          (row) =>
-            `${row.rate ?? '-'} / ${row.uom_display ?? row.uom ?? '-'} → ${row.stock_unit_rate ?? '-'} / ${(inventoryValuationReference.stock_uom_display ?? inventoryStockUomDisplay) || '-'}`,
-        )
-        .join('；')
-    : '';
-  const inventoryValuationReferenceFactor = Number(
-    inventoryValuationReference.conversion_factor ?? 1,
+    ? inventorySourceItem.valuation_rate_candidates.map(objectValue)
+    : [];
+  const inventoryCurrentValuationRate = Number(
+    inventorySourceItem.current_valuation_rate ?? 0,
   );
-  const inventoryValuationReferenceHelp =
-    inventoryValuationReferenceFactor > 0 &&
-    inventoryValuationReferenceFactor !== 1
-      ? `已将标准采购（Standard Buying）的 ${inventoryValuationReference.rate ?? '-'} / ${inventoryValuationReference.uom_display ?? inventoryValuationReference.uom ?? '-'} 按换算系数 ${inventoryValuationReferenceFactor} 折算为每${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}成本。`
-      : '已从标准采购（Standard Buying）的标准采购参考价带出。';
-  const inventoryValuationRateHelp = inventoryValuationReferenceConflict
-    ? '检测到多个标准采购参考价折算后不一致，因此没有自动填写。请确认正确的采购计价单位，或按本次库存的实际来源手工填写。'
-    : inventoryValuationRateSource === 'standard_buying_reference'
-      ? `商品当前没有有效库存估值，${inventoryValuationReferenceHelp}请按本次库存的实际来源核对；执行库存调整不会创建采购单、供应商应付或采购发票。`
+  const inventoryCurrentStockValue = Number(
+    inventorySourceItem.current_stock_value ??
+      inventoryCurrentStockQty * inventoryCurrentValuationRate,
+  );
+  const inventoryTargetStockValue =
+    inventoryTargetStockQty !== null &&
+    Number.isFinite(Number(inventoryValuationRate))
+      ? inventoryTargetStockQty * Number(inventoryValuationRate)
+      : null;
+  const inventoryStockValueDifference =
+    inventoryTargetStockValue === null
+      ? null
+      : inventoryTargetStockValue - inventoryCurrentStockValue;
+  const inventoryRevaluesExistingStock =
+    inventoryCurrentStockQty > 0 &&
+    Number.isFinite(Number(inventoryValuationRate)) &&
+    Math.abs(Number(inventoryValuationRate) - inventoryCurrentValuationRate) >=
+      0.000001;
+  const inventoryValuationReference =
+    inventoryValuationCandidates.find(
+      (row) => row.reference_id === inventoryValuationReferenceId,
+    ) ?? objectValue(inventorySourceItem.valuation_rate_reference);
+  const inventoryValuationInputDisplay = String(
+    (Array.isArray(inventorySourceItem.available_uoms)
+      ? inventorySourceItem.available_uoms
+          .map(objectValue)
+          .find((row) => row.uom === inventoryValuationInputUom)?.uom_display
+      : undefined) ??
+      inventoryValuationCandidates.find(
+        (row) => row.uom === inventoryValuationInputUom,
+      )?.uom_display ??
+      inventoryValuationInputUom ??
+      inventoryUom ??
+      '',
+  );
+  const inventoryValuationRateHelp =
+    inventoryValuationRateSource === 'buying_price_reference'
+      ? `已采用采购价格表“${String(inventoryValuationReference.price_list ?? '-')}”的价格；后端会按 Item Price 记录重新核验并折算。`
       : inventoryValuationRateSource === 'current_valuation'
-        ? `已沿用商品当前库存估值，按库存基准单位“${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}”计价。`
-        : `按库存基准单位“${inventoryStockUomDisplay || inventorySourceItem.stock_uom || '库存基准单位'}”计价。库存调整不是采购，但增加库存必须确定新增库存资产的估值。`;
+        ? '已沿用当前仓库的实际库存估值。'
+        : '人工价格按当前选择单位录入，系统会折算为库存基准单位估值。';
+
+  const applyInventoryValuationCandidate = (
+    candidate: Record<string, unknown>,
+  ) => {
+    if (!candidate.selectable) return;
+    form.setFieldsValue({
+      valuationInputRate: Number(candidate.rate),
+      valuationInputUom: String(candidate.uom ?? ''),
+      valuationRate: Number(candidate.stock_unit_rate),
+      valuationRateSource: 'buying_price_reference',
+      valuationReferenceId: String(candidate.reference_id ?? ''),
+    });
+    setDirty(true);
+  };
+
+  const updateInventoryValuationForUom = (nextUom: string) => {
+    const nextUnit = Array.isArray(inventorySourceItem.available_uoms)
+      ? inventorySourceItem.available_uoms
+          .map(objectValue)
+          .find((row) => row.uom === nextUom)
+      : undefined;
+    const nextFactor = Number(nextUnit?.conversion_factor ?? 0);
+    const source = form.getFieldValue('valuationRateSource');
+    const currentStockUnitRate = Number(form.getFieldValue('valuationRate'));
+    if (
+      source === 'user' &&
+      nextFactor > 0 &&
+      Number.isFinite(currentStockUnitRate) &&
+      currentStockUnitRate > 0
+    ) {
+      form.setFieldsValue({
+        valuationInputRate: currentStockUnitRate * nextFactor,
+        valuationInputUom: nextUom,
+        valuationRate: currentStockUnitRate,
+        valuationRateSource: 'user',
+        valuationReferenceId: undefined,
+      });
+      message.info('已按新单位换算并保留你的人工库存估值。');
+      return;
+    }
+    if (inventoryCurrentValuationRate > 0 && nextFactor > 0) {
+      form.setFieldsValue({
+        valuationInputRate: inventoryCurrentValuationRate * nextFactor,
+        valuationInputUom: nextUom,
+        valuationRate: inventoryCurrentValuationRate,
+        valuationRateSource: 'current_valuation',
+        valuationReferenceId: undefined,
+      });
+      return;
+    }
+    const exactCandidates = inventoryValuationCandidates.filter(
+      (row) => row.selectable && row.uom === nextUom,
+    );
+    if (exactCandidates.length === 1) {
+      applyInventoryValuationCandidate(exactCandidates[0]);
+      return;
+    }
+    form.setFieldsValue({
+      valuationInputRate: undefined,
+      valuationInputUom: nextUom,
+      valuationRate: undefined,
+      valuationRateSource: undefined,
+      valuationReferenceId: undefined,
+    });
+  };
   const unresolvedProductItemGroupQuery =
     draft?.draftType === 'product_setup'
       ? unresolvedSelectionQuery(
@@ -622,12 +732,12 @@ export function AiDraftEditorModal({
     if (
       draft.draftType === 'inventory_adjustment' &&
       inventoryNeedsValuationRate &&
-      Number(form.getFieldValue('valuationRate') ?? 0) <= 0
+      Number(form.getFieldValue('valuationInputRate') ?? 0) <= 0
     ) {
       try {
-        await form.validateFields(['valuationRate']);
+        await form.validateFields(['valuationInputRate']);
       } catch {
-        form.scrollToField('valuationRate', {
+        form.scrollToField('valuationInputRate', {
           behavior: 'smooth',
           block: 'center',
           focus: true,
@@ -858,6 +968,14 @@ export function AiDraftEditorModal({
                   type={draft.validation.errors.length ? 'warning' : 'info'}
                 />
               ) : null)}
+            {dirty && draft.draftType === 'inventory_adjustment' ? (
+              <Alert
+                message="当前顶部校验来自已保存版本；保存草稿后会按最新单位、价格和实时库存重新校验。"
+                showIcon
+                style={{ marginBottom: 16 }}
+                type="info"
+              />
+            ) : null}
             {draft.draftType === 'product_setup' ? (
               <ProductUpdateState
                 draft={draft}
@@ -1231,7 +1349,11 @@ export function AiDraftEditorModal({
                     warehouse={selectedWarehouse}
                     onChange={() => {
                       form.setFieldValue('uom', undefined);
+                      form.setFieldValue('valuationInputRate', undefined);
+                      form.setFieldValue('valuationInputUom', undefined);
                       form.setFieldValue('valuationRate', undefined);
+                      form.setFieldValue('valuationRateSource', undefined);
+                      form.setFieldValue('valuationReferenceId', undefined);
                     }}
                   />
                 </Form.Item>
@@ -1292,6 +1414,7 @@ export function AiDraftEditorModal({
                 >
                   <Select
                     disabled={!inventoryUomOptions.length}
+                    onChange={(value) => updateInventoryValuationForUom(value)}
                     options={inventoryUomOptions}
                     placeholder={
                       inventoryItemMatchesSource
@@ -1300,75 +1423,330 @@ export function AiDraftEditorModal({
                     }
                   />
                 </Form.Item>
-                {inventoryNeedsValuationRate ? (
+                <Form.Item hidden name="valuationInputUom">
+                  <Input />
+                </Form.Item>
+                <Form.Item hidden name="valuationRate">
+                  <InputNumber />
+                </Form.Item>
+                <Form.Item hidden name="valuationRateSource">
+                  <Input />
+                </Form.Item>
+                <Form.Item hidden name="valuationReferenceId">
+                  <Input />
+                </Form.Item>
+                {inventoryTargetStockQty !== null ? (
+                  <ProCard
+                    style={{ gridColumn: '1 / -1' }}
+                    title="库存估值与价值影响"
+                    variant="outlined"
+                  >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 12,
+                        gridTemplateColumns:
+                          'repeat(auto-fit, minmax(220px, 1fr))',
+                      }}
+                    >
+                      <Form.Item
+                        extra={inventoryValuationRateHelp}
+                        label={`本次计价单位价格（每${inventoryValuationInputDisplay || '所选单位'}）`}
+                        name="valuationInputRate"
+                        required={inventoryNeedsValuationRate}
+                        rules={
+                          inventoryNeedsValuationRate
+                            ? [
+                                {
+                                  validator: async (_, value) => {
+                                    if (Number(value ?? 0) <= 0) {
+                                      throw new Error(
+                                        '增加库存时必须填写有效的计价单位价格',
+                                      );
+                                    }
+                                  },
+                                },
+                              ]
+                            : undefined
+                        }
+                      >
+                        <InputNumber
+                          min={0}
+                          onChange={(value) => {
+                            const numericValue = Number(value);
+                            form.setFieldsValue({
+                              valuationInputUom: inventoryUom,
+                              valuationRate:
+                                Number.isFinite(numericValue) &&
+                                inventoryConversionFactor > 0
+                                  ? numericValue / inventoryConversionFactor
+                                  : undefined,
+                              valuationRateSource: 'user',
+                              valuationReferenceId: undefined,
+                            });
+                          }}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <div>
+                        <Typography.Text type="secondary">
+                          执行后库存估值单价（每
+                          {inventoryStockUomDisplay ||
+                            String(
+                              inventorySourceItem.stock_uom ?? '库存基准单位',
+                            )}
+                          ）
+                        </Typography.Text>
+                        <div style={{ marginTop: 8 }}>
+                          <Typography.Text strong style={{ fontSize: 20 }}>
+                            {formatInventoryNumber(inventoryValuationRate)}
+                          </Typography.Text>
+                          <Tag style={{ marginInlineStart: 8 }}>
+                            {inventoryValuationRateSource ===
+                            'buying_price_reference'
+                              ? '采购价候选'
+                              : inventoryValuationRateSource ===
+                                  'current_valuation'
+                                ? '当前库存估值'
+                                : inventoryValuationRateSource === 'user'
+                                  ? '人工填写'
+                                  : '待确认'}
+                          </Tag>
+                        </div>
+                        <Typography.Paragraph
+                          style={{ marginBottom: 0, marginTop: 8 }}
+                          type="secondary"
+                        >
+                          该数值会写入 ERPNext Stock
+                          Reconciliation，影响库存价值；
+                          采购价格表本身只是候选来源，不会创建采购单、应付或采购发票。
+                        </Typography.Paragraph>
+                      </div>
+                    </div>
+
+                    {inventoryValuationCandidates.length ? (
+                      <div style={{ marginTop: 16 }}>
+                        <Typography.Text strong>
+                          有效采购价格候选
+                        </Typography.Text>
+                        <Table<Record<string, unknown>>
+                          columns={[
+                            {
+                              dataIndex: 'price_list',
+                              render: (value: unknown) => (
+                                <PriceListName code={String(value ?? '')} />
+                              ),
+                              title: '价格表',
+                              width: 150,
+                            },
+                            {
+                              render: (_, row) =>
+                                `${formatInventoryNumber(row.rate)} ${String(row.currency ?? '')}`.trim(),
+                              title: '原价格',
+                              width: 120,
+                            },
+                            {
+                              render: (_, row) =>
+                                String(row.uom_display ?? row.uom ?? '-'),
+                              title: '计价单位',
+                              width: 100,
+                            },
+                            {
+                              dataIndex: 'conversion_factor',
+                              render: (value: unknown) =>
+                                formatInventoryNumber(value),
+                              title: '换算系数',
+                              width: 100,
+                            },
+                            {
+                              dataIndex: 'stock_unit_rate',
+                              render: (value: unknown) =>
+                                formatInventoryNumber(value),
+                              title: `折算后/${inventoryStockUomDisplay || '库存单位'}`,
+                              width: 130,
+                            },
+                            {
+                              render: (_, row) =>
+                                row.valid_from || row.valid_upto
+                                  ? `${row.valid_from ?? '不限'} ～ ${row.valid_upto ?? '不限'}`
+                                  : '长期有效',
+                              title: '有效期',
+                              width: 190,
+                            },
+                            {
+                              fixed: 'right' as const,
+                              render: (_, row) => (
+                                <Button
+                                  disabled={!row.selectable}
+                                  onClick={() =>
+                                    applyInventoryValuationCandidate(row)
+                                  }
+                                  size="small"
+                                  type={
+                                    row.reference_id ===
+                                    inventoryValuationReferenceId
+                                      ? 'primary'
+                                      : 'link'
+                                  }
+                                >
+                                  {!row.selectable
+                                    ? '不可用'
+                                    : row.reference_id ===
+                                        inventoryValuationReferenceId
+                                      ? '已采用'
+                                      : '采用'}
+                                </Button>
+                              ),
+                              title: '操作',
+                              width: 90,
+                            },
+                          ]}
+                          dataSource={inventoryValuationCandidates}
+                          pagination={false}
+                          rowKey={(row) => String(row.reference_id)}
+                          scroll={{ x: 880 }}
+                          size="small"
+                          style={{ marginTop: 8 }}
+                        />
+                        {inventoryValuationCandidates.some(
+                          (row) => !row.selectable,
+                        ) ? (
+                          <Typography.Paragraph
+                            style={{ marginBottom: 0, marginTop: 8 }}
+                            type="secondary"
+                          >
+                            “不可用”表示价格缺少计价单位或商品没有对应换算关系，需要先维护商品价格或单位。
+                          </Typography.Paragraph>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <Alert
+                        message="该商品当前没有有效采购价格候选，可沿用当前库存估值或人工填写。"
+                        showIcon
+                        style={{ marginTop: 16 }}
+                        type="info"
+                      />
+                    )}
+
+                    <div
+                      style={{
+                        display: 'grid',
+                        gap: 12,
+                        gridTemplateColumns:
+                          'repeat(auto-fit, minmax(145px, 1fr))',
+                        marginTop: 16,
+                      }}
+                    >
+                      {[
+                        [
+                          '数量换算',
+                          `${formatInventoryNumber(inventoryQuantity)} ${String(selectedInventoryUom?.uom_display ?? inventoryUom ?? '')} = ${formatInventoryNumber(inventoryInputStockQty)} ${inventoryStockUomDisplay}`,
+                        ],
+                        [
+                          '当前库存',
+                          `${formatInventoryNumber(inventoryCurrentStockQty)} ${inventoryStockUomDisplay}`,
+                        ],
+                        [
+                          '执行后库存',
+                          `${formatInventoryNumber(inventoryTargetStockQty)} ${inventoryStockUomDisplay}`,
+                        ],
+                        [
+                          '当前库存价值',
+                          formatInventoryNumber(inventoryCurrentStockValue),
+                        ],
+                        [
+                          '执行后库存价值',
+                          formatInventoryNumber(inventoryTargetStockValue),
+                        ],
+                        [
+                          '库存价值差额',
+                          formatInventoryNumber(inventoryStockValueDifference),
+                        ],
+                      ].map(([label, value]) => (
+                        <div key={label}>
+                          <Typography.Text type="secondary">
+                            {label}
+                          </Typography.Text>
+                          <div>
+                            <Typography.Text strong>{value}</Typography.Text>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {inventoryRevaluesExistingStock ? (
+                      <Alert
+                        message="本次估值与当前仓库估值不同，执行时会同时重新估值已有库存。"
+                        showIcon
+                        style={{ marginTop: 16 }}
+                        type="warning"
+                      />
+                    ) : null}
+                    {inventorySourceItem.valuation_selection_required ? (
+                      <Alert
+                        message="当前单位存在多个采购价候选，或只有其他单位的采购价；请明确采用一项或人工填写。"
+                        showIcon
+                        style={{ marginTop: 16 }}
+                        type="warning"
+                      />
+                    ) : null}
+                  </ProCard>
+                ) : null}
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Typography.Text type="secondary">快捷原因</Typography.Text>
+                  <div style={{ marginBottom: 8, marginTop: 6 }}>
+                    <Space wrap>
+                      {INVENTORY_REASON_PRESETS.filter((reason) => {
+                        if (reason === '盘点盘盈')
+                          return adjustmentType !== 'decrease';
+                        if (
+                          reason === '盘点盘亏' ||
+                          reason === '破损、报废或过期损耗'
+                        )
+                          return adjustmentType !== 'increase';
+                        return true;
+                      }).map((reason) => (
+                        <Button
+                          key={reason}
+                          onClick={() => {
+                            form.setFieldValue('reason', reason);
+                            setDirty(true);
+                          }}
+                          size="small"
+                        >
+                          {reason}
+                        </Button>
+                      ))}
+                      <Button
+                        onClick={() => {
+                          form.setFieldValue('reason', undefined);
+                          setDirty(true);
+                          form.scrollToField('reason', {
+                            behavior: 'smooth',
+                            block: 'center',
+                            focus: true,
+                          });
+                        }}
+                        size="small"
+                      >
+                        其他（手工填写）
+                      </Button>
+                    </Space>
+                  </div>
                   <Form.Item
-                    extra={inventoryValuationRateHelp}
-                    label="库存单位成本"
-                    name="valuationRate"
-                    required
+                    label="调整原因"
+                    name="reason"
                     rules={[
                       {
-                        validator: async (_, value) => {
-                          if (Number(value ?? 0) <= 0) {
-                            throw new Error(
-                              '增加库存时必须填写有效的库存单位成本',
-                            );
-                          }
-                        },
+                        message: '请填写盘点差异或业务原因',
+                        required: true,
                       },
                     ]}
                   >
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
+                    <Input.TextArea maxLength={1000} rows={3} />
                   </Form.Item>
-                ) : null}
-                {inventoryNeedsValuationRate &&
-                inventoryValuationReferenceConflict ? (
-                  <Alert
-                    description={inventoryValuationConflictDetails}
-                    showIcon
-                    style={{ gridColumn: '1 / -1' }}
-                    title="存在多个折算结果不一致的标准采购参考价，无法自动填写库存成本。"
-                    type="warning"
-                  />
-                ) : null}
-                {inventoryNeedsValuationRate &&
-                inventoryValuationRateSource === 'standard_buying_reference' ? (
-                  <Alert
-                    showIcon
-                    style={{ gridColumn: '1 / -1' }}
-                    title="当前数值来自标准采购参考价，仅作为本次库存估值建议，请核对后执行。"
-                    type="info"
-                  />
-                ) : null}
-                {inventoryTargetStockQty !== null ? (
-                  <Alert
-                    showIcon
-                    style={{
-                      gridColumn: '1 / -1',
-                      minWidth: 0,
-                      overflowWrap: 'anywhere',
-                    }}
-                    title={`换算预览：${Number(inventoryQuantity ?? 0)} ${selectedInventoryUom?.uom_display ?? inventoryUom ?? ''} = ${inventoryInputStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}；当前 ${inventoryCurrentStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}，执行后 ${inventoryTargetStockQty} ${inventoryStockUomDisplay || inventorySourceItem.stock_uom || ''}`}
-                    type="warning"
-                  />
-                ) : null}
-                <Form.Item
-                  label="调整原因"
-                  name="reason"
-                  style={{ gridColumn: '1 / -1' }}
-                  rules={[
-                    {
-                      message: '请填写盘点差异或业务原因',
-                      required: true,
-                    },
-                  ]}
-                >
-                  <Input.TextArea maxLength={1000} rows={3} />
-                </Form.Item>
+                </div>
               </div>
             ) : (
               <>

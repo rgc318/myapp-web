@@ -40,7 +40,11 @@ export type AiDraftFormValues = {
   targetDate?: Dayjs;
   transactionDate?: Dayjs;
   uom?: string;
+  valuationInputRate?: number;
+  valuationInputUom?: string;
   valuationRate?: number;
+  valuationRateSource?: 'buying_price_reference' | 'current_valuation' | 'user';
+  valuationReferenceId?: string;
   warehouse?: string;
   wholesaleRate?: number;
 };
@@ -92,7 +96,11 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   targetDate: '交货/到货日期',
   transactionDate: '单据日期',
   uom: '单位',
-  valuationRate: '库存单位成本',
+  valuationInputRate: '计价单位价格',
+  valuationInputUom: '计价单位',
+  valuationRate: '执行后库存估值单价',
+  valuationRateSource: '库存估值来源',
+  valuationReferenceId: '采购价格来源',
   warehouse: '仓库',
   wholesaleRate: '批发价',
 };
@@ -126,6 +134,7 @@ const INVENTORY_FIELDS: (keyof AiDraftFormValues)[] = [
   'adjustmentType',
   'quantity',
   'uom',
+  'valuationInputRate',
   'valuationRate',
   'reason',
 ];
@@ -300,6 +309,8 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
     );
     const rawAdjustmentType = textValue(payload.adjustment_type);
     const valuationRate = numberValue(item.valuation_rate);
+    const valuationInputRate =
+      numberValue(item.valuation_input_rate) ?? valuationRate;
     return {
       adjustmentType:
         rawAdjustmentType === 'increase' || rawAdjustmentType === 'decrease'
@@ -313,10 +324,25 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       quantity: numberValue(item.qty),
       reason: textValue(payload.reason) ?? textValue(payload.remarks),
       uom: textValue(item.uom),
+      valuationInputRate:
+        valuationInputRate !== undefined && valuationInputRate > 0
+          ? valuationInputRate
+          : undefined,
+      valuationInputUom:
+        textValue(item.valuation_input_uom) ?? textValue(item.uom),
       valuationRate:
         valuationRate !== undefined && valuationRate > 0
           ? valuationRate
           : undefined,
+      valuationRateSource:
+        textValue(item.valuation_rate_source) === 'standard_buying_reference'
+          ? 'buying_price_reference'
+          : (textValue(item.valuation_rate_source) as
+              | 'buying_price_reference'
+              | 'current_valuation'
+              | 'user'
+              | undefined),
+      valuationReferenceId: textValue(item.valuation_rate_reference_id),
       warehouse: textValue(payload.warehouse),
     };
   }
@@ -570,11 +596,16 @@ export function getAiDraftFormFieldIssues(
       name: 'reason',
     });
   }
-  const valuationError = matchingValidationError(draft, ['成本', '估值']);
+  const valuationError = matchingValidationError(draft, [
+    '成本',
+    '估值',
+    '采购价格',
+    '计价',
+  ]);
   if (valuationError) {
     issues.push({
       message: valuationError,
-      name: 'valuationRate',
+      name: 'valuationInputRate',
     });
   }
 
@@ -620,17 +651,9 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
     };
   }
   if (draft.draftType === 'inventory_adjustment') {
-    const originalItem = readPayloadRow(
-      Array.isArray(draft.payload.items) ? draft.payload.items[0] : undefined,
-    );
-    const originalValuationRate = numberValue(originalItem.valuation_rate);
     const valuationRateSource =
-      values.valuationRate !== undefined &&
-      values.valuationRate === originalValuationRate
-        ? textValue(originalItem.valuation_rate_source)
-        : values.valuationRate !== undefined
-          ? 'user'
-          : undefined;
+      values.valuationRateSource ??
+      (values.valuationInputRate !== undefined ? 'user' : undefined);
     return {
       adjustment_type: values.adjustmentType,
       company: values.company,
@@ -651,7 +674,13 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
       reason: values.reason,
       uom: values.uom,
       valuation_rate: values.valuationRate,
+      valuation_input_rate: values.valuationInputRate,
+      valuation_input_uom: values.valuationInputUom ?? values.uom,
       valuation_rate_source: valuationRateSource,
+      valuation_rate_reference_id:
+        valuationRateSource === 'buying_price_reference'
+          ? values.valuationReferenceId
+          : undefined,
       warehouse: values.warehouse,
       warehouse_query: values.warehouse
         ? undefined

@@ -1037,22 +1037,30 @@ describe('AiDraftEditorModal', () => {
     expect(screen.getByText('件')).toBeTruthy();
     expect(screen.queryByText(/纸箱/)).toBeNull();
     expect(screen.queryByText(/箱装/)).toBeNull();
-    const preview = screen.getByText(
-      '换算预览：200 箱 = 4800 件；当前 0 件，执行后 4800 件',
-    );
+    fireEvent.click(screen.getByRole('button', { name: '历史数据纠正' }));
     expect(
-      (preview.closest('.ant-alert') as HTMLElement).style.gridColumn,
-    ).toBe('1 / -1');
+      screen.getByRole<HTMLTextAreaElement>('textbox', { name: '调整原因' })
+        .value,
+    ).toBe('历史数据纠正');
+    expect(screen.getByText('数量换算')).toBeTruthy();
+    expect(screen.getByText('200 箱 = 4,800 件')).toBeTruthy();
+    expect(screen.getByText('执行后库存')).toBeTruthy();
+    expect(screen.getByText('4,800 件')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: '保存草稿' }));
     expect(
-      await screen.findByText('增加库存时必须填写有效的库存单位成本'),
+      await screen.findByText('增加库存时必须填写有效的计价单位价格'),
     ).toBeTruthy();
     expect(mockedUpdate).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByRole('spinbutton', { name: '库存单位成本' }), {
-      target: { value: '2.5' },
-    });
+    fireEvent.change(
+      screen.getByRole('spinbutton', {
+        name: '本次计价单位价格（每箱）',
+      }),
+      {
+        target: { value: '60' },
+      },
+    );
     mockedUpdate.mockResolvedValue({
       ...inventoryDraft,
       payload: {
@@ -1060,7 +1068,10 @@ describe('AiDraftEditorModal', () => {
         items: [
           {
             ...inventoryDraft.payload.items[0],
+            valuation_input_rate: 60,
+            valuation_input_uom: 'Box',
             valuation_rate: 2.5,
+            valuation_rate_source: 'user',
           },
         ],
       },
@@ -1072,8 +1083,11 @@ describe('AiDraftEditorModal', () => {
         inventoryDraft.name,
         2,
         expect.objectContaining({
+          valuation_input_rate: 60,
+          valuation_input_uom: 'Box',
           valuation_rate: 2.5,
           valuation_rate_source: 'user',
+          reason: '历史数据纠正',
         }),
       );
     });
@@ -1098,15 +1112,33 @@ describe('AiDraftEditorModal', () => {
             stock_uom: 'Nos',
             stock_uom_display: '件',
             uom: 'Nos',
+            valuation_input_rate: 70,
+            valuation_input_uom: 'Box',
             valuation_rate: 70 / 24,
+            valuation_rate_candidates: [
+              {
+                conversion_factor: 24,
+                currency: 'CNY',
+                price_list: 'Standard Buying',
+                rate: 70,
+                reference_id: 'PRICE-BOX',
+                selectable: true,
+                stock_unit_rate: 70 / 24,
+                uom: 'Box',
+                uom_display: '箱',
+              },
+            ],
+            valuation_rate_reference_id: 'PRICE-BOX',
             valuation_rate_reference: {
               conversion_factor: 24,
+              price_list: 'Standard Buying',
               rate: 70,
+              reference_id: 'PRICE-BOX',
               stock_unit_rate: 70 / 24,
               uom: 'Box',
               uom_display: '箱',
             },
-            valuation_rate_source: 'standard_buying_reference',
+            valuation_rate_source: 'buying_price_reference',
           },
         ],
         posting_date: '2026-09-02',
@@ -1138,23 +1170,20 @@ describe('AiDraftEditorModal', () => {
       Number(
         (
           await screen.findByRole<HTMLInputElement>('spinbutton', {
-            name: '库存单位成本',
+            name: '本次计价单位价格（每箱）',
           })
         ).value,
       ),
-    ).toBeCloseTo(70 / 24);
+    ).toBe(70);
+    expect(screen.getByText('采购价候选')).toBeTruthy();
     expect(
-      screen.getByText(
-        '当前数值来自标准采购参考价，仅作为本次库存估值建议，请核对后执行。',
-      ),
+      screen.getByText(/后端会按 Item Price 记录重新核验并折算/),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/不会创建采购单、供应商应付或采购发票/),
-    ).toBeTruthy();
-    expect(screen.getByText(/70 \/ 箱.*换算系数 24.*每件成本/)).toBeTruthy();
+    expect(screen.getByText(/影响库存价值/)).toBeTruthy();
+    expect(screen.getAllByText('标准采购').length).toBeGreaterThan(0);
   });
 
-  it('does not auto-fill conflicting Standard Buying prices from different UOMs', async () => {
+  it('shows different-UOM buying prices as valid choices instead of a conflict', async () => {
     const inventoryDraft = {
       ...draft,
       draftType: 'inventory_adjustment' as const,
@@ -1174,28 +1203,36 @@ describe('AiDraftEditorModal', () => {
             stock_uom: 'Nos',
             stock_uom_display: '件',
             uom: 'Nos',
-            valuation_rate: null,
-            valuation_rate_reference: {
-              candidates: [
-                {
-                  conversion_factor: 1,
-                  rate: 70,
-                  stock_unit_rate: 70,
-                  uom: 'Nos',
-                  uom_display: '件',
-                },
-                {
-                  conversion_factor: 24,
-                  rate: 70,
-                  stock_unit_rate: 70 / 24,
-                  uom: 'Box',
-                  uom_display: '箱',
-                },
-              ],
-              conflict: true,
-              stock_uom: 'Nos',
-              stock_uom_display: '件',
-            },
+            current_stock_value: 12750,
+            current_valuation_rate: 2.5,
+            valuation_input_rate: 2.5,
+            valuation_input_uom: 'Nos',
+            valuation_rate: 2.5,
+            valuation_rate_candidates: [
+              {
+                conversion_factor: 1,
+                currency: 'CNY',
+                price_list: 'Standard Buying',
+                rate: 2.5,
+                reference_id: 'PRICE-NOS',
+                selectable: true,
+                stock_unit_rate: 2.5,
+                uom: 'Nos',
+                uom_display: '件',
+              },
+              {
+                conversion_factor: 24,
+                currency: 'CNY',
+                price_list: 'Standard Buying',
+                rate: 70,
+                reference_id: 'PRICE-BOX',
+                selectable: true,
+                stock_unit_rate: 70 / 24,
+                uom: 'Box',
+                uom_display: '箱',
+              },
+            ],
+            valuation_rate_source: 'current_valuation',
           },
         ],
         posting_date: '2026-09-02',
@@ -1204,9 +1241,9 @@ describe('AiDraftEditorModal', () => {
       },
       title: '库存调整草稿',
       validation: {
-        errors: ['库存增加会形成新的库存资产，必须填写有效的库存单位成本。'],
-        readyForHandoff: false,
-        warnings: ['标准采购参考价存在冲突'],
+        errors: [],
+        readyForHandoff: true,
+        warnings: [],
       },
     };
     mockedGet.mockResolvedValue(inventoryDraft);
@@ -1224,19 +1261,34 @@ describe('AiDraftEditorModal', () => {
     );
 
     expect(
-      (
-        await screen.findByRole<HTMLInputElement>('spinbutton', {
-          name: '库存单位成本',
-        })
-      ).value,
-    ).toBe('');
+      Number(
+        (
+          await screen.findByRole<HTMLInputElement>('spinbutton', {
+            name: '本次计价单位价格（每件）',
+          })
+        ).value,
+      ),
+    ).toBe(2.5);
+    expect(screen.queryByText(/折算结果不一致/)).toBeNull();
+    expect(screen.getAllByText('标准采购').length).toBeGreaterThan(0);
+    expect(screen.getByText('2.916667')).toBeTruthy();
+
+    const adoptButtons = screen.getAllByRole('button', { name: '采用' });
+    fireEvent.click(adoptButtons[1]);
+    expect(
+      Number(
+        (
+          await screen.findByRole<HTMLInputElement>('spinbutton', {
+            name: '本次计价单位价格（每箱）',
+          })
+        ).value,
+      ),
+    ).toBe(70);
     expect(
       screen.getByText(
-        '存在多个折算结果不一致的标准采购参考价，无法自动填写库存成本。',
+        '本次估值与当前仓库估值不同，执行时会同时重新估值已有库存。',
       ),
     ).toBeTruthy();
-    expect(screen.getByText(/70 \/ 件 → 70 \/ 件/)).toBeTruthy();
-    expect(screen.getByText(/70 \/ 箱 → .* \/ 件/)).toBeTruthy();
   });
 
   it.each([

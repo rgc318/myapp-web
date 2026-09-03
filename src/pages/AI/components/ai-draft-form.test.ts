@@ -70,8 +70,11 @@ describe('AI draft conflict form helpers', () => {
             stock_uom: 'Nos',
             target_stock_qty: 4800,
             uom: 'Box',
+            valuation_input_rate: 60,
+            valuation_input_uom: 'Box',
             valuation_rate: 2.5,
-            valuation_rate_source: 'standard_buying_reference',
+            valuation_rate_reference_id: 'PRICE-BOX',
+            valuation_rate_source: 'buying_price_reference',
           },
         ],
         posting_date: '2026-09-01',
@@ -87,10 +90,14 @@ describe('AI draft conflict form helpers', () => {
 
     const values = getAiDraftFormValues(draft);
     expect(values.valuationRate).toBe(2.5);
+    expect(values.valuationInputRate).toBe(60);
     expect(buildAiDraftPayload(draft, values)).toEqual(
       expect.objectContaining({
+        valuation_input_rate: 60,
+        valuation_input_uom: 'Box',
         valuation_rate: 2.5,
-        valuation_rate_source: 'standard_buying_reference',
+        valuation_rate_reference_id: 'PRICE-BOX',
+        valuation_rate_source: 'buying_price_reference',
       }),
     );
 
@@ -106,14 +113,16 @@ describe('AI draft conflict form helpers', () => {
         ],
       },
       validation: {
-        errors: ['库存增加会形成新的库存资产，必须填写有效的库存单位成本。'],
+        errors: [
+          '库存增加会形成新的库存资产，必须填写有效的执行后库存估值单价。',
+        ],
         readyForHandoff: false,
         warnings: [],
       },
     } as unknown as AiDraft;
     expect(getAiDraftFormFieldIssues(invalidDraft)).toContainEqual({
-      message: '库存增加会形成新的库存资产，必须填写有效的库存单位成本。',
-      name: 'valuationRate',
+      message: '库存增加会形成新的库存资产，必须填写有效的执行后库存估值单价。',
+      name: 'valuationInputRate',
     });
   });
 
