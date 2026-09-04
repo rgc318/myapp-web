@@ -80,9 +80,21 @@ export type AiDraft = {
   status: string;
   sourceRun: string | null;
   version: number;
-  validation: { readyForHandoff: boolean; errors: string[]; warnings: string[] };
+  validation: {
+    readyForHandoff: boolean;
+    errors: string[];
+    warnings: string[];
+    issues?: AiDraftValidationIssue[];
+  };
   payload: Record<string, unknown>;
   execution: AiDraftExecution | null;
+};
+
+export type AiDraftValidationIssue = {
+  code: string;
+  field: string | null;
+  message: string;
+  meta: Record<string, unknown>;
 };
 
 export type AiDraftExecution = {
@@ -188,12 +200,8 @@ export function isAiDraftVersionConflictError(
 ): error is AiDraftVersionConflictError {
   if (error instanceof AiDraftVersionConflictError) return true;
   if (!error || typeof error !== 'object') return false;
-  const candidate = error as { code?: unknown; message?: unknown };
-  return (
-    candidate.code === 'AI_DRAFT_VERSION_CONFLICT' ||
-    (typeof candidate.message === 'string' &&
-      candidate.message.includes('草稿版本已变化'))
-  );
+  const candidate = error as { code?: unknown };
+  return candidate.code === 'AI_DRAFT_VERSION_CONFLICT';
 }
 
 function translateAiDraftMutationError(error: unknown): never {
@@ -933,6 +941,28 @@ export function mapAiDraft(value: unknown): AiDraft {
       readyForHandoff: Boolean(validation.ready_for_handoff),
       errors: toStringList(validation.errors),
       warnings: toStringList(validation.warnings),
+      issues: Array.isArray(validation.issues)
+        ? validation.issues.flatMap((value) => {
+            const issue = readObject(value);
+            const message =
+              typeof issue.message === 'string' ? issue.message.trim() : '';
+            if (!message) return [];
+            return [
+              {
+                code:
+                  typeof issue.code === 'string' && issue.code.trim()
+                    ? issue.code.trim()
+                    : 'DRAFT_VALIDATION_ERROR',
+                field:
+                  typeof issue.field === 'string' && issue.field.trim()
+                    ? issue.field.trim()
+                    : null,
+                message,
+                meta: readObject(issue.meta),
+              },
+            ];
+          })
+        : [],
     },
   };
 }

@@ -236,6 +236,47 @@ function valuesEqual(
   );
 }
 
+function orderHeaderClearFields(
+  draft: AiDraft,
+  values: AiDraftFormValues,
+  originalValues: AiDraftFormValues,
+  operation: 'create' | 'update',
+) {
+  if (operation !== 'update') return [];
+  const persisted = Array.isArray(draft.payload.header_clear_fields)
+    ? draft.payload.header_clear_fields.filter(
+        (field): field is string => typeof field === 'string',
+      )
+    : [];
+  const clearFields = new Set(persisted);
+  const editableFields: Array<{
+    payloadKey: 'remarks' | 'supplier_ref';
+    valueKey: 'remarks' | 'supplierRef';
+  }> = [
+    { payloadKey: 'remarks', valueKey: 'remarks' },
+    ...(draft.draftType === 'purchase_order'
+      ? ([{ payloadKey: 'supplier_ref', valueKey: 'supplierRef' }] as const)
+      : []),
+  ];
+  editableFields.forEach(({ payloadKey, valueKey }) => {
+    if (textValue(values[valueKey])) {
+      clearFields.delete(payloadKey);
+    } else if (
+      clearFields.has(payloadKey) ||
+      textValue(originalValues[valueKey])
+    ) {
+      clearFields.add(payloadKey);
+    }
+  });
+  return [...clearFields]
+    .filter(
+      (field) =>
+        field === 'remarks' ||
+        (draft.draftType === 'purchase_order' && field === 'supplier_ref'),
+    )
+    .sort();
+}
+
 function displayItems(value: unknown) {
   if (!Array.isArray(value) || !value.length) return '无商品明细';
   return value
@@ -391,13 +432,76 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
   };
 }
 
-function matchingValidationError(
-  draft: AiDraft,
-  terms: string[],
-): string | undefined {
-  return draft.validation.errors.find((error) =>
-    terms.some((term) => error.includes(term)),
-  );
+const BACKEND_FIELD_TO_FORM_FIELD: Record<
+  string,
+  AiDraftFormFieldIssue['name']
+> = {
+  adjustment_type: 'adjustmentType',
+  brand: 'brand',
+  currency: 'currency',
+  customer: 'party',
+  delivery_date: 'targetDate',
+  item_code: 'itemCode',
+  item_group: 'itemGroup',
+  item_name: 'itemName',
+  opening_qty: 'openingQty',
+  posting_date: 'postingDate',
+  reason: 'reason',
+  retail_rate: 'retailRate',
+  schedule_date: 'targetDate',
+  standard_buying_rate: 'standardBuyingRate',
+  standard_selling_rate: 'standardSellingRate',
+  stock_uom: 'stockUom',
+  supplier: 'party',
+  transaction_date: 'transactionDate',
+  warehouse: 'warehouse',
+  wholesale_rate: 'wholesaleRate',
+};
+
+function backendFieldIssueName(
+  field: string | null,
+  draftType: AiDraft['draftType'],
+): AiDraftFormFieldIssue['name'] | null {
+  if (!field) return null;
+  const normalized = field.replace(/^patch\./, '').replace(/^target\./, '');
+  const direct = BACKEND_FIELD_TO_FORM_FIELD[normalized];
+  if (direct) return direct;
+  const itemMatch =
+    /^items\.(\d+)\.(item_code|qty|uom|warehouse|valuation_rate)$/.exec(
+      normalized,
+    );
+  if (!itemMatch) return null;
+  const index = Number(itemMatch[1]);
+  const itemField = itemMatch[2];
+  if (draftType === 'inventory_adjustment' && index === 0) {
+    if (itemField === 'item_code') return 'itemCode';
+    if (itemField === 'qty') return 'quantity';
+    if (itemField === 'uom') return 'uom';
+    if (itemField === 'warehouse') return 'warehouse';
+  }
+  if (itemField === 'valuation_rate') return 'valuationInputRate';
+  const formField: keyof AiDraftItemFormValues =
+    itemField === 'item_code'
+      ? 'itemCode'
+      : (itemField as keyof AiDraftItemFormValues);
+  return ['items', index, formField];
+}
+
+function structuredBackendFieldIssues(draft: AiDraft): AiDraftFormFieldIssue[] {
+  return (draft.validation.issues ?? []).flatMap((issue) => {
+    const name = backendFieldIssueName(issue.field, draft.draftType);
+    return name ? [{ message: issue.message, name }] : [];
+  });
+}
+
+function addFieldIssue(
+  issues: AiDraftFormFieldIssue[],
+  issue: AiDraftFormFieldIssue,
+) {
+  const key = JSON.stringify(issue.name);
+  if (!issues.some((value) => JSON.stringify(value.name) === key)) {
+    issues.push(issue);
+  }
 }
 
 export function getAiDraftFormFieldIssues(
@@ -407,49 +511,25 @@ export function getAiDraftFormFieldIssues(
 
   if (draft.draftType === 'product_setup') {
     const payload = draft.payload;
-    const issues: AiDraftFormFieldIssue[] = [];
-    const mappings: Array<{
-      name: keyof AiDraftFormValues;
-      terms: string[];
-    }> = [
-      { name: 'itemName', terms: ['请填写商品名称'] },
-      {
+    const issues = structuredBackendFieldIssues(draft);
+    if (payload.operation === 'update' && !textValue(payload.item_code)) {
+      addFieldIssue(issues, {
+        message:
+          '尚未绑定要完善的现有商品，请在“选择现有商品”中搜索并选择目标商品。',
         name: 'itemCode',
-        terms: ['未找到唯一的现有商品', '商品名称匹配到多条', '商品编码'],
-      },
-      { name: 'itemGroup', terms: ['商品分类'] },
-      { name: 'brand', terms: ['品牌'] },
-      { name: 'currency', terms: ['币种'] },
-      { name: 'stockUom', terms: ['库存单位', '库存基准单位'] },
-      { name: 'warehouse', terms: ['仓库'] },
-      { name: 'openingQty', terms: ['初始库存', '当前库存作为初始库存'] },
-      { name: 'standardSellingRate', terms: ['标准售价'] },
-      { name: 'wholesaleRate', terms: ['批发价'] },
-      { name: 'retailRate', terms: ['零售价'] },
-      {
-        name: 'standardBuyingRate',
-        terms: ['标准采购参考价', '成本价', '默认采购价'],
-      },
-    ];
-    for (const mapping of mappings) {
-      const error = matchingValidationError(draft, mapping.terms);
-      if (error && !issues.some((issue) => issue.name === mapping.name)) {
-        issues.push({ message: error, name: mapping.name });
-      }
+      });
     }
-    if (
-      payload.operation === 'update' &&
-      !textValue(payload.item_code) &&
-      matchingValidationError(draft, [
-        '未找到唯一的现有商品',
-        '商品名称匹配到多条',
-      ])
-    ) {
-      const targetIssue = issues.find((issue) => issue.name === 'itemCode');
-      if (targetIssue) {
-        targetIssue.message =
-          '尚未绑定要完善的现有商品，请在“选择现有商品”中搜索并选择目标商品。';
-      }
+    if (payload.operation === 'create' && !textValue(payload.item_name)) {
+      addFieldIssue(issues, {
+        message: '请填写商品名称。',
+        name: 'itemName',
+      });
+    }
+    if (!textValue(payload.stock_uom)) {
+      addFieldIssue(issues, {
+        message: '请选择库存基准单位。',
+        name: 'stockUom',
+      });
     }
     const itemGroupQuery = unresolvedQuery(
       payload,
@@ -457,17 +537,17 @@ export function getAiDraftFormFieldIssues(
       'item_group_query',
     );
     if (itemGroupQuery) {
-      const issue = issues.find((value) => value.name === 'itemGroup');
-      if (issue) {
-        issue.message = `“${itemGroupQuery}”尚未匹配到唯一商品分类，请从下拉结果中选择。`;
-      }
+      addFieldIssue(issues, {
+        message: `“${itemGroupQuery}”尚未匹配到唯一商品分类，请从下拉结果中选择。`,
+        name: 'itemGroup',
+      });
     }
     const brandQuery = unresolvedQuery(payload, 'brand', 'brand_query');
     if (brandQuery) {
-      const issue = issues.find((value) => value.name === 'brand');
-      if (issue) {
-        issue.message = `“${brandQuery}”尚未匹配到唯一品牌，请从下拉结果中选择。`;
-      }
+      addFieldIssue(issues, {
+        message: `“${brandQuery}”尚未匹配到唯一品牌，请从下拉结果中选择。`,
+        name: 'brand',
+      });
     }
     const warehouseQuery = unresolvedQuery(
       payload,
@@ -475,10 +555,20 @@ export function getAiDraftFormFieldIssues(
       'warehouse_query',
     );
     if (warehouseQuery) {
-      const issue = issues.find((value) => value.name === 'warehouse');
-      if (issue) {
-        issue.message = `“${warehouseQuery}”尚未匹配到当前公司的可用仓库，请重新选择。`;
-      }
+      addFieldIssue(issues, {
+        message: `“${warehouseQuery}”尚未匹配到当前公司的可用仓库，请重新选择。`,
+        name: 'warehouse',
+      });
+    }
+    if (
+      payload.operation === 'create' &&
+      (numberValue(payload.opening_qty) ?? 0) > 0 &&
+      numberValue(payload.standard_buying_rate) === undefined
+    ) {
+      addFieldIssue(issues, {
+        message: '初始库存增加资产时，请核对并填写库存估值参考价。',
+        name: 'standardBuyingRate',
+      });
     }
     return issues;
   }
@@ -488,7 +578,7 @@ export function getAiDraftFormFieldIssues(
     draft.draftType === 'purchase_order'
   ) {
     const payload = draft.payload;
-    const issues: AiDraftFormFieldIssue[] = [];
+    const issues: AiDraftFormFieldIssue[] = structuredBackendFieldIssues(draft);
     const isPurchase = draft.draftType === 'purchase_order';
     const party = textValue(payload[isPurchase ? 'supplier' : 'customer']);
     const partyQuery = textValue(
@@ -501,11 +591,6 @@ export function getAiDraftFormFieldIssues(
           : `请选择具体${isPurchase ? '供应商' : '客户'}。`,
         name: 'party',
       });
-    }
-    if (matchingValidationError(draft, ['日期'])) {
-      const message = matchingValidationError(draft, ['日期']) as string;
-      issues.push({ message, name: 'transactionDate' });
-      issues.push({ message, name: 'targetDate' });
     }
     const defaultWarehouse = textValue(payload.warehouse);
     const defaultWarehouseQuery = unresolvedQuery(
@@ -554,58 +639,41 @@ export function getAiDraftFormFieldIssues(
   const item = readPayloadRow(
     Array.isArray(payload.items) ? payload.items[0] : undefined,
   );
-  const issues: AiDraftFormFieldIssue[] = [];
+  const issues: AiDraftFormFieldIssue[] = structuredBackendFieldIssues(draft);
   const itemQuery = textValue(item.item_query);
 
   if (!textValue(item.item_code)) {
-    issues.push({
+    addFieldIssue(issues, {
       message: itemQuery
         ? `“${itemQuery}”尚未匹配到唯一商品，请从下拉结果中选择具体商品。`
-        : (matchingValidationError(draft, ['商品']) ?? '请选择具体商品。'),
+        : '请选择具体商品。',
       name: 'itemCode',
     });
   }
   if (!textValue(payload.warehouse)) {
     const warehouseQuery = textValue(payload.warehouse_query);
-    issues.push({
+    addFieldIssue(issues, {
       message: warehouseQuery
         ? `“${warehouseQuery}”尚未匹配到当前公司的可用仓库，请重新选择。`
-        : (matchingValidationError(draft, ['仓库']) ?? '请选择具体仓库。'),
+        : '请选择具体仓库。',
       name: 'warehouse',
     });
   }
   const quantity = numberValue(item.qty);
   const adjustmentType = textValue(payload.adjustment_type);
-  const quantityError = matchingValidationError(draft, ['数量', '目标库存']);
   if (
     quantity === undefined ||
-    (['increase', 'decrease'].includes(adjustmentType ?? '') &&
-      quantity <= 0) ||
-    Boolean(quantityError?.includes('负数'))
+    (['increase', 'decrease'].includes(adjustmentType ?? '') && quantity <= 0)
   ) {
-    issues.push({
-      message: quantityError ?? '请填写库存调整数量。',
+    addFieldIssue(issues, {
+      message: '请填写有效的库存调整数量。',
       name: 'quantity',
     });
   }
   if (!textValue(payload.reason) && !textValue(payload.remarks)) {
-    issues.push({
-      message:
-        matchingValidationError(draft, ['原因', '盘点差异']) ??
-        '请填写盘点差异或业务原因。',
+    addFieldIssue(issues, {
+      message: '请填写盘点差异或业务原因。',
       name: 'reason',
-    });
-  }
-  const valuationError = matchingValidationError(draft, [
-    '成本',
-    '估值',
-    '采购价格',
-    '计价',
-  ]);
-  if (valuationError) {
-    issues.push({
-      message: valuationError,
-      name: 'valuationInputRate',
     });
   }
 
@@ -692,6 +760,12 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
     : [];
   const operation = values.operation === 'update' ? 'update' : 'create';
   const originalValues = getAiDraftFormValues(draft);
+  const headerClearFields = orderHeaderClearFields(
+    draft,
+    values,
+    originalValues,
+    operation,
+  );
   const updateItemsExplicit =
     operation === 'update' &&
     (draft.payload.update_items_explicit === true ||
@@ -700,6 +774,7 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
     source_attachments: draft.payload.source_attachments,
     operation,
     order_number: values.orderNumber,
+    header_clear_fields: headerClearFields,
     source_document_type: draft.payload.source_document_type,
     update_items_explicit: updateItemsExplicit,
     ...(draft.draftType === 'purchase_order'

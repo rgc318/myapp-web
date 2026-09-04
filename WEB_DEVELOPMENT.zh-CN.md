@@ -68,6 +68,8 @@
 
 AI 历史消息中的“完善商品/调整库存”按钮不能直接复用 citation 内的旧编码。页面先调用 `resolve_active_product_v1`；若已存在继任商品，明确展示历史编码和当前有效编码并要求用户确认，再用有效编码创建草稿。有效商品仍停用且没有继任商品时阻断，不发送草稿创建请求。
 
+AI 草稿字段定位优先消费 Backend `validation.issues[]` 的 `code / field / message / meta`。页面不得通过 `errors[].includes(中文文案)` 或异常 message 文本决定字段、版本冲突或业务动作；旧 `errors[]` 只用于兼容展示。版本冲突只识别稳定错误码 `AI_DRAFT_VERSION_CONFLICT`。商品、订单和库存语义命令分别遵循 target/patch、header/line patch 和可空调整类型契约，前端只编辑草稿，不重新解析用户原话。订单更新草稿的 `header_clear_fields` 必须在打开、保存、冲突合并和恢复版本时保留；用户重新填写值时移除对应 clear marker，用户删除原有备注或供应商参考号时补充 marker，不能仅用 `null` 猜测清空意图。
+
 ### 1.2 控制台告警与本地资源排障规范
 
 前端联调时应区分“会影响功能的资源错误”和“短期兼容告警”。

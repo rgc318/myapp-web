@@ -32,21 +32,31 @@ describe('AI draft conflict form helpers', () => {
           '库存调整必须填写盘点差异或业务原因。',
         ],
         readyForHandoff: false,
+        issues: [
+          {
+            code: 'INVENTORY_REASON_REQUIRED',
+            field: 'reason',
+            message: '库存调整必须填写盘点差异或业务原因。',
+            meta: {},
+          },
+        ],
         warnings: ['商品“圣晶石”无法唯一匹配，请人工选择。'],
       },
     } as unknown as AiDraft;
 
     expect(getAiDraftFormValues(draft).itemCode).toBeUndefined();
-    expect(getAiDraftFormFieldIssues(draft)).toEqual([
-      {
-        message: '“圣晶石”尚未匹配到唯一商品，请从下拉结果中选择具体商品。',
-        name: 'itemCode',
-      },
-      {
-        message: '库存调整必须填写盘点差异或业务原因。',
-        name: 'reason',
-      },
-    ]);
+    expect(getAiDraftFormFieldIssues(draft)).toEqual(
+      expect.arrayContaining([
+        {
+          message: '“圣晶石”尚未匹配到唯一商品，请从下拉结果中选择具体商品。',
+          name: 'itemCode',
+        },
+        {
+          message: '库存调整必须填写盘点差异或业务原因。',
+          name: 'reason',
+        },
+      ]),
+    );
     expect(buildAiDraftPayload(draft, getAiDraftFormValues(draft))).toEqual(
       expect.objectContaining({
         item_code: undefined,
@@ -117,6 +127,15 @@ describe('AI draft conflict form helpers', () => {
           '库存增加会形成新的库存资产，必须填写有效的执行后库存估值单价。',
         ],
         readyForHandoff: false,
+        issues: [
+          {
+            code: 'INVENTORY_VALUATION_REQUIRED',
+            field: 'items.0.valuation_rate',
+            message:
+              '库存增加会形成新的库存资产，必须填写有效的执行后库存估值单价。',
+            meta: {},
+          },
+        ],
         warnings: [],
       },
     } as unknown as AiDraft;
@@ -124,6 +143,46 @@ describe('AI draft conflict form helpers', () => {
       message: '库存增加会形成新的库存资产，必须填写有效的执行后库存估值单价。',
       name: 'valuationInputRate',
     });
+  });
+
+  it('maps nested inventory validation paths to top-level inventory fields', () => {
+    const draft = {
+      company: 'Demo Company',
+      draftType: 'inventory_adjustment',
+      payload: {
+        adjustment_type: 'decrease',
+        company: 'Demo Company',
+        items: [{ item_code: 'ITEM-001', qty: 20, uom: 'Box' }],
+        reason: '盘亏',
+        warehouse: 'Stores - RD',
+      },
+      validation: {
+        errors: ['调整后的目标库存不能为负数。', '单位换算无效。'],
+        readyForHandoff: false,
+        issues: [
+          {
+            code: 'INVENTORY_TARGET_NEGATIVE',
+            field: 'items.0.qty',
+            message: '调整后的目标库存不能为负数。',
+            meta: {},
+          },
+          {
+            code: 'INVENTORY_UOM_INVALID',
+            field: 'items.0.uom',
+            message: '单位换算无效。',
+            meta: {},
+          },
+        ],
+        warnings: [],
+      },
+    } as unknown as AiDraft;
+
+    expect(getAiDraftFormFieldIssues(draft)).toEqual(
+      expect.arrayContaining([
+        { message: '调整后的目标库存不能为负数。', name: 'quantity' },
+        { message: '单位换算无效。', name: 'uom' },
+      ]),
+    );
   });
 
   it('keeps unresolved product master-data queries separate from selected values', () => {
@@ -361,6 +420,65 @@ describe('AI draft conflict form helpers', () => {
     expect(
       buildAiDraftPayload(extractedDraft, getAiDraftFormValues(extractedDraft)),
     ).toEqual(expect.objectContaining({ update_items_explicit: true }));
+  });
+
+  it('preserves generated header clears and records fields cleared by the user', () => {
+    const salesDraft = {
+      company: 'Demo Company',
+      draftType: 'sales_order',
+      payload: {
+        company: 'Demo Company',
+        customer: 'CUST-1',
+        operation: 'update',
+        order_number: 'SO-001',
+        transaction_date: '2026-09-04',
+        delivery_date: '2026-09-05',
+        remarks: null,
+        header_clear_fields: ['remarks'],
+        items: [],
+      },
+    } as unknown as AiDraft;
+    const purchaseDraft = {
+      company: 'Demo Company',
+      draftType: 'purchase_order',
+      payload: {
+        company: 'Demo Company',
+        supplier: 'SUP-1',
+        operation: 'update',
+        order_number: 'PO-001',
+        transaction_date: '2026-09-04',
+        schedule_date: '2026-09-06',
+        supplier_ref: 'REF-OLD',
+        remarks: '原采购备注',
+        items: [],
+      },
+    } as unknown as AiDraft;
+
+    expect(
+      buildAiDraftPayload(salesDraft, getAiDraftFormValues(salesDraft)),
+    ).toEqual(expect.objectContaining({ header_clear_fields: ['remarks'] }));
+
+    const purchaseValues = getAiDraftFormValues(purchaseDraft);
+    expect(
+      buildAiDraftPayload(purchaseDraft, {
+        ...purchaseValues,
+        remarks: undefined,
+        supplierRef: undefined,
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        header_clear_fields: ['remarks', 'supplier_ref'],
+        remarks: undefined,
+        supplier_ref: undefined,
+      }),
+    );
+
+    expect(
+      buildAiDraftPayload(salesDraft, {
+        ...getAiDraftFormValues(salesDraft),
+        remarks: '重新填写',
+      }),
+    ).toEqual(expect.objectContaining({ header_clear_fields: [] }));
   });
 
   it('treats order items as one explicit conflict field and never merges rows silently', () => {

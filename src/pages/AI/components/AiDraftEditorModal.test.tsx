@@ -965,8 +965,9 @@ describe('AiDraftEditorModal', () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getAllByText('库存调整必须填写盘点差异或业务原因。').length,
-    ).toBeGreaterThan(1);
+      screen.getAllByText('库存调整必须填写盘点差异或业务原因。'),
+    ).toHaveLength(1);
+    expect(screen.getByText('请填写盘点差异或业务原因。')).toBeTruthy();
     const unresolvedUomSelect = screen.getByRole('combobox', { name: '单位' });
     expect((unresolvedUomSelect as HTMLInputElement).disabled).toBe(true);
     expect(
