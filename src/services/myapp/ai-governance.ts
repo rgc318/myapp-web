@@ -77,6 +77,7 @@ export type AiModel = {
   lastHealthAt: string | null;
   lastHealthTrigger: string | null;
   lastHealthStatus: string | null;
+  lastStructuredErrorCode?: string | null;
   lastToolErrorCode?: string | null;
   lastVisionErrorCode?: string | null;
   modelAlias: string;
@@ -89,6 +90,7 @@ export type AiModel = {
   sensitiveDataAllowed: boolean;
   status: string;
   supportsJsonSchema: boolean;
+  supportsStructuredOutput: boolean;
   supportsStreaming: boolean;
   supportsTools?: boolean;
   supportsVision: boolean;
@@ -113,6 +115,9 @@ export type AiModelAvailabilityItem = {
   latencyMs: number;
   modelAlias: string;
   providerModel: string | null;
+  structuredErrorCode: string | null;
+  supportsJsonSchema: boolean;
+  supportsStructuredOutput: boolean;
 };
 
 export type AiModelAvailabilityResult = {
@@ -359,6 +364,7 @@ export function mapAiModel(value: unknown): AiModel {
     lastHealthAt: text(row.last_health_at),
     lastHealthTrigger: text(row.last_health_trigger),
     lastHealthStatus: text(row.last_health_status),
+    lastStructuredErrorCode: text(row.last_structured_error_code),
     lastToolErrorCode: text(row.last_tool_error_code),
     lastVisionErrorCode: text(row.last_vision_error_code),
     modelAlias: String(row.model_alias ?? ''),
@@ -371,6 +377,7 @@ export function mapAiModel(value: unknown): AiModel {
     sensitiveDataAllowed: Boolean(row.sensitive_data_allowed),
     status: String(row.status ?? ''),
     supportsJsonSchema: Boolean(row.supports_json_schema),
+    supportsStructuredOutput: Boolean(row.supports_structured_output),
     supportsStreaming: Boolean(row.supports_streaming),
     supportsTools: Boolean(row.supports_tools),
     supportsVision: Boolean(row.supports_vision),
@@ -755,6 +762,12 @@ export async function checkAiModelAvailability(modelAliases?: string[]) {
                   latencyMs: toNumber(row.latency_ms),
                   modelAlias: toOptionalText(row.model_alias) ?? '',
                   providerModel: toOptionalText(row.provider_model) ?? null,
+                  structuredErrorCode:
+                    toOptionalText(row.structured_error_code) ?? null,
+                  supportsJsonSchema: Boolean(row.supports_json_schema),
+                  supportsStructuredOutput: Boolean(
+                    row.supports_structured_output,
+                  ),
                 };
               })
             : [],

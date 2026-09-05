@@ -48,6 +48,7 @@ export type AiSelectableModel = {
   healthExpiresAt: string | null;
   healthFailureCount: number;
   lastErrorCode: string | null;
+  lastStructuredErrorCode?: string | null;
   lastVisionErrorCode?: string | null;
   lastHealthAt: string | null;
   lastHealthTrigger: string | null;
@@ -55,6 +56,7 @@ export type AiSelectableModel = {
   modelAlias: string;
   status: string;
   supportsJsonSchema: boolean;
+  supportsStructuredOutput?: boolean;
   supportsStreaming: boolean;
   supportsVision?: boolean;
 };
@@ -1165,6 +1167,10 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
             typeof row.last_error_code === 'string'
               ? row.last_error_code
               : null,
+          lastStructuredErrorCode:
+            typeof row.last_structured_error_code === 'string'
+              ? row.last_structured_error_code
+              : null,
           lastVisionErrorCode:
             typeof row.last_vision_error_code === 'string'
               ? row.last_vision_error_code
@@ -1184,6 +1190,7 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
           modelAlias: String(row.model_alias ?? ''),
           status: String(row.status ?? ''),
           supportsJsonSchema: Boolean(row.supports_json_schema),
+          supportsStructuredOutput: Boolean(row.supports_structured_output),
           supportsStreaming: Boolean(row.supports_streaming),
           supportsVision: Boolean(row.supports_vision),
         };

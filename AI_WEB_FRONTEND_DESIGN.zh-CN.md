@@ -354,7 +354,7 @@ AI 草稿是可审计的预填建议，不是正式单据。模型只负责结�
 - 每行“检测”只发送当前行 alias；成功或失败后刷新表格并保留当前筛选、分页和列设置。
 - ProTable 行选择允许跨当前页操作前明确核对已选数量；“检测已选（N）”只发送选中的 alias，不得把空选择降级为全量检测。
 - “一键检查可用性”是明确的全量动作，必须二次确认真实 Provider 调用和可能产生的少量费用。
-- 页面展示 `lastHealthAt`、`healthExpiresAt`、`available / degraded / unavailable / stale / half_open / unknown`、连续失败次数、工具能力和稳定错误码。只有有效 `unavailable` 禁用模型；`degraded / stale / half_open / unknown` 使用明确标签但保持可选。健康是带 TTL 的时间快照，不得把旧的成功或失败表述为当前 Provider SLA。
+- 页面展示 `lastHealthAt`、`healthExpiresAt`、`available / degraded / unavailable / stale / half_open / unknown`、连续失败次数、工具能力、结构化输出能力和稳定错误码。结构化标签必须区分“原生 JSON Schema”和“结构化输出”：前者只表示 Provider 原生 strict 能力，后者表示原生或受控 JSON 回退最终通过本地 Schema 校验。只有有效 `unavailable` 禁用模型；`degraded / stale / half_open / unknown` 使用明确标签但保持可选。健康是带 TTL 的时间快照，不得把旧的成功或失败表述为当前 Provider SLA。
 - 检测结果只更新健康和能力事实，不自动启用、停用、退役模型，也不自动发布或回滚策略。
 - 治理总览展示 Scheduler 的启停、`03:15` 站点时间、`all_enabled / selected` 范围、健康 TTL 和最近检测时间；页面只读展示这些站点配置，不在浏览器直接修改 Scheduler。
 - 单项、多选和全量检测都使用相同 loading/成功/失败反馈。批量响应允许部分模型不可用，但请求级校验、权限或 Orchestrator 故障必须作为整次失败处理。

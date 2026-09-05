@@ -465,6 +465,8 @@ export default function AiPage() {
             ? model.displayName
             : `${model.displayName} · ${model.modelAlias}`
         }${model.supportsVision ? ' · 图片输入' : ''}${
+          model.supportsStructuredOutput ? ' · 结构化输出' : ''
+        }${
           healthStatus === 'unavailable' ? ' · 不可用' : ''
         }${healthStatus === 'degraded' ? ' · 临时波动' : ''}${
           healthStatus === 'stale' ? ' · 状态已过期' : ''

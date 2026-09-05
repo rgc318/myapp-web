@@ -471,6 +471,7 @@ describe('AI domain service', () => {
             model_alias: 'opencode-glm-5.2',
             status: 'active',
             supports_json_schema: 0,
+            supports_structured_output: 1,
             supports_streaming: 1,
           },
         ],
@@ -492,6 +493,7 @@ describe('AI domain service', () => {
       displayName: 'GLM 5.2',
       modelAlias: 'opencode-glm-5.2',
       lastHealthStatus: 'available',
+      supportsStructuredOutput: true,
       supportsStreaming: true,
     });
   });

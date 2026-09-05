@@ -51,6 +51,9 @@ describe('AI governance domain service', () => {
             input_cost: '1.25',
             output_cost: '4.5',
             currency: 'CNY',
+            supports_json_schema: 0,
+            supports_structured_output: 1,
+            last_structured_error_code: null,
             registry_version: 3,
           },
         ],
@@ -71,6 +74,8 @@ describe('AI governance domain service', () => {
       modelAlias: 'erp-fast-chat',
       dataRegion: 'cn-east',
       inputCost: 1.25,
+      supportsJsonSchema: false,
+      supportsStructuredOutput: true,
       registryVersion: 3,
     });
   });
@@ -325,6 +330,9 @@ describe('AI governance domain service', () => {
               health_status: 'available',
               latency_ms: 321.5,
               provider_model: 'openai/gpt-5',
+              supports_json_schema: false,
+              supports_structured_output: true,
+              structured_error_code: null,
             },
             {
               model_alias: 'erp-embedding',
@@ -369,6 +377,11 @@ describe('AI governance domain service', () => {
       available: false,
       errorCode: 'PROVIDER_HTTP_429',
       healthStatus: 'degraded',
+    });
+    expect(availabilityResult.data.items[0]).toMatchObject({
+      supportsJsonSchema: false,
+      supportsStructuredOutput: true,
+      structuredErrorCode: null,
     });
   });
 

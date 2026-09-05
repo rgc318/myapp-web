@@ -407,8 +407,11 @@ export default function AiModelGovernancePage({
         <Space size={[4, 4]} wrap>
           <Tag color={row.supportsStreaming ? 'green' : 'default'}>流式</Tag>
           <Tag color={row.supportsTools ? 'cyan' : 'default'}>工具调用</Tag>
+          <Tag color={row.supportsStructuredOutput ? 'green' : 'default'}>
+            {row.supportsStructuredOutput ? '结构化输出' : '结构化未验证'}
+          </Tag>
           <Tag color={row.supportsJsonSchema ? 'blue' : 'default'}>
-            JSON Schema
+            原生 JSON Schema
           </Tag>
           <Tag color={row.supportsVision ? 'purple' : 'default'}>
             {row.supportsVision ? '图片输入' : '纯文本'}
@@ -456,6 +459,9 @@ export default function AiModelGovernancePage({
             {row.lastVisionErrorCode ? (
               <Text type="warning">视觉：{row.lastVisionErrorCode}</Text>
             ) : null}
+            {row.lastStructuredErrorCode ? (
+              <Text type="warning">结构化：{row.lastStructuredErrorCode}</Text>
+            ) : null}
             {row.lastToolErrorCode ? (
               <Text type="warning">工具：{row.lastToolErrorCode}</Text>
             ) : null}
@@ -478,7 +484,7 @@ export default function AiModelGovernancePage({
                   Modal.confirm({
                     title: `检测模型 ${row.modelAlias}？`,
                     content:
-                      '系统会通过 LiteLLM 发起一次最小真实请求，可能产生少量 Provider 费用。',
+                      '系统会通过 LiteLLM 检测基础对话、工具调用、结构化输出和图片输入，可能产生少量 Provider 费用。',
                     okText: '开始检测',
                     cancelText: '取消',
                     onOk: () => executeModelAvailabilityCheck([row.modelAlias]),
