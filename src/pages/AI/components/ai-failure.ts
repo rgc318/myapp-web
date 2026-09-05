@@ -19,6 +19,12 @@ const MODEL_CODES = new Set([
   'MODEL_PROVIDER_REJECTED',
 ]);
 
+const CONTRACT_CODES = new Set([
+  'AI_PROMPT_VERSION_MISMATCH',
+  'AI_RUNTIME_CONTRACT_MISMATCH',
+  'AI_SCHEMA_VERSION_MISMATCH',
+]);
+
 const PERMISSION_CODES = new Set([
   'AUTHENTICATION_REQUIRED',
   'AuthenticationError',
@@ -30,7 +36,7 @@ const SYSTEM_CODES = new Set([
   'AI_BROWSER_STREAM_UNSUPPORTED',
   'AI_DAILY_BUDGET_EXCEEDED',
   'AI_MONTHLY_BUDGET_EXCEEDED',
-  'AI_PROMPT_VERSION_MISMATCH',
+  'AI_RUNTIME_NOT_READY',
   'AI_RUNTIME_GOVERNANCE_UNAVAILABLE',
   'AI_SERVICE_AUTHENTICATION_FAILED',
   'INTERNAL_ERROR',
@@ -40,6 +46,16 @@ export function resolveAiFailureRecovery(
   errorCode?: string | null,
 ): AiFailureRecovery {
   const code = errorCode?.trim() || null;
+  if (code && CONTRACT_CODES.has(code)) {
+    return {
+      action: 'none',
+      alertType: 'error',
+      description:
+        '当前 Backend 与 AI Orchestrator 的运行契约不一致，需要管理员同步并重新部署服务；切换模型或重复发送不会恢复。',
+      kind: 'system',
+      title: 'AI 运行版本需要同步',
+    };
+  }
   if (code && MODEL_CODES.has(code)) {
     return {
       action: 'retry',
