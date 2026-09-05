@@ -455,17 +455,25 @@ export default function AiPage() {
       : '自动模型（由策略选择）';
   const modelSelectOptions = [
     { label: automaticModelLabel, value: 'auto' },
-    ...selectableModels.map((model) => ({
-      disabled: model.lastHealthStatus === 'unavailable',
-      label: `${
-        model.displayName === model.modelAlias
-          ? model.displayName
-          : `${model.displayName} · ${model.modelAlias}`
-      }${model.supportsVision ? ' · 图片输入' : ''}${
-        model.lastHealthStatus === 'unavailable' ? ' · 不可用' : ''
-      }${model.lastHealthStatus === 'degraded' ? ' · 临时波动' : ''}`,
-      value: model.modelAlias,
-    })),
+    ...selectableModels.map((model) => {
+      const healthStatus =
+        model.effectiveHealthStatus || model.lastHealthStatus || 'unknown';
+      return {
+        disabled: healthStatus === 'unavailable',
+        label: `${
+          model.displayName === model.modelAlias
+            ? model.displayName
+            : `${model.displayName} · ${model.modelAlias}`
+        }${model.supportsVision ? ' · 图片输入' : ''}${
+          healthStatus === 'unavailable' ? ' · 不可用' : ''
+        }${healthStatus === 'degraded' ? ' · 临时波动' : ''}${
+          healthStatus === 'stale' ? ' · 状态已过期' : ''
+        }${healthStatus === 'half_open' ? ' · 恢复探测中' : ''}${
+          healthStatus === 'unknown' ? ' · 尚未检测' : ''
+        }`,
+        value: model.modelAlias,
+      };
+    }),
   ];
 
   const setComposerAttachments = useCallback(
@@ -646,7 +654,8 @@ export default function AiPage() {
           models.some(
             (model) =>
               model.modelAlias === current &&
-              model.lastHealthStatus !== 'unavailable',
+              (model.effectiveHealthStatus || model.lastHealthStatus) !==
+                'unavailable',
           )
             ? current
             : null,

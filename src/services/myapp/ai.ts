@@ -44,9 +44,13 @@ export type AiScenarioResolution = {
 export type AiSelectableModel = {
   capability: string;
   displayName: string;
+  effectiveHealthStatus: string | null;
+  healthExpiresAt: string | null;
+  healthFailureCount: number;
   lastErrorCode: string | null;
   lastVisionErrorCode?: string | null;
   lastHealthAt: string | null;
+  lastHealthTrigger: string | null;
   lastHealthStatus: string | null;
   modelAlias: string;
   status: string;
@@ -1148,6 +1152,15 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
         return {
           capability: String(row.capability ?? ''),
           displayName: String(row.display_name ?? row.model_alias ?? ''),
+          effectiveHealthStatus:
+            typeof row.effective_health_status === 'string'
+              ? row.effective_health_status
+              : null,
+          healthExpiresAt:
+            typeof row.health_expires_at === 'string'
+              ? row.health_expires_at
+              : null,
+          healthFailureCount: toNumber(row.health_failure_count),
           lastErrorCode:
             typeof row.last_error_code === 'string'
               ? row.last_error_code
@@ -1159,6 +1172,10 @@ export async function listAiSelectableModels(): Promise<AiWorkspaceOptions> {
           lastHealthAt:
             typeof row.last_health_at === 'string'
               ? row.last_health_at
+              : null,
+          lastHealthTrigger:
+            typeof row.last_health_trigger === 'string'
+              ? row.last_health_trigger
               : null,
           lastHealthStatus:
             typeof row.last_health_status === 'string'

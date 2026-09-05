@@ -94,6 +94,7 @@ describe('AI governance domain service', () => {
           enabled: true,
           cron: '15 3 * * *',
           timezone: 'site',
+          ttl_seconds: 108000,
           scope: 'all_enabled',
           model_aliases: [],
           last_health_at: '2026-08-01 03:15:00',
@@ -131,6 +132,7 @@ describe('AI governance domain service', () => {
       enabled: true,
       cron: '15 3 * * *',
       lastHealthAt: '2026-08-01 03:15:00',
+      ttlSeconds: 108000,
     });
     expect(result.dataTaskCounts.review_required).toBe(3);
   });

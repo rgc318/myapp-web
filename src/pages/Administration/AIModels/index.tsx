@@ -91,8 +91,11 @@ const POLICY_STATUS: Record<string, { color: string; text: string }> = {
 const MODEL_HEALTH: Record<string, { color: string; text: string }> = {
   available: { color: 'success', text: '可用' },
   degraded: { color: 'warning', text: '临时波动' },
+  half_open: { color: 'processing', text: '恢复探测' },
   listed: { color: 'processing', text: 'LiteLLM 可见' },
   missing: { color: 'default', text: 'LiteLLM 不可见' },
+  stale: { color: 'warning', text: '状态已过期' },
+  unknown: { color: 'default', text: '尚未检测' },
   unavailable: { color: 'error', text: '不可用' },
 };
 
@@ -428,27 +431,37 @@ export default function AiModelGovernancePage({
       title: '健康',
       search: false,
       width: 180,
-      render: (_, row) => (
-        <Space orientation="vertical" size={0}>
-          {row.lastHealthStatus ? (
-            <Tag color={MODEL_HEALTH[row.lastHealthStatus]?.color ?? 'default'}>
-              {MODEL_HEALTH[row.lastHealthStatus]?.text ?? row.lastHealthStatus}
-            </Tag>
-          ) : (
-            <Text>-</Text>
-          )}
-          <Text type="secondary">{row.lastHealthAt || '-'}</Text>
-          {row.lastErrorCode ? (
-            <Text type="danger">{row.lastErrorCode}</Text>
-          ) : null}
-          {row.lastVisionErrorCode ? (
-            <Text type="warning">视觉：{row.lastVisionErrorCode}</Text>
-          ) : null}
-          {row.lastToolErrorCode ? (
-            <Text type="warning">工具：{row.lastToolErrorCode}</Text>
-          ) : null}
-        </Space>
-      ),
+      render: (_, row) => {
+        const healthStatus =
+          row.effectiveHealthStatus || row.lastHealthStatus || 'unknown';
+        return (
+          <Space orientation="vertical" size={0}>
+            {healthStatus ? (
+              <Tag color={MODEL_HEALTH[healthStatus]?.color ?? 'default'}>
+                {MODEL_HEALTH[healthStatus]?.text ?? healthStatus}
+              </Tag>
+            ) : (
+              <Text>-</Text>
+            )}
+            <Text type="secondary">{row.lastHealthAt || '-'}</Text>
+            {row.healthExpiresAt ? (
+              <Text type="secondary">有效至：{row.healthExpiresAt}</Text>
+            ) : null}
+            {row.healthFailureCount ? (
+              <Text type="warning">连续失败：{row.healthFailureCount}</Text>
+            ) : null}
+            {row.lastErrorCode ? (
+              <Text type="danger">{row.lastErrorCode}</Text>
+            ) : null}
+            {row.lastVisionErrorCode ? (
+              <Text type="warning">视觉：{row.lastVisionErrorCode}</Text>
+            ) : null}
+            {row.lastToolErrorCode ? (
+              <Text type="warning">工具：{row.lastToolErrorCode}</Text>
+            ) : null}
+          </Space>
+        );
+      },
     },
     { title: '版本', dataIndex: 'registryVersion', search: false, width: 80 },
     {
@@ -896,7 +909,7 @@ export default function AiModelGovernancePage({
                       }
                       description={
                         overview?.modelHealthSchedule.enabled
-                          ? `每天 03:15（站点时区）检测${overview.modelHealthSchedule.modelAliases.length ? `指定的 ${overview.modelHealthSchedule.modelAliases.length} 个模型` : '全部未停用模型'}；最近检测：${overview.modelHealthSchedule.lastHealthAt || '尚无记录'}`
+                          ? `每天 03:15（站点时区）检测${overview.modelHealthSchedule.modelAliases.length ? `指定的 ${overview.modelHealthSchedule.modelAliases.length} 个模型` : '全部未停用模型'}；健康结果有效 ${Math.round(overview.modelHealthSchedule.ttlSeconds / 3600)} 小时；最近检测：${overview.modelHealthSchedule.lastHealthAt || '尚无记录'}`
                           : '可在站点配置中启用 myapp_ai_model_healthcheck_enabled；手动单项、批量和全量检测仍可使用。'
                       }
                     />

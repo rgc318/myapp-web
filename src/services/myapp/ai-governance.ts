@@ -32,6 +32,7 @@ export type AiGovernanceOverview = {
     modelAliases: string[];
     scope: string;
     timezone: string;
+    ttlSeconds: number;
   };
   policyCounts: Record<string, number>;
   recentAudits: AiAuditEvent[];
@@ -68,8 +69,13 @@ export type AiModel = {
   embeddingDimensions: number | null;
   embeddingSpaceVersion: string | null;
   inputCost: number;
+  effectiveHealthStatus: string | null;
+  healthExpiresAt: string | null;
+  healthFailureCount: number;
+  healthIsStale: boolean;
   lastErrorCode: string | null;
   lastHealthAt: string | null;
+  lastHealthTrigger: string | null;
   lastHealthStatus: string | null;
   lastToolErrorCode?: string | null;
   lastVisionErrorCode?: string | null;
@@ -99,7 +105,10 @@ export type AiModelSyncResult = {
 export type AiModelAvailabilityItem = {
   available: boolean;
   capability: string | null;
+  effectiveHealthStatus: string;
   errorCode: string | null;
+  healthExpiresAt: string | null;
+  healthFailureCount: number;
   healthStatus: string;
   latencyMs: number;
   modelAlias: string;
@@ -110,6 +119,7 @@ export type AiModelAvailabilityResult = {
   availableCount: number;
   checkedCount: number;
   degradedCount: number;
+  healthTtlSeconds: number;
   items: AiModelAvailabilityItem[];
   requestedCount: number;
   source: string;
@@ -340,9 +350,14 @@ export function mapAiModel(value: unknown): AiModel {
     dataRegion: text(row.data_region),
     embeddingDimensions: toOptionalNumber(row.embedding_dimensions),
     embeddingSpaceVersion: text(row.embedding_space_version),
+    effectiveHealthStatus: text(row.effective_health_status),
+    healthExpiresAt: text(row.health_expires_at),
+    healthFailureCount: toNumber(row.health_failure_count),
+    healthIsStale: Boolean(row.health_is_stale),
     inputCost: toNumber(row.input_cost),
     lastErrorCode: text(row.last_error_code),
     lastHealthAt: text(row.last_health_at),
+    lastHealthTrigger: text(row.last_health_trigger),
     lastHealthStatus: text(row.last_health_status),
     lastToolErrorCode: text(row.last_tool_error_code),
     lastVisionErrorCode: text(row.last_vision_error_code),
@@ -595,6 +610,7 @@ export async function getAiGovernanceOverview() {
       modelAliases: toStringList(modelHealthSchedule.model_aliases),
       scope: text(modelHealthSchedule.scope) ?? '',
       timezone: text(modelHealthSchedule.timezone) ?? '',
+      ttlSeconds: toNumber(modelHealthSchedule.ttl_seconds),
     },
     policyCounts: mapCounts(row.policy_counts),
     recentAudits: Array.isArray(row.recent_audits)
@@ -718,13 +734,21 @@ export async function checkAiModelAvailability(modelAliases?: string[]) {
           availableCount: toNumber(payload.available_count),
           checkedCount: toNumber(payload.checked_count),
           degradedCount: toNumber(payload.degraded_count),
+          healthTtlSeconds: toNumber(payload.health_ttl_seconds),
           items: Array.isArray(payload.items)
             ? payload.items.map((item) => {
                 const row = readObject(item);
                 return {
                   available: Boolean(row.available),
                   capability: toOptionalText(row.capability) ?? null,
+                  effectiveHealthStatus:
+                    toOptionalText(row.effective_health_status) ??
+                    toOptionalText(row.health_status) ??
+                    (Boolean(row.available) ? 'available' : 'unavailable'),
                   errorCode: toOptionalText(row.error_code) ?? null,
+                  healthExpiresAt:
+                    toOptionalText(row.health_expires_at) ?? null,
+                  healthFailureCount: toNumber(row.health_failure_count),
                   healthStatus:
                     toOptionalText(row.health_status) ??
                     (Boolean(row.available) ? 'available' : 'unavailable'),
