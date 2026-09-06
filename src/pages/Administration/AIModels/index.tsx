@@ -65,7 +65,10 @@ import {
   updateAiModel,
   validateAiPolicy,
 } from '@/services/myapp/ai-governance';
-import { notifyMutationError } from '@/services/myapp/mutation';
+import {
+  getMutationErrorMessage,
+  notifyMutationError,
+} from '@/services/myapp/mutation';
 import UsageAnalytics from './UsageAnalytics';
 import VectorReleases from './VectorReleases';
 
@@ -201,6 +204,14 @@ export default function AiModelGovernancePage({
   const [policyForm] = Form.useForm();
   const [actionForm] = Form.useForm();
   const [editingModel, setEditingModel] = useState<AiModel | null>(null);
+  const [statusAction, setStatusAction] = useState<{
+    aliases: string[];
+    status: 'active' | 'disabled';
+  } | null>(null);
+  const [statusForm] = Form.useForm();
+  const [changingStatus, setChangingStatus] = useState(false);
+  const statusInFlight = useRef(false);
+  const [statusFailures, setStatusFailures] = useState<string[]>([]);
   const [syncingModels, setSyncingModels] = useState(false);
   const [checkingModels, setCheckingModels] = useState(false);
   const [checkingModelAliases, setCheckingModelAliases] = useState<string[]>(
@@ -351,11 +362,14 @@ export default function AiModelGovernancePage({
     {
       title: '模型别名',
       dataIndex: 'modelAlias',
+      fixed: 'left',
       width: 220,
       search: false,
       render: (_, row) => (
         <Space orientation="vertical" size={0}>
-          <Text strong>{row.modelAlias}</Text>
+          <Text strong style={{ overflowWrap: 'anywhere' }}>
+            {row.modelAlias}
+          </Text>
           <Text type="secondary">
             {row.providerModelDisplay || row.providerFamily || '-'}
           </Text>
@@ -373,7 +387,7 @@ export default function AiModelGovernancePage({
       render: (_, row) => <Tag color="blue">{row.capability}</Tag>,
     },
     {
-      title: '状态',
+      title: '管理状态',
       dataIndex: 'status',
       valueType: 'select',
       valueEnum: Object.fromEntries(
@@ -431,7 +445,7 @@ export default function AiModelGovernancePage({
       ),
     },
     {
-      title: '健康',
+      title: '基础探测与能力诊断',
       search: false,
       width: 180,
       render: (_, row) => {
@@ -441,7 +455,9 @@ export default function AiModelGovernancePage({
           <Space orientation="vertical" size={0}>
             {healthStatus ? (
               <Tag color={MODEL_HEALTH[healthStatus]?.color ?? 'default'}>
-                {MODEL_HEALTH[healthStatus]?.text ?? healthStatus}
+                {healthStatus === 'available'
+                  ? '基础探测通过'
+                  : (MODEL_HEALTH[healthStatus]?.text ?? healthStatus)}
               </Tag>
             ) : (
               <Text>-</Text>
@@ -473,10 +489,30 @@ export default function AiModelGovernancePage({
     {
       title: '操作',
       valueType: 'option',
-      width: 150,
+      width: 210,
+      fixed: 'right',
       render: (_, row) =>
         access.canManageAiGovernance
           ? [
+              <Button
+                key="status"
+                size="small"
+                type="link"
+                danger={['active', 'validated'].includes(row.status)}
+                disabled={changingStatus || row.status === 'retired'}
+                onClick={() => {
+                  statusForm.resetFields();
+                  setStatusFailures([]);
+                  setStatusAction({
+                    aliases: [row.modelAlias],
+                    status: ['active', 'validated'].includes(row.status)
+                      ? 'disabled'
+                      : 'active',
+                  });
+                }}
+              >
+                {['active', 'validated'].includes(row.status) ? '停用' : '启用'}
+              </Button>,
               <Button
                 key="check"
                 loading={checkingModelAliases.includes(row.modelAlias)}
@@ -935,7 +971,35 @@ export default function AiModelGovernancePage({
                             }
                           : undefined
                       }
-                      tableAlertOptionRender={false}
+                      tableAlertOptionRender={() => (
+                        <Space>
+                          {(['active', 'disabled'] as const).map((status) => (
+                            <Button
+                              key={status}
+                              size="small"
+                              disabled={
+                                changingStatus || !selectedModelAliases.length
+                              }
+                              onClick={() => {
+                                statusForm.resetFields();
+                                setStatusFailures([]);
+                                setStatusAction({
+                                  aliases: [...selectedModelAliases],
+                                  status,
+                                });
+                              }}
+                            >
+                              {status === 'active' ? '批量启用' : '批量停用'}
+                            </Button>
+                          ))}
+                          <Button
+                            size="small"
+                            onClick={() => setSelectedModelAliases([])}
+                          >
+                            清空选择
+                          </Button>
+                        </Space>
+                      )}
                       request={async (params) => {
                         const result = await listAiModels({
                           capability: params.capability,
@@ -1151,6 +1215,100 @@ export default function AiModelGovernancePage({
           />
         </Card>
       </Space>
+
+      <Modal
+        title={`${statusAction?.status === 'active' ? '启用' : '停用'}模型（${statusAction?.aliases.length ?? 0}）`}
+        open={Boolean(statusAction)}
+        confirmLoading={changingStatus}
+        closable={!changingStatus}
+        maskClosable={!changingStatus}
+        cancelButtonProps={{ disabled: changingStatus }}
+        onCancel={() => {
+          if (!changingStatus) setStatusAction(null);
+        }}
+        onOk={() => statusForm.submit()}
+      >
+        <Alert
+          type="info"
+          showIcon
+          title={
+            statusAction?.status === 'active'
+              ? '启用仅开放模型管理状态；实际请求仍检查健康、场景能力与策略资格。'
+              : '停用后新的模型选择和策略资格检查会排除该模型。已发布策略若没有其他合格候选，相关场景将不可用；缓存刷新期间可能短暂沿用旧状态。'
+          }
+        />
+        <Paragraph
+          style={{
+            marginTop: 12,
+            maxHeight: 160,
+            overflow: 'auto',
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {statusAction?.aliases.join('、')}
+        </Paragraph>
+        {statusFailures.length > 0 && (
+          <Alert
+            type="error"
+            title="以下模型未完成变更"
+            description={statusFailures.join('；')}
+          />
+        )}
+        <Form
+          form={statusForm}
+          layout="vertical"
+          onFinish={async (values) => {
+            if (!statusAction || statusInFlight.current) return;
+            statusInFlight.current = true;
+            setChangingStatus(true);
+            const failed: string[] = [];
+            const failures: string[] = [];
+            try {
+              for (const alias of statusAction.aliases) {
+                try {
+                  await updateAiModel(
+                    alias,
+                    { status: statusAction.status },
+                    values.reason,
+                    { silent: true },
+                  );
+                } catch (error) {
+                  failed.push(alias);
+                  failures.push(`${alias}：${getMutationErrorMessage(error)}`);
+                }
+              }
+              setSelectedModelAliases(failed);
+              setStatusFailures(failures);
+              reloadGovernance();
+              if (failed.length) {
+                message.warning(
+                  `成功 ${statusAction.aliases.length - failed.length} 个，失败 ${failed.length} 个；保留失败项供重试。`,
+                );
+                setStatusAction({ ...statusAction, aliases: failed });
+              } else {
+                message.success(
+                  `已${statusAction.status === 'active' ? '启用' : '停用'} ${statusAction.aliases.length} 个模型`,
+                );
+                setStatusAction(null);
+                statusForm.resetFields();
+              }
+            } finally {
+              statusInFlight.current = false;
+              setChangingStatus(false);
+            }
+          }}
+        >
+          <Form.Item
+            name="reason"
+            label="变更原因"
+            rules={[
+              { required: true, whitespace: true, message: '请填写变更原因' },
+            ]}
+          >
+            <Input.TextArea maxLength={1000} rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title={`编辑模型管理信息 · ${editingModel?.modelAlias ?? ''}`}

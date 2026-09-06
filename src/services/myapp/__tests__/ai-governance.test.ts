@@ -32,6 +32,14 @@ const mockedCallGatewayMethod = jest.mocked(callGatewayMethod);
 const mockedRunGatewayMutation = jest.mocked(runGatewayMutation);
 
 describe('AI governance domain service', () => {
+  it('sends only lifecycle state for quick disable and suppresses batch toasts', async () => {
+    await updateAiModel('model-a', { status: 'disabled' }, '维护窗口', { silent: true });
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith('update_ai_model_registry_v1', expect.objectContaining({
+      payload: { model_alias: 'model-a', payload: { status: 'disabled' }, reason: '维护窗口' },
+      notifyError: false,
+      successMessage: undefined,
+    }));
+  });
   beforeEach(() => {
     mockedCallGatewayMethod.mockReset();
     mockedRunGatewayMutation.mockReset();

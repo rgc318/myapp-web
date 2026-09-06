@@ -90,6 +90,7 @@ export function AiRunInspector({
   errorCode,
   modelAlias,
   modelDisplay,
+  modelSelection: requestedSelection,
   onEditRequest,
   onRetry,
   result,
@@ -106,6 +107,7 @@ export function AiRunInspector({
   errorCode?: string | null;
   modelAlias?: string | null;
   modelDisplay?: string | null;
+  modelSelection?: 'auto' | 'fixed';
   onEditRequest?: () => void;
   onRetry?: () => void;
   result: AiChatResult | null;
@@ -123,7 +125,7 @@ export function AiRunInspector({
   const resolvedModelAlias = result?.modelAlias || modelAlias || null;
   const resolvedModelDisplay =
     result?.modelDisplay || modelDisplay || resolvedModelAlias;
-  const modelSelection = run?.modelSelection ?? 'auto';
+  const modelSelection = run?.modelSelection ?? requestedSelection ?? 'auto';
   const requestedModelDisplay =
     run?.requestedModelDisplay ||
     (modelSelection === 'fixed' ? resolvedModelDisplay : null);

@@ -793,6 +793,7 @@ export async function updateAiModel(
     status?: string;
   },
   reason: string,
+  options: { silent?: boolean } = {},
 ) {
   return runGatewayMutation('update_ai_model_registry_v1', {
     payload: {
@@ -813,7 +814,8 @@ export async function updateAiModel(
       }),
       reason,
     },
-    successMessage: '模型管理信息已更新',
+    successMessage: options.silent ? undefined : '模型管理信息已更新',
+    notifyError: !options.silent,
   });
 }
 

@@ -44,6 +44,23 @@ const result: AiChatResult = {
 };
 
 describe('AiRunInspector', () => {
+  it('preserves fixed selection when a failed stream has no completed result', () => {
+    render(
+      <App>
+        <AiRunInspector
+          result={null}
+          status="failed"
+          tools={[]}
+          warnings={[]}
+          modelSelection="fixed"
+          modelDisplay="DeepSeek"
+          error="请求失败"
+        />
+      </App>,
+    );
+    expect(screen.getByText('固定模型')).toBeTruthy();
+    expect(screen.queryByText('自动模型（由策略选择）')).toBeNull();
+  });
   it('separates the business overview from advanced diagnostics', () => {
     render(
       <App>

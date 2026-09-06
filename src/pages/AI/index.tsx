@@ -3085,6 +3085,7 @@ export default function AiPage() {
               errorCode={inspectedErrorCode}
               modelAlias={inspectedMessage?.modelAlias ?? null}
               modelDisplay={inspectedMessage?.modelDisplay ?? null}
+              modelSelection={inspectedMessage?.modelSelection}
               onEditRequest={
                 canRecoverInspectedRun ? editFailedRequest : undefined
               }
