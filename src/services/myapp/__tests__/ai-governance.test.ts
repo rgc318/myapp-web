@@ -2,6 +2,9 @@ import { callGatewayMethod } from '../api-client';
 import {
   analyzeAiProductData,
   checkAiModelAvailability,
+  startAiModelCheck,
+  getAiModelCheck,
+  cancelAiModelCheck,
   createAiDataTask,
   cleanupExcludedAiVectors,
   getAiGovernanceOverview,
@@ -32,6 +35,23 @@ const mockedCallGatewayMethod = jest.mocked(callGatewayMethod);
 const mockedRunGatewayMutation = jest.mocked(runGatewayMutation);
 
 describe('AI governance domain service', () => {
+  it('submits a background check without using the synchronous endpoint', async () => {
+    await startAiModelCheck(['a'], 'basic');
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith('start_ai_model_check_v1', expect.objectContaining({
+      payload: { model_aliases: ['a'], mode: 'basic' },
+    }));
+    await cancelAiModelCheck('job-1');
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith('cancel_ai_model_check_v1', expect.objectContaining({ payload: { job_id: 'job-1' } }));
+  });
+  it('maps partial progress without classifying execution errors as model unavailability', async () => {
+    mockedCallGatewayMethod.mockResolvedValue({ data: {
+      job_id: 'job-1', status: 'partial', mode: 'basic', model_aliases: ['a', 'b'], total: 2, completed: 1,
+      items: [{ model_alias: 'a', check_status: 'error', error_code: 'MODEL_CHECK_EXECUTION_FAILED' }],
+    }, meta: {}, raw: {} });
+    const job = await getAiModelCheck();
+    expect(job).toMatchObject({ jobId: 'job-1', status: 'partial', modelAliases: ['a', 'b'], completed: 1 });
+    expect(job?.items[0]).toMatchObject({ checkStatus: 'error', healthStatus: '', errorCode: 'MODEL_CHECK_EXECUTION_FAILED' });
+  });
   it('sends only lifecycle state for quick disable and suppresses batch toasts', async () => {
     await updateAiModel('model-a', { status: 'disabled' }, '维护窗口', { silent: true });
     expect(mockedRunGatewayMutation).toHaveBeenCalledWith('update_ai_model_registry_v1', expect.objectContaining({

@@ -32,6 +32,7 @@ import {
   InputNumber,
   Modal,
   message,
+  Progress,
   Row,
   Select,
   Space,
@@ -42,17 +43,19 @@ import {
   Typography,
 } from 'antd';
 import dayjs, { type Dayjs } from 'dayjs';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   type AiAuditEvent,
   type AiModel,
+  type AiModelCheckJob,
   type AiPolicy,
   type AiPolicyDraftInput,
   type AiPolicyVersion,
   type AiUsageDaily,
   approveAiPolicy,
-  checkAiModelAvailability,
+  cancelAiModelCheck,
   getAiGovernanceOverview,
+  getAiModelCheck,
   getAiPolicy,
   getAiUsage,
   listAiAuditEvents,
@@ -61,6 +64,7 @@ import {
   publishAiPolicy,
   rollbackAiPolicy,
   saveAiPolicyDraft,
+  startAiModelCheck,
   syncAiModels,
   updateAiModel,
   validateAiPolicy,
@@ -214,6 +218,45 @@ export default function AiModelGovernancePage({
   const [statusFailures, setStatusFailures] = useState<string[]>([]);
   const [syncingModels, setSyncingModels] = useState(false);
   const [checkingModels, setCheckingModels] = useState(false);
+  const [checkJob, setCheckJob] = useState<AiModelCheckJob | null>(null);
+  const [checkMode, setCheckMode] = useState<'basic' | 'full'>('basic');
+  const [pollError, setPollError] = useState(false);
+  const checkMutationVersion = useRef(0);
+  const checkMutationBusy = useRef(false);
+  const checkActive =
+    checkJob?.status === 'queued' || checkJob?.status === 'running';
+  useEffect(() => {
+    if (!access.canManageAiGovernance) return;
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let previousProgress = '';
+    const poll = async () => {
+      const version = checkMutationVersion.current;
+      try {
+        const job = await getAiModelCheck();
+        if (
+          !disposed &&
+          version === checkMutationVersion.current &&
+          !checkMutationBusy.current
+        ) {
+          setCheckJob(job);
+          setPollError(false);
+          const progress = `${job?.jobId}:${job?.completed}:${job?.status}`;
+          if (progress !== previousProgress) modelActionRef.current?.reload();
+          previousProgress = progress;
+        }
+      } catch {
+        if (!disposed) setPollError(true);
+      } finally {
+        if (!disposed) timer = setTimeout(poll, 3000);
+      }
+    };
+    void poll();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [access.canManageAiGovernance]);
   const [checkingModelAliases, setCheckingModelAliases] = useState<string[]>(
     [],
   );
@@ -335,23 +378,31 @@ export default function AiModelGovernancePage({
     }
   };
 
-  const executeModelAvailabilityCheck = async (modelAliases?: string[]) => {
+  const executeModelAvailabilityCheck = async (
+    modelAliases?: string[],
+    mode = checkMode,
+  ) => {
+    if (checkMutationBusy.current) return;
+    checkMutationBusy.current = true;
+    checkMutationVersion.current += 1;
     const aliases = modelAliases?.filter(Boolean) ?? [];
     setCheckingModels(true);
     setCheckingModelAliases(aliases);
     try {
-      const result = await checkAiModelAvailability(
+      const result = await startAiModelCheck(
         aliases.length ? aliases : undefined,
+        mode,
       );
-      message.success(
-        `已检查 ${result.data.checkedCount} 个：${result.data.availableCount} 个可用，${result.data.degradedCount} 个临时波动，${result.data.unavailableCount} 个不可用`,
-      );
+      setCheckJob(result.data);
+      message.info('检测任务已提交，结果将逐项保存。');
       setSelectedModelAliases([]);
       reloadGovernance();
     } catch (error) {
       notifyMutationError(error);
       throw error;
     } finally {
+      checkMutationVersion.current += 1;
+      checkMutationBusy.current = false;
       setCheckingModels(false);
       setCheckingModelAliases([]);
     }
@@ -515,12 +566,18 @@ export default function AiModelGovernancePage({
               </Button>,
               <Button
                 key="check"
+                disabled={
+                  checkActive ||
+                  checkingModels ||
+                  row.status === 'disabled' ||
+                  row.status === 'retired'
+                }
                 loading={checkingModelAliases.includes(row.modelAlias)}
                 onClick={() => {
                   Modal.confirm({
                     title: `检测模型 ${row.modelAlias}？`,
                     content:
-                      '系统会通过 LiteLLM 检测基础对话、工具调用、结构化输出和图片输入，可能产生少量 Provider 费用。',
+                      '按所选模式在后台检测。快速模式发送最小请求；完整模式额外检测工具、结构化输出和视觉，可能产生 Provider 费用。',
                     okText: '开始检测',
                     cancelText: '取消',
                     onOk: () => executeModelAvailabilityCheck([row.modelAlias]),
@@ -955,6 +1012,144 @@ export default function AiModelGovernancePage({
                           : '可在站点配置中启用 myapp_ai_model_healthcheck_enabled；手动单项、批量和全量检测仍可使用。'
                       }
                     />
+                    {access.canManageAiGovernance && (
+                      <Space>
+                        <Text>检测模式</Text>
+                        <Select
+                          value={checkMode}
+                          onChange={setCheckMode}
+                          disabled={checkActive}
+                          options={[
+                            {
+                              value: 'basic',
+                              label: '快速连通性（保留能力状态）',
+                            },
+                            {
+                              value: 'full',
+                              label: '完整能力检测（多次请求）',
+                            },
+                          ]}
+                        />
+                      </Space>
+                    )}
+                    {pollError && (
+                      <Alert
+                        type="warning"
+                        title="进度获取失败，正在重试；不代表模型不可用。"
+                      />
+                    )}
+                    {checkJob && (
+                      <Card size="small" title="最近检测任务">
+                        <Space orientation="vertical" style={{ width: '100%' }}>
+                          <Text>
+                            {(
+                              {
+                                queued: '排队中',
+                                running: '检测中',
+                                completed: '检测结束',
+                                partial: '部分检测执行失败',
+                                cancelled: '已取消',
+                                interrupted: '已中断',
+                              } as Record<string, string>
+                            )[checkJob.status] || checkJob.status}{' '}
+                            · {checkJob.completed}/{checkJob.total} · 基础可用{' '}
+                            {
+                              checkJob.items.filter((item) => item.available)
+                                .length
+                            }{' '}
+                            个
+                          </Text>
+                          <Progress
+                            percent={
+                              checkJob.total
+                                ? Math.round(
+                                    (checkJob.completed / checkJob.total) * 100,
+                                  )
+                                : 0
+                            }
+                            status={checkActive ? 'active' : 'normal'}
+                          />
+                          {checkActive ? (
+                            <Button
+                              disabled={checkJob.cancelRequested}
+                              onClick={async () => {
+                                if (checkMutationBusy.current) return;
+                                checkMutationBusy.current = true;
+                                try {
+                                  setCheckJob(
+                                    (await cancelAiModelCheck(checkJob.jobId))
+                                      .data,
+                                  );
+                                } catch (error) {
+                                  notifyMutationError(error);
+                                } finally {
+                                  checkMutationVersion.current += 1;
+                                  checkMutationBusy.current = false;
+                                }
+                              }}
+                            >
+                              {checkJob.cancelRequested
+                                ? '等待当前模型结束后取消'
+                                : '取消检测'}
+                            </Button>
+                          ) : (
+                            <Button
+                              disabled={
+                                checkingModels ||
+                                !checkJob.modelAliases.some(
+                                  (alias) =>
+                                    !checkJob.items.some(
+                                      (item) =>
+                                        item.modelAlias === alias &&
+                                        item.available &&
+                                        item.checkStatus === 'completed',
+                                    ),
+                                )
+                              }
+                              onClick={async () => {
+                                const aliases = checkJob.modelAliases.filter(
+                                  (alias) =>
+                                    !checkJob.items.some(
+                                      (item) =>
+                                        item.modelAlias === alias &&
+                                        item.available &&
+                                        item.checkStatus === 'completed',
+                                    ),
+                                );
+                                try {
+                                  await executeModelAvailabilityCheck(
+                                    aliases,
+                                    checkJob.mode,
+                                  );
+                                } catch (error) {
+                                  notifyMutationError(error);
+                                }
+                              }}
+                            >
+                              重试异常及未完成项
+                            </Button>
+                          )}
+                          <Table
+                            size="small"
+                            rowKey="modelAlias"
+                            dataSource={checkJob.items}
+                            pagination={{ pageSize: 5 }}
+                            columns={[
+                              { title: '模型', dataIndex: 'modelAlias' },
+                              {
+                                title: '结果',
+                                render: (_, item) =>
+                                  item.checkStatus === 'error'
+                                    ? '检测执行失败（非模型结论）'
+                                    : MODEL_HEALTH[item.healthStatus]?.text ||
+                                      '未知',
+                              },
+                              { title: '错误码', dataIndex: 'errorCode' },
+                            ]}
+                          />
+                        </Space>
+                      </Card>
+                    )}
                     <ProTable<AiModel>
                       actionRef={modelActionRef}
                       rowKey="modelAlias"
@@ -1040,7 +1235,11 @@ export default function AiModelGovernancePage({
                               </Button>,
                               <Button
                                 key="availability-selected"
-                                disabled={!selectedModelAliases.length}
+                                disabled={
+                                  checkActive ||
+                                  checkingModels ||
+                                  !selectedModelAliases.length
+                                }
                                 icon={<ApiOutlined />}
                                 loading={
                                   checkingModels &&
@@ -1050,7 +1249,7 @@ export default function AiModelGovernancePage({
                                   Modal.confirm({
                                     title: `检测已选 ${selectedModelAliases.length} 个模型？`,
                                     content:
-                                      '系统会对每个已选模型发起一次最小真实请求，可能产生少量 Provider 费用。',
+                                      '按所选模式在后台逐项检测并保存。完整能力检测包含多次请求，可能产生 Provider 费用。',
                                     okText: '开始检测',
                                     cancelText: '取消',
                                     onOk: () =>
@@ -1064,6 +1263,7 @@ export default function AiModelGovernancePage({
                               </Button>,
                               <Button
                                 key="availability"
+                                disabled={checkActive || checkingModels}
                                 icon={<ApiOutlined />}
                                 loading={
                                   checkingModels &&
@@ -1073,7 +1273,7 @@ export default function AiModelGovernancePage({
                                   Modal.confirm({
                                     title: '检查全部模型可用性？',
                                     content:
-                                      '系统会通过 LiteLLM 对每个未停用模型发起一次最小真实请求，可能产生少量 Provider 费用。',
+                                      '按所选模式在后台检测全部未停用模型（最多 100 个）。完整能力检测包含多次请求，可能产生 Provider 费用。',
                                     okText: '开始检查',
                                     cancelText: '取消',
                                     onOk: () => executeModelAvailabilityCheck(),

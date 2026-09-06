@@ -728,6 +728,51 @@ export async function syncAiModels() {
   });
 }
 
+export type AiModelCheckJob = {
+  jobId: string;
+  status: string;
+  mode: 'basic' | 'full';
+  modelAliases: string[];
+  total: number;
+  completed: number;
+  cancelRequested: boolean;
+  items: { modelAlias: string; checkStatus: string; available: boolean; errorCode: string; healthStatus: string }[];
+};
+
+function mapModelCheckJob(data: unknown): AiModelCheckJob {
+  const row = readObject(data);
+  return {
+    jobId: String(row.job_id), status: String(row.status),
+    mode: row.mode === 'basic' ? 'basic' : 'full',
+    modelAliases: toStringList(row.model_aliases),
+    total: toNumber(row.total), completed: toNumber(row.completed),
+    cancelRequested: Boolean(row.cancel_requested),
+    items: Array.isArray(row.items) ? row.items.map((item) => {
+      const value = readObject(item);
+      return { modelAlias: String(value.model_alias), checkStatus: String(value.check_status),
+        available: Boolean(value.available), errorCode: toOptionalText(value.error_code) ?? '',
+        healthStatus: toOptionalText(value.health_status) ?? '' };
+    }) : [],
+  };
+}
+
+export async function startAiModelCheck(modelAliases?: string[], mode: 'basic' | 'full' = 'full') {
+  return runGatewayMutation<AiModelCheckJob>('start_ai_model_check_v1', {
+    payload: { model_aliases: modelAliases, mode }, transform: mapModelCheckJob,
+  });
+}
+
+export async function getAiModelCheck(jobId?: string) {
+  const result = await callGatewayMethod<unknown>('get_ai_model_check_v1', compactPayload({ job_id: jobId }));
+  return result.data ? mapModelCheckJob(result.data) : null;
+}
+
+export async function cancelAiModelCheck(jobId: string) {
+  return runGatewayMutation<AiModelCheckJob>('cancel_ai_model_check_v1', {
+    payload: { job_id: jobId }, transform: mapModelCheckJob,
+  });
+}
+
 export async function checkAiModelAvailability(modelAliases?: string[]) {
   return runGatewayMutation<AiModelAvailabilityResult>(
     'check_ai_model_availability_v1',
