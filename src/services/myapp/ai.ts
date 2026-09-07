@@ -34,6 +34,7 @@ export type AiScenario =
   | 'sales_order_draft'
   | 'purchase_order_draft'
   | 'inventory_adjustment_draft'
+  | 'product_lifecycle_plan'
   | 'product_setup_draft';
 
 export type AiScenarioResolution = {
@@ -72,6 +73,13 @@ export type AiWorkspaceOptions = {
 };
 
 export type AiDraft = {
+  boundFields?: {
+    operation: boolean;
+    target: boolean;
+    warehouse: boolean;
+    adjustmentType: boolean;
+  };
+  boundScopeSummary?: string[];
   company: string | null;
   conversationId: string | null;
   creation: string | null;
@@ -898,7 +906,39 @@ export function mapAiDraft(value: unknown): AiDraft {
   const row = readObject(value);
   const validation = readObject(row.validation);
   const execution = readObject(row.execution);
+  const contract = readObject(readObject(row.payload)._action_contract);
+  const scope = readObject(contract.resolved_scope);
+  const action = readObject(contract.action);
+  const operations = Array.isArray(action.operations) ? action.operations : [];
+  const hasBoundText = (value: unknown) => typeof value === 'string' && Boolean(value);
+  const directions: Record<string, string> = {
+    increase: '增加库存',
+    decrease: '减少库存',
+    set_target: '设置目标库存',
+  };
+  const boundScopeSummary: string[] = [];
+  if (operations.length === 1 && ['create', 'update'].includes(String(operations[0]))) {
+    boundScopeSummary.push(`操作：${operations[0] === 'create' ? '新建' : '修改'}`);
+  }
+  if (typeof scope.target === 'string' && scope.target) {
+    boundScopeSummary.push(`目标：${scope.target}`);
+  }
+  if (typeof scope.warehouse === 'string' && scope.warehouse) {
+    boundScopeSummary.push(`仓库：${scope.warehouse}`);
+  }
+  if (typeof scope.adjustment_type === 'string' && scope.adjustment_type) {
+    boundScopeSummary.push(
+      `调整方式：${directions[scope.adjustment_type] ?? scope.adjustment_type}`,
+    );
+  }
   return {
+    boundScopeSummary,
+    boundFields: {
+      operation: operations.length === 1 && ['create', 'update'].includes(String(operations[0])),
+      target: hasBoundText(scope.target),
+      warehouse: hasBoundText(scope.warehouse),
+      adjustmentType: hasBoundText(scope.adjustment_type),
+    },
     company: typeof row.company === 'string' ? row.company : null,
     conversationId:
       typeof row.conversation === 'string' ? row.conversation : null,

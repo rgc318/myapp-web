@@ -29,6 +29,7 @@ import { AiDraftCompactSummary } from './AiDraftCompactSummary';
 import { getInventoryDraftProductCandidates } from './ai-draft-candidate-selection';
 import { resolveAiFailureRecovery } from './ai-failure';
 import { BusinessResultPanel } from './BusinessResultPanel';
+import { ProductLifecyclePlanCard } from './ProductLifecyclePlan';
 
 const REPORT_METRIC_LABELS: Record<string, string> = {
   sales_amount_total: '销售额',
@@ -151,6 +152,9 @@ function CitationCard({
   | 'isProductActionPending'
   | 'candidateSelectionPending'
 > & { citation: AiCitation }) {
+  if (citation.type === 'product_lifecycle_plan' && citation.id) {
+    return <ProductLifecyclePlanCard planId={citation.id} />;
+  }
   const draft = resolveAiDraftCitation(citation);
   const inventoryProductCandidates = draft
     ? getInventoryDraftProductCandidates(draft)

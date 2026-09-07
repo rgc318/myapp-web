@@ -917,6 +917,24 @@ export function AiDraftEditorModal({
             />
           </div>
         ) : null}
+        {draft?.boundScopeSummary?.length ? (
+          <Alert
+            title="本草稿已绑定操作范围"
+            description={
+              <Space orientation="vertical" size={2}>
+                {draft.boundScopeSummary.map((part) => (
+                  <Typography.Text key={part}>{part}</Typography.Text>
+                ))}
+                <Typography.Text>
+                  以上已绑定内容不能更换或清空。如需更换，请返回对话明确新要求并重新生成草稿。数量、金额等仍按业务规则编辑；执行前请核对目标是否符合原意。
+                </Typography.Text>
+              </Space>
+            }
+            showIcon
+            style={{ marginBottom: 16 }}
+            type="info"
+          />
+        ) : null}
         {versionConflict ? (
           <div style={{ marginBottom: 16 }}>
             <AiDraftVersionConflict
@@ -1012,6 +1030,11 @@ export function AiDraftEditorModal({
                     rules={[{ required: true }]}
                   >
                     <Select
+                      disabled={
+                        busy ||
+                        Boolean(versionConflict) ||
+                        draft.boundFields?.operation
+                      }
                       options={[
                         { label: '新增商品', value: 'create' },
                         { label: '完善现有商品', value: 'update' },
@@ -1022,6 +1045,13 @@ export function AiDraftEditorModal({
                     <Form.Item label="疑似相同商品">
                       <Select
                         allowClear
+                        disabled={
+                          busy ||
+                          Boolean(versionConflict) ||
+                          draft.boundFields?.target ||
+                          (draft.boundFields?.operation &&
+                            productOperation !== 'update')
+                        }
                         onChange={(value) => {
                           if (value) {
                             form.setFieldsValue({
@@ -1090,6 +1120,11 @@ export function AiDraftEditorModal({
                   >
                     {needsProductTargetSelection ? (
                       <RemoteProductSelect
+                        disabled={
+                          busy ||
+                          Boolean(versionConflict) ||
+                          draft.boundFields?.target
+                        }
                         company={company}
                         initialCandidates={productCandidates(
                           draft.payload.duplicate_candidates,
@@ -1315,6 +1350,11 @@ export function AiDraftEditorModal({
                   ]}
                 >
                   <RemoteLinkSelect
+                    disabled={
+                      busy ||
+                      Boolean(versionConflict) ||
+                      draft.boundFields?.warehouse
+                    }
                     doctype="Warehouse"
                     filters={{ company, disabled: 0, is_group: 0 }}
                     initialQuery={
@@ -1337,6 +1377,11 @@ export function AiDraftEditorModal({
                   rules={[{ message: '请选择具体商品', required: true }]}
                 >
                   <RemoteProductSelect
+                    disabled={
+                      busy ||
+                      Boolean(versionConflict) ||
+                      draft.boundFields?.target
+                    }
                     company={company}
                     initialCandidates={inventoryProductCandidates}
                     initialQuery={unresolvedInventoryItemQuery || undefined}
@@ -1363,6 +1408,11 @@ export function AiDraftEditorModal({
                   rules={[{ required: true }]}
                 >
                   <Select
+                    disabled={
+                      busy ||
+                      Boolean(versionConflict) ||
+                      draft.boundFields?.adjustmentType
+                    }
                     options={[
                       { label: '调整到目标库存', value: 'set_target' },
                       { label: '增加库存', value: 'increase' },
@@ -1763,6 +1813,11 @@ export function AiDraftEditorModal({
                     rules={[{ required: true }]}
                   >
                     <Select
+                      disabled={
+                        busy ||
+                        Boolean(versionConflict) ||
+                        draft.boundFields?.operation
+                      }
                       options={[
                         { label: '创建新订单', value: 'create' },
                         { label: '修改现有订单', value: 'update' },
@@ -1783,7 +1838,12 @@ export function AiDraftEditorModal({
                     ]}
                   >
                     <Input
-                      disabled={productOperation !== 'update'}
+                      disabled={
+                        busy ||
+                        Boolean(versionConflict) ||
+                        productOperation !== 'update' ||
+                        draft.boundFields?.target
+                      }
                       placeholder="例如 SO-0001 / PO-0001"
                     />
                   </Form.Item>

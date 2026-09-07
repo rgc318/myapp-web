@@ -11,6 +11,13 @@ import AiPage from './index';
 
 let mockLocationSearch = '';
 
+jest.mock('@/services/myapp/product-lifecycle', () => ({
+  ...jest.requireActual('@/services/myapp/product-lifecycle'),
+  generateAiLifecyclePlan: jest.fn(),
+  getLifecyclePlan: jest.fn(),
+}));
+const lifecycle = jest.requireMock('@/services/myapp/product-lifecycle');
+
 jest.mock('@umijs/max', () => ({
   history: {
     get location() {
@@ -720,6 +727,160 @@ describe('AI workspace page', () => {
         };
       },
     );
+  });
+
+  it('routes deletion to its persisted confirmation plan without chat or edit fallback', async () => {
+    resolveAiScenario.mockResolvedValueOnce({
+      scenario: 'product_lifecycle_plan',
+      resolutionId: 'LIFECYCLE-PROOF',
+    });
+    const plan = {
+      name: 'PLAN-LIFECYCLE',
+      version: 1,
+      status: 'pending',
+      operation: 'delete',
+      expiresAt: '2099-01-01',
+      expiresInSeconds: 900,
+      executionAvailable: false,
+      groups: [],
+      targets: [],
+      preserveTargets: [],
+      receipt: null,
+      sourceContent: '删除商品 A',
+      scopeWarning: '共享商品主档',
+    };
+    lifecycle.generateAiLifecyclePlan.mockResolvedValueOnce({
+      conversationId: 'AI-CONV-1',
+      plan,
+      content: '请确认商品删除计划',
+      citations: [],
+    });
+    lifecycle.getLifecyclePlan.mockResolvedValue(plan);
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    fireEvent.change(await screen.findByLabelText('AI 输入'), {
+      target: { value: '删除商品 A' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    await screen.findByText('请确认商品删除计划');
+    expect(lifecycle.generateAiLifecyclePlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: '删除商品 A',
+        scenarioResolutionId: 'LIFECYCLE-PROOF',
+      }),
+    );
+    await screen.findByText('商品生命周期操作计划');
+    expect(streamAiChatMessage).not.toHaveBeenCalled();
+    expect(generateAiProductSetupDraft).not.toHaveBeenCalled();
+  });
+
+  it('keeps live citations and deltas across the recovery polling interval', async () => {
+    const originalStream = streamAiChatMessage.getMockImplementation();
+    if (!originalStream) throw new Error('Missing stream fixture');
+    let finishStream: (() => void) | undefined;
+    const citation = {
+      type: 'product',
+      id: 'LIVE-ITEM',
+      label: '实时商品',
+      data: {},
+    };
+    getAiConversation.mockResolvedValue({
+      conversation: { name: 'AI-CONV-1' },
+      messages: [],
+      latestRun: { runId: 'AI-RUN-1', run: { status: 'running' } },
+    });
+    streamAiChatMessage.mockImplementationOnce(
+      async (payload: unknown, onEvent: any) => {
+        const completed = await originalStream(payload, () => {});
+        onEvent({
+          type: 'run_started',
+          conversation: 'AI-CONV-1',
+          run_id: 'AI-RUN-1',
+        });
+        onEvent({ type: 'citation', citation });
+        onEvent({ type: 'message_delta', delta: '正在整理商品' });
+        await new Promise<void>((resolve) => {
+          finishStream = resolve;
+        });
+        return {
+          ...completed,
+          message: { ...completed.message, citations: [citation] },
+        };
+      },
+    );
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+      target: { value: '查询商品' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '发送' }));
+    expect(await screen.findByText('来源 LIVE-ITEM')).toBeTruthy();
+    try {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 3300));
+      });
+      expect(getAiConversation).not.toHaveBeenCalled();
+      expect(screen.getByText('来源 LIVE-ITEM')).toBeTruthy();
+      expect(screen.getByText('正在整理商品')).toBeTruthy();
+    } finally {
+      await act(async () => {
+        finishStream?.();
+      });
+    }
+    expect(await screen.findByText('找到两个商品')).toBeTruthy();
+    expect(screen.getByText('来源 LIVE-ITEM')).toBeTruthy();
+  });
+
+  it('switches the requested model between two turns without changing conversation', async () => {
+    render(React.createElement(App, null, React.createElement(AiPage)));
+    await waitFor(() => expect(listAiSelectableModels).toHaveBeenCalled());
+    const choices = [
+      ['GLM 5.2 · opencode-glm-5.2', 'opencode-glm-5.2'],
+      ['GPT 5.6 Luna · gpt-5.6-luna', 'gpt-5.6-luna'],
+    ];
+    for (const [index, [label, alias]] of choices.entries()) {
+      await waitFor(() =>
+        expect(
+          document.querySelector(
+            '.ai-quick-model-select input[role="combobox"]',
+          ),
+        ).toBeTruthy(),
+      );
+      const select = document.querySelector<HTMLElement>(
+        '.ai-quick-model-select input[role="combobox"]',
+      );
+      if (!select) throw new Error('Missing model selector');
+      await waitFor(() =>
+        expect((select as HTMLInputElement).disabled).toBe(false),
+      );
+      fireEvent.mouseDown(select);
+      const option = (await screen.findAllByText(label))
+        .map((node) => node.closest('.ant-select-item-option'))
+        .find((node) => node instanceof HTMLElement);
+      fireEvent.click(option as HTMLElement);
+      fireEvent.change(screen.getByRole('textbox', { name: 'AI 输入' }), {
+        target: { value: `第${index + 1}轮问题` },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '发送' }));
+      await waitFor(() =>
+        expect(streamAiChatMessage).toHaveBeenCalledTimes(index + 1),
+      );
+      const expected = {
+        modelAlias: alias,
+        conversationId: index === 0 ? null : 'AI-CONV-1',
+      };
+      expect(resolveAiScenario.mock.calls[index][0]).toEqual(
+        expect.objectContaining(expected),
+      );
+      expect(streamAiChatMessage.mock.calls[index][0]).toEqual(
+        expect.objectContaining(expected),
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByRole('textbox', { name: 'AI 输入' }) as HTMLInputElement)
+            .disabled,
+        ).toBe(false),
+      );
+    }
+    expect(screen.getAllByText('找到两个商品')).toHaveLength(2);
   });
 
   it('submits a streamed request and renders durable diagnostics', async () => {

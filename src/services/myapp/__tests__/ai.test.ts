@@ -1,5 +1,6 @@
 import { callGatewayMethod } from '../api-client';
 import {
+  mapAiDraft,
   AiDraftVersionConflictError,
   cancelAiRun,
   executeAiDraft,
@@ -33,6 +34,27 @@ import { runGatewayMutation } from '../mutation';
 import { TextDecoder } from 'util';
 
 Object.assign(globalThis, { TextDecoder });
+
+it('locks only persisted actions and resolved fields, keeping unresolved choices open', () => {
+  expect(mapAiDraft({ payload: { operation: 'update', item_code: 'UNTRUSTED' } }).boundFields).toEqual({
+    operation: false, target: false, warehouse: false, adjustmentType: false,
+  });
+  const mapped = mapAiDraft({ payload: { _action_contract: {
+    action: { operations: ['update'] }, resolved_scope: { warehouse: 'Stores', adjustment_type: 'increase' },
+  } } });
+  expect(mapped.boundFields).toEqual({ operation: true, target: false, warehouse: true, adjustmentType: true });
+  expect(mapped.boundScopeSummary).toContain('操作：修改');
+});
+
+it('maps only persisted bound scope into display summaries', () => {
+  expect(mapAiDraft({ payload: {} }).boundScopeSummary).toEqual([]);
+  expect(mapAiDraft({ payload: { item_code: 'unbound' } }).boundScopeSummary).toEqual([]);
+  expect(mapAiDraft({ payload: { _action_contract: { resolved_scope: {
+    target: 'ITEM-1', warehouse: 'Stores', adjustment_type: 'decrease',
+  } } } }).boundScopeSummary).toEqual([
+    '目标：ITEM-1', '仓库：Stores', '调整方式：减少库存',
+  ]);
+});
 
 jest.mock('../api-client', () => ({
   callGatewayMethod: jest.fn(),

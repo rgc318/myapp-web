@@ -66,6 +66,7 @@ const STATUS_META: Record<
 };
 
 const SCENARIO_LABELS: Record<AiScenario, string> = {
+  product_lifecycle_plan: '商品生命周期操作计划',
   auto: '智能模式',
   general: '通用助手',
   inventory_adjustment_draft: '库存调整草稿',

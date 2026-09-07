@@ -99,6 +99,7 @@ import {
   uploadAiImageAttachment,
 } from '@/services/myapp/ai';
 import { resolveActiveProduct } from '@/services/myapp/master-data';
+import { generateAiLifecyclePlan } from '@/services/myapp/product-lifecycle';
 import { AiAttachmentPreview } from './components/AiAttachmentPreview';
 import { AiDraftEditorModal } from './components/AiDraftEditorModal';
 import { AiDraftVersionList } from './components/AiDraftReview';
@@ -117,6 +118,10 @@ import {
 } from './components/ai-draft-candidate-selection';
 import { BusinessDocumentDrawer } from './components/BusinessDocumentDrawer';
 import { ProductDetailDrawer } from './components/ProductDetailDrawer';
+import {
+  ProductLifecyclePlanModal,
+  ProductLifecyclePlansButton,
+} from './components/ProductLifecyclePlan';
 import { useAiWorkspaceStyles } from './styles';
 
 type ChatRow = AiMessageRow & {
@@ -330,6 +335,7 @@ export default function AiPage() {
   const [conversationLoading, setConversationLoading] = useState(false);
   const [olderMessagesLoading, setOlderMessagesLoading] = useState(false);
   const [messages, setMessages] = useState<ChatRow[]>([]);
+  const [lifecyclePlanId, setLifecyclePlanId] = useState<string | null>(null);
   const [messagePagination, setMessagePagination] =
     useState<AiConversationMessagePagination>(EMPTY_MESSAGE_PAGINATION);
   const [conversations, setConversations] = useState<AiConversation[]>([]);
@@ -869,6 +875,7 @@ export default function AiPage() {
 
   useEffect(() => {
     if (
+      loading ||
       !conversationId ||
       !activeRunId ||
       (runStatus !== 'running' && runStatus !== 'waiting_approval')
@@ -881,7 +888,15 @@ export default function AiPage() {
     const pollRunStatus = async () => {
       try {
         const snapshot = await getAiConversation(conversationId, { limit: 1 });
-        if (!active || snapshot.latestRun?.runId !== activeRunId) return;
+        // The local request owns live content until it settles. Recovery polling
+        // must not overwrite citations/deltas with a not-yet-persisted snapshot.
+        // Recheck after await: a new send can start while a poll is in flight.
+        if (
+          !active ||
+          submitInFlightRef.current ||
+          snapshot.latestRun?.runId !== activeRunId
+        )
+          return;
         const latestRun = snapshot.latestRun;
         const nextStatus = resolveRunDisplayStatus(latestRun.run.status);
         const persistedMessage = [...snapshot.messages]
@@ -973,6 +988,7 @@ export default function AiPage() {
   }, [
     activeRunId,
     conversationId,
+    loading,
     refreshConversations,
     refreshPendingApprovals,
     runStatus,
@@ -1378,6 +1394,43 @@ export default function AiPage() {
         throw new Error('请先在工作偏好中选择默认公司。');
       }
 
+      if (resolvedScenario === 'product_lifecycle_plan') {
+        if (attachmentIds.length)
+          throw new Error('商品生命周期操作请使用文字和明确商品目标。');
+        const result = await generateAiLifecyclePlan({
+          content,
+          company: effectiveCompany,
+          conversationId,
+          modelAlias: requestedModelAlias,
+          scenarioResolutionId,
+        });
+        setConversationId(result.conversationId);
+        activeConversationIdRef.current = result.conversationId;
+        setConversationCompany((current) => current || effectiveCompany);
+        setConversationStatus('active');
+        setActiveRunId(null);
+        setLastResult(null);
+        setRunStatus('completed');
+        setRunProgress(null);
+        setRunError(null);
+        setRunErrorCode(null);
+        setRetryRequest(null);
+        setMessages((current) =>
+          current.map((item) =>
+            item.id === assistantMessage.id
+              ? {
+                  ...item,
+                  content: result.content,
+                  citations: result.citations,
+                  runStatus: 'completed',
+                }
+              : item,
+          ),
+        );
+        setLifecyclePlanId(result.plan.name);
+        await refreshConversations();
+        return;
+      }
       if (
         resolvedScenario === 'sales_order_draft' ||
         resolvedScenario === 'purchase_order_draft' ||
@@ -2535,6 +2588,7 @@ export default function AiPage() {
                 </div>
               </div>
               <Space>
+                <ProductLifecyclePlansButton />
                 <Badge
                   count={pendingDraftTotal}
                   overflowCount={99}
@@ -3181,6 +3235,10 @@ export default function AiPage() {
           </Form.Item>
         </Form>
       </Modal>
+      <ProductLifecyclePlanModal
+        planId={lifecyclePlanId}
+        onClose={() => setLifecyclePlanId(null)}
+      />
       <AiDraftEditorModal
         draftId={editingDraftId}
         onClose={() => setEditingDraftId(null)}

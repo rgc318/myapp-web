@@ -14,6 +14,7 @@ jest.mock('@/components', () => {
   const remoteInput = (props: any, label: string) =>
     React.createElement('input', {
       'aria-label': label,
+      disabled: props.disabled,
       'data-candidate-count': String(props.initialCandidates?.length ?? 0),
       'data-initial-query': props.initialQuery ?? '',
       onChange: (event: any) => props.onChange?.(event.target.value),
@@ -93,6 +94,133 @@ const draft = {
 };
 
 describe('AiDraftEditorModal', () => {
+  it('locks a contracted product operation while keeping ordinary fields editable', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      boundFields: {
+        operation: true,
+        target: false,
+        warehouse: false,
+        adjustmentType: false,
+      },
+    });
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    expect(
+      ((await screen.findByLabelText('处理方式')) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText('商品名称') as HTMLInputElement).disabled,
+    ).toBe(false);
+  });
+  it.each([
+    true,
+    false,
+  ])('respects persisted inventory target lock %s without locking quantity', async (target) => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      draftType: 'inventory_adjustment',
+      boundFields: {
+        operation: false,
+        target,
+        warehouse: true,
+        adjustmentType: true,
+      },
+      payload: {
+        company: draft.company,
+        adjustment_type: 'increase',
+        warehouse: 'Stores',
+        items: [{ item_code: target ? 'ITEM-1' : null, qty: 10, uom: 'Unit' }],
+      },
+    });
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    expect(
+      ((await screen.findByLabelText('Item')) as HTMLInputElement).disabled,
+    ).toBe(target);
+    expect(
+      (screen.getByLabelText('Warehouse') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText('调整方式') as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect((screen.getByLabelText('数量') as HTMLInputElement).disabled).toBe(
+      false,
+    );
+  });
+
+  it.each([
+    'sales_order',
+    'purchase_order',
+  ] as const)('locks persisted %s operation and order identity', async (draftType) => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      draftType,
+      boundFields: {
+        operation: true,
+        target: true,
+        warehouse: false,
+        adjustmentType: false,
+      },
+      payload: { operation: 'update', order_number: 'ORDER-1', items: [] },
+    });
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    expect(
+      ((await screen.findByLabelText('来源订单号')) as HTMLInputElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByLabelText('处理方式') as HTMLInputElement).disabled,
+    ).toBe(true);
+  });
+  it('shows the latest persisted bound scope and regeneration guidance', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      boundScopeSummary: ['目标：ITEM-LOCKED'],
+    });
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    expect(await screen.findByText('目标：ITEM-LOCKED')).toBeTruthy();
+    expect(screen.getByText('本草稿已绑定操作范围')).toBeTruthy();
+    expect(screen.getByText(/如需更换，请返回对话明确新要求/)).toBeTruthy();
+  });
   beforeEach(() => {
     mockedGet.mockReset();
     mockedGet.mockResolvedValue(draft);
