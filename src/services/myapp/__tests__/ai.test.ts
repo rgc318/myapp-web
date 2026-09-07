@@ -6,6 +6,8 @@ import {
   fetchAiAttachmentPreview,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
+  generateAiSalesOrderDraft,
+  generateAiPurchaseOrderDraft,
   getAiConversation,
   listAiConversations,
   listAiAgentApprovals,
@@ -43,6 +45,13 @@ const mockedCallGatewayMethod = jest.mocked(callGatewayMethod);
 const mockedRunGatewayMutation = jest.mocked(runGatewayMutation);
 
 describe('AI domain service', () => {
+  it('forwards resolution credentials for every generated draft type', async () => {
+    for (const generate of [generateAiSalesOrderDraft, generateAiPurchaseOrderDraft, generateAiInventoryAdjustmentDraft, generateAiProductSetupDraft]) {
+      mockedCallGatewayMethod.mockResolvedValue({ data: { draft: { payload: {}, validation: {} } }, meta: {}, raw: {} });
+      await generate({ content: '请求', company: 'c', scenarioResolutionId: 'proof' });
+      expect(mockedCallGatewayMethod).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ scenario_resolution_id: 'proof' }));
+    }
+  });
   beforeEach(() => {
     mockedCallGatewayMethod.mockReset();
     mockedRunGatewayMutation.mockReset();

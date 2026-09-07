@@ -1,5 +1,7 @@
 # myapp Web 前端开发文档
 
+四类自然语言草稿的 domain service 现接受 scenarioResolutionId 并转换为 scenario_resolution_id。AI 页面自动路由后必须透传同一次解析凭据；后端会拒绝失效或与原请求不匹配的凭据。显式指定草稿类型时没有凭据，由后端重新解析并校验动作。不要从页面回传或修改服务端 _action_contract；旧模型草稿缺少契约时需要重新生成，不能伪造契约绕过交接/执行校验。
+
 模型检测的单项、已选和全部入口现在通过 start/get/cancel 后台任务接口，页面串行轮询进度并恢复最近任务；支持 basic/full、协作取消、异常及未完成项重试。进度查询失败不等于模型不可用，completed 也不等于全部模型通过。前端字段转换仍在 ai-governance service。设计与边界见父仓 `docs/05-development/11-ai-model-check-jobs.zh-CN.md`。
 
 AI 模型注册表提供固定身份/操作列、单行及批量启停。快捷操作只通过治理 service 提交 status 与原因，避免旧行快照覆盖成本等元数据；批量逐项执行、汇总结果并保留失败项，成功项不重复提交。基础探测、管理状态与单项能力分别显示，不能把基础健康当作所有业务场景可用。设计见父仓 `docs/05-development/10-ai-model-registry-operations.zh-CN.md`。

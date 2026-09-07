@@ -1432,10 +1432,12 @@ export async function generateAiSalesOrderDraft(payload: {
   company: string;
   modelAlias?: string | null;
   retryRunId?: string | null;
+  scenarioResolutionId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_sales_order_draft_v1',
     {
+      ...(payload.scenarioResolutionId ? { scenario_resolution_id: payload.scenarioResolutionId } : {}),
       content: payload.content,
       ...(payload.attachmentIds?.length
         ? { attachment_ids: payload.attachmentIds }
@@ -1459,10 +1461,12 @@ export async function generateAiPurchaseOrderDraft(payload: {
   company: string;
   modelAlias?: string | null;
   retryRunId?: string | null;
+  scenarioResolutionId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_purchase_order_draft_v1',
     {
+      ...(payload.scenarioResolutionId ? { scenario_resolution_id: payload.scenarioResolutionId } : {}),
       content: payload.content,
       ...(payload.attachmentIds?.length
         ? { attachment_ids: payload.attachmentIds }
@@ -1484,10 +1488,12 @@ export async function generateAiInventoryAdjustmentDraft(payload: {
   company: string;
   modelAlias?: string | null;
   retryRunId?: string | null;
+  scenarioResolutionId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_inventory_adjustment_draft_v1',
     {
+      ...(payload.scenarioResolutionId ? { scenario_resolution_id: payload.scenarioResolutionId } : {}),
       content: payload.content,
       ...(payload.attachmentIds?.length
         ? { attachment_ids: payload.attachmentIds }
@@ -1551,10 +1557,12 @@ export async function generateAiProductSetupDraft(payload: {
   company: string;
   modelAlias?: string | null;
   retryRunId?: string | null;
+  scenarioResolutionId?: string | null;
 }): Promise<AiChatResult & { draft: AiSalesOrderDraft }> {
   const result = await callGatewayMethod<Record<string, unknown>>(
     'generate_ai_product_setup_draft_v1',
     {
+      ...(payload.scenarioResolutionId ? { scenario_resolution_id: payload.scenarioResolutionId } : {}),
       content: payload.content,
       ...(payload.attachmentIds?.length
         ? { attachment_ids: payload.attachmentIds }

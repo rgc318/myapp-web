@@ -2209,6 +2209,7 @@ describe('AI workspace page', () => {
         }),
       );
       expect(generateAiInventoryAdjustmentDraft).toHaveBeenCalledWith({
+        scenarioResolutionId: 'AI-RESOLUTION-INVENTORY',
         company: 'Demo Company',
         content: '给迪莫添加10个库存',
         conversationId: null,
@@ -2251,6 +2252,7 @@ describe('AI workspace page', () => {
         }),
       );
       expect(generateAiProductSetupDraft).toHaveBeenCalledWith({
+        scenarioResolutionId: 'AI-RESOLUTION-PRODUCT-DRAFT',
         company: 'Demo Company',
         content: '完善迪莫商品资料',
         conversationId: null,

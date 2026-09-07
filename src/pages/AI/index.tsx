@@ -1390,6 +1390,7 @@ export default function AiPage() {
           startedAt: current?.startedAt ?? Date.now(),
         }));
         const draftPayload = {
+          ...(scenarioResolutionId ? { scenarioResolutionId } : {}),
           ...(attachmentIds.length ? { attachmentIds } : {}),
           company: effectiveCompany as string,
           content,
