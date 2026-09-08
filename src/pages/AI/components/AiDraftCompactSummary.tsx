@@ -2,6 +2,7 @@ import { Space, Typography } from 'antd';
 import React, { type ReactNode } from 'react';
 import { ProductImage } from '@/components/ProductImage';
 import type { AiDraft } from '@/services/myapp/ai';
+import { readAiProductPricing } from '@/services/myapp/ai-product-pricing';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { resolveDisplayUom } from '@/utils/display-uom';
 import {
@@ -9,6 +10,7 @@ import {
   formatCurrencyValue,
 } from '@/utils/myapp-display';
 import { formatConvertedQty } from '@/utils/uom-conversion';
+import { AiProductPricingSummary } from './AiProductPricing';
 
 type SummaryItem = {
   key: string;
@@ -156,7 +158,9 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
     {
       key: 'prices',
       label: '价格',
-      value: (
+      value: readAiProductPricing(payload) ? (
+        <AiProductPricingSummary payload={payload} />
+      ) : (
         <Space size={[12, 0]} wrap>
           <span>
             销售参考{' '}

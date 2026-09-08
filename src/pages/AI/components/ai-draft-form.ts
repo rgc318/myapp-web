@@ -1,6 +1,13 @@
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { AiDraft } from '@/services/myapp/ai';
+import {
+  type AiProductPrice,
+  type AiProductUomRelation,
+  buildAiProductPricing,
+  readAiProductPricing,
+} from '@/services/myapp/ai-product-pricing';
+import { resolveDisplayUom } from '@/utils/display-uom';
 
 export type AiDraftItemFormValues = {
   itemCode?: string;
@@ -11,6 +18,10 @@ export type AiDraftItemFormValues = {
 };
 
 export type AiDraftFormValues = {
+  productPrices?: AiProductPrice[];
+  productUomRelations?: AiProductUomRelation[];
+  wholesaleDefaultUom?: string;
+  retailDefaultUom?: string;
   adjustmentType?: 'set_target' | 'increase' | 'decrease';
   barcode?: string;
   brand?: string;
@@ -67,6 +78,10 @@ export type AiDraftFormFieldIssue = {
 };
 
 const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
+  productPrices: '价格与计价单位',
+  productUomRelations: '单位换算关系',
+  wholesaleDefaultUom: '批发默认单位',
+  retailDefaultUom: '零售默认单位',
   adjustmentType: '调整方式',
   barcode: '条码',
   brand: '品牌',
@@ -106,6 +121,10 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
 };
 
 const PRODUCT_FIELDS: (keyof AiDraftFormValues)[] = [
+  'productPrices',
+  'productUomRelations',
+  'wholesaleDefaultUom',
+  'retailDefaultUom',
   'company',
   'operation',
   'itemName',
@@ -299,6 +318,26 @@ function displayValue(
   const normalized = normalizeValue(key, value);
   if (key === 'items') return displayItems(normalized);
   if (normalized === null) return '未填写';
+  if (key === 'productPrices' && Array.isArray(value)) {
+    return (
+      (value as AiProductPrice[])
+        .map(
+          (row) =>
+            `${row.priceList ?? '未选择价格表'}: ${row.rate ?? '待填写'} ${row.currency ?? ''}/${resolveDisplayUom(row.uom, row.uomDisplay)}`,
+        )
+        .join('；') || '无价格'
+    );
+  }
+  if (key === 'productUomRelations' && Array.isArray(value)) {
+    return (
+      (value as AiProductUomRelation[])
+        .map(
+          (row) =>
+            `${row.fromQty ?? '?'} ${resolveDisplayUom(row.fromUom)} = ${row.toQty ?? '?'} ${resolveDisplayUom(row.toUom)}`,
+        )
+        .join('；') || '无换算'
+    );
+  }
   if (key === 'defaultMode') return normalized === 'retail' ? '零售' : '批发';
   if (key === 'adjustmentType') {
     if (normalized === 'increase') return '增加库存';
@@ -312,7 +351,12 @@ function cloneFieldValue(
   key: keyof AiDraftFormValues,
   value: AiDraftFormValues[keyof AiDraftFormValues],
 ) {
-  if (key === 'items' && Array.isArray(value)) {
+  if (
+    (key === 'items' ||
+      key === 'productPrices' ||
+      key === 'productUomRelations') &&
+    Array.isArray(value)
+  ) {
     return value.map((item) => ({ ...item }));
   }
   return value;
@@ -342,6 +386,7 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       specification: textValue(payload.specification),
       warehouse: textValue(payload.warehouse),
       wholesaleRate: numberValue(payload.wholesale_rate),
+      ...readAiProductPricing(payload),
     };
   }
   if (draft.draftType === 'inventory_adjustment') {
@@ -680,7 +725,10 @@ export function getAiDraftFormFieldIssues(
   return issues;
 }
 
-export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
+export function buildAiDraftPayload(
+  draft: AiDraft,
+  values: AiDraftFormValues,
+): Record<string, unknown> {
   if (draft.draftType === 'product_setup') {
     const operation = values.operation === 'update' ? 'update' : 'create';
     return {
@@ -716,6 +764,7 @@ export function buildAiDraftPayload(draft: AiDraft, values: AiDraftFormValues) {
           ? unresolvedQuery(draft.payload, 'warehouse', 'warehouse_query')
           : undefined,
       wholesale_rate: values.wholesaleRate,
+      ...buildAiProductPricing(values, draft.payload),
     };
   }
   if (draft.draftType === 'inventory_adjustment') {

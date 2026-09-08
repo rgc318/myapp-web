@@ -107,7 +107,19 @@ it('never offers execution for a blocked plan', async () => {
       onClose: jest.fn(),
     }),
   );
-  await screen.findByText('存在历史引用');
+  const reason = await screen.findByText('存在历史引用');
+  expect(reason.closest('.ant-typography-danger')).not.toBeNull();
+  expect(
+    screen.getByText('不允许执行').closest('.ant-tag-error'),
+  ).not.toBeNull();
+  expect(
+    screen.getByText('预检未通过').closest('.ant-tag-error'),
+  ).not.toBeNull();
+  const summary = screen.getByText(
+    '整批预检未通过，不会自动执行部分目标或替换动作。',
+  );
+  expect(summary.closest('.ant-alert-error')).not.toBeNull();
+  expect(summary.closest('.ant-typography-danger')).not.toBeNull();
   expect(screen.queryByRole('button', { name: '确认删除商品' })).toBeNull();
   expect(executeLifecyclePlan).not.toHaveBeenCalled();
 });
@@ -124,6 +136,37 @@ it('fails closed for an expired server deadline', async () => {
   );
   await screen.findByText('计划已过期，请重新发送请求生成计划。');
   expect(screen.queryByRole('button', { name: '确认删除商品' })).toBeNull();
+});
+
+it('keeps a passed plan neutral and the shared scope warning distinct from errors', async () => {
+  render(
+    React.createElement(ProductLifecyclePlanModal, {
+      planId: 'PLAN-1',
+      onClose: jest.fn(),
+    }),
+  );
+  const result = await screen.findByText('通过');
+  expect(result.closest('.ant-typography-danger')).toBeNull();
+  expect(screen.queryByText('预检未通过')).toBeNull();
+  expect(
+    screen.getByText('共享商品主档范围').closest('.ant-alert-warning'),
+  ).not.toBeNull();
+  expect(screen.getByText('待确认')).not.toBeNull();
+});
+
+it('highlights a permission refusal in red', async () => {
+  jest
+    .mocked(getLifecyclePlan)
+    .mockRejectedValue(new Error('无权访问该操作计划'));
+  render(
+    React.createElement(ProductLifecyclePlanModal, {
+      planId: 'PLAN-1',
+      onClose: jest.fn(),
+    }),
+  );
+  const reason = await screen.findByText('无权访问该操作计划');
+  expect(reason.closest('.ant-typography-danger')).not.toBeNull();
+  expect(reason.closest('.ant-alert-error')).not.toBeNull();
 });
 
 it('rereads server state on reopening instead of using stale confirmation state', async () => {

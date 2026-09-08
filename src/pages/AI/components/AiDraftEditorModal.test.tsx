@@ -94,6 +94,47 @@ const draft = {
 };
 
 describe('AiDraftEditorModal', () => {
+  it('renders typed prices and an editable missing packaging quantity', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      payload: {
+        ...draft.payload,
+        pricing_contract_version: 'product-pricing-v1',
+        prices: [
+          {
+            row_id: 'retail',
+            price_list: 'Retail',
+            rate: 3.5,
+            uom: 'Bottle',
+            currency: 'CNY',
+            interpretation: 'inferred',
+            evidence: '3.5元每瓶',
+          },
+        ],
+        uom_relations: [
+          { from_uom: 'Bottle', from_qty: null, to_uom: 'Box', to_qty: 1 },
+        ],
+      },
+    });
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    expect(await screen.findByText('价格与计价单位')).toBeTruthy();
+    expect(screen.getByText('3.5元每瓶')).toBeTruthy();
+    const quantity = screen.getByLabelText('左侧数量') as HTMLInputElement;
+    expect(quantity.value).toBe('');
+    fireEvent.change(quantity, { target: { value: '12' } });
+    expect(quantity.value).toBe('12');
+    expect(screen.queryByLabelText('标准销售参考价')).toBeNull();
+  });
   it('locks a contracted product operation while keeping ordinary fields editable', async () => {
     mockedGet.mockResolvedValue({
       ...draft,

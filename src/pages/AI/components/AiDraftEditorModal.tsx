@@ -32,10 +32,12 @@ import {
   isAiDraftVersionConflictError,
   updateAiDraft,
 } from '@/services/myapp/ai';
+import { readAiProductPricing } from '@/services/myapp/ai-product-pricing';
 import { notifyMutationError } from '@/services/myapp/mutation';
 import { AiDraftProgress } from './AiDraftProgress';
 import { AiDraftBusinessReview } from './AiDraftReview';
 import { AiDraftVersionConflict } from './AiDraftVersionConflict';
+import { AiProductPricingFields } from './AiProductPricing';
 import {
   type AiDraftConflictField,
   type AiDraftFormValues,
@@ -1202,71 +1204,78 @@ export function AiDraftEditorModal({
                   >
                     <CurrencySelect />
                   </Form.Item>
-                  <Form.Item
-                    label="标准销售参考价"
-                    name="standardSellingRate"
-                    extra="写入标准销售（Standard Selling），仅在没有匹配到更具体的客户、渠道或价格表规则时作为销售兜底参考；不等同于批发价或零售价。"
-                  >
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="批发价"
-                    name="wholesaleRate"
-                    extra="写入批发（Wholesale）价格表，供批发销售模式默认取价。"
-                  >
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="零售价"
-                    name="retailRate"
-                    extra="写入零售（Retail）价格表，供零售销售模式默认取价。"
-                  >
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
-                  <Form.Item
-                    label="标准采购参考价"
-                    name="standardBuyingRate"
-                    extra={
-                      hasOpeningStock
-                        ? '写入标准采购（Standard Buying），并作为当前初始库存估值的建议来源；请按实际取得成本核对，销售价格不会参与库存计价。'
-                        : '写入标准采购（Standard Buying），作为没有供应商合同价、数量阶梯价或采购价格表时的采购兜底参考；它不是库存实时估值。'
-                    }
-                    required={hasOpeningStock}
-                    rules={[
-                      {
-                        validator: async (_, value) => {
-                          if (
-                            Number(form.getFieldValue('openingQty') ?? 0) > 0 &&
-                            (value === null ||
-                              value === undefined ||
-                              value === '')
-                          ) {
-                            throw new Error(
-                              '填写初始库存时，请输入标准采购参考价并核对首次入库估值',
-                            );
-                          }
-                        },
-                      },
-                    ]}
-                  >
-                    <InputNumber
-                      min={0}
-                      precision={6}
-                      style={{ width: '100%' }}
-                    />
-                  </Form.Item>
+                  {readAiProductPricing(draft.payload) ? (
+                    <AiProductPricingFields />
+                  ) : (
+                    <>
+                      <Form.Item
+                        label="标准销售参考价"
+                        name="standardSellingRate"
+                        extra="写入标准销售（Standard Selling），仅在没有匹配到更具体的客户、渠道或价格表规则时作为销售兜底参考；不等同于批发价或零售价。"
+                      >
+                        <InputNumber
+                          min={0}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label="批发价"
+                        name="wholesaleRate"
+                        extra="写入批发（Wholesale）价格表，供批发销售模式默认取价。"
+                      >
+                        <InputNumber
+                          min={0}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label="零售价"
+                        name="retailRate"
+                        extra="写入零售（Retail）价格表，供零售销售模式默认取价。"
+                      >
+                        <InputNumber
+                          min={0}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        label="标准采购参考价"
+                        name="standardBuyingRate"
+                        extra={
+                          hasOpeningStock
+                            ? '写入标准采购（Standard Buying），并作为当前初始库存估值的建议来源；请按实际取得成本核对，销售价格不会参与库存计价。'
+                            : '写入标准采购（Standard Buying），作为没有供应商合同价、数量阶梯价或采购价格表时的采购兜底参考；它不是库存实时估值。'
+                        }
+                        required={hasOpeningStock}
+                        rules={[
+                          {
+                            validator: async (_, value) => {
+                              if (
+                                Number(form.getFieldValue('openingQty') ?? 0) >
+                                  0 &&
+                                (value === null ||
+                                  value === undefined ||
+                                  value === '')
+                              ) {
+                                throw new Error(
+                                  '填写初始库存时，请输入标准采购参考价并核对首次入库估值',
+                                );
+                              }
+                            },
+                          },
+                        ]}
+                      >
+                        <InputNumber
+                          min={0}
+                          precision={6}
+                          style={{ width: '100%' }}
+                        />
+                      </Form.Item>
+                    </>
+                  )}
                   {!isProductUpdate ? (
                     <>
                       <Form.Item label="初始库存数量" name="openingQty">

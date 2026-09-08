@@ -127,7 +127,9 @@ export function ProductLifecyclePlanModal({
               type="error"
               showIcon
               title="操作未完成"
-              description={error}
+              description={
+                <Typography.Text type="danger">{error}</Typography.Text>
+              }
             />
           ) : null}
           {plan ? (
@@ -146,7 +148,14 @@ export function ProductLifecyclePlanModal({
                   {
                     key: 'status',
                     label: '状态',
-                    children: statusLabels[plan.status] ?? plan.status,
+                    children:
+                      plan.status === 'pending' &&
+                      !plan.executionAvailable &&
+                      !plan.groups.length ? (
+                        <Tag color="error">预检未通过</Tag>
+                      ) : (
+                        (statusLabels[plan.status] ?? plan.status)
+                      ),
                   },
                   {
                     key: 'source',
@@ -246,11 +255,22 @@ export function ProductLifecyclePlanModal({
                     {
                       title: '预检结果',
                       render: (_, item) =>
-                        item.blockers.length
-                          ? item.blockers.map((issue) => (
-                              <div key={issue.code}>{issue.message}</div>
-                            ))
-                          : '通过',
+                        item.blockers.length ? (
+                          <Space orientation="vertical" size={4}>
+                            <Tag color="error">不允许执行</Tag>
+                            {item.blockers.map((issue) => (
+                              <Typography.Text
+                                key={issue.code}
+                                type="danger"
+                                strong
+                              >
+                                {issue.message}
+                              </Typography.Text>
+                            ))}
+                          </Space>
+                        ) : (
+                          '通过'
+                        ),
                     },
                   ]}
                 />
@@ -268,8 +288,13 @@ export function ProductLifecyclePlanModal({
               !plan.executionAvailable &&
               plan.status === 'pending' ? (
                 <Alert
-                  type="warning"
-                  title="整批预检未通过，不会自动执行部分目标或替换动作。"
+                  type="error"
+                  showIcon
+                  title={
+                    <Typography.Text type="danger" strong>
+                      整批预检未通过，不会自动执行部分目标或替换动作。
+                    </Typography.Text>
+                  }
                 />
               ) : null}
               {plan.receipt ? (

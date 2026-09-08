@@ -23,6 +23,7 @@ import {
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
 } from '@/services/myapp/ai';
+import { readAiProductPricing } from '@/services/myapp/ai-product-pricing';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { useAiWorkspaceStyles } from '../styles';
 import { AiDraftCompactSummary } from './AiDraftCompactSummary';
@@ -352,7 +353,9 @@ function CitationCard({
               menu={{
                 items: [
                   { key: 'history', label: '版本历史' },
-                  ...(draft?.status === 'draft' && validation?.readyForHandoff
+                  ...(draft?.status === 'draft' &&
+                  validation?.readyForHandoff &&
+                  !readAiProductPricing(draft.payload)
                     ? [{ key: 'handoff', label: '在业务编辑器继续' }]
                     : []),
                   ...(draft?.status === 'draft'

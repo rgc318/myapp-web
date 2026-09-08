@@ -34,6 +34,39 @@ function renderSummary(draft: AiDraft) {
 }
 
 describe('AiDraftCompactSummary', () => {
+  it('shows typed price units and inference instead of stale scalar amounts', () => {
+    const { container } = renderSummary(
+      buildDraft('product_setup', {
+        pricing_contract_version: 'product-pricing-v1',
+        standard_selling_rate: 999,
+        prices: [
+          {
+            row_id: 'retail',
+            price_list: 'Retail',
+            rate: 3.5,
+            uom: 'Bottle',
+            uom_display: '瓶',
+            currency: 'CNY',
+            interpretation: 'inferred',
+          },
+          {
+            row_id: 'standard',
+            price_list: 'Standard Selling',
+            rate: 30,
+            uom: 'Box',
+            uom_display: '箱',
+            currency: 'CNY',
+            interpretation: 'default',
+          },
+        ],
+      }),
+    );
+    expect(container.textContent).toContain('3.50 元/瓶');
+    expect(container.textContent).toContain('30.00 元/箱');
+    expect(screen.getByText('推断待确认')).toBeTruthy();
+    expect(screen.getByText('默认参考')).toBeTruthy();
+    expect(container.textContent).not.toContain('999');
+  });
   it('shows product identity, business UOM, four prices and opening stock', () => {
     renderSummary(
       buildDraft('product_setup', {

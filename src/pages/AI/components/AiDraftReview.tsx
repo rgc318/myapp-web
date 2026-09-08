@@ -13,8 +13,10 @@ import {
 import React from 'react';
 import { ProductImage } from '@/components/ProductImage';
 import type { AiDraft } from '@/services/myapp/ai';
+import { readAiProductPricing } from '@/services/myapp/ai-product-pricing';
 import { resolveMediaUrl } from '@/services/myapp/media-url';
 import { formatCurrencyValue, resolveDisplayUom } from '@/utils/myapp-display';
+import { AiProductPricingSummary } from './AiProductPricing';
 
 const DRAFT_TYPE_LABELS: Record<AiDraft['draftType'], string> = {
   inventory_adjustment: '库存调整',
@@ -255,8 +257,20 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
               span: 2,
               children: displayValue(payload.description),
             },
-          ]}
+          ].filter(
+            (item) =>
+              !readAiProductPricing(payload) ||
+              ![
+                'sellingRate',
+                'wholesaleRate',
+                'retailRate',
+                'standardBuyingRate',
+              ].includes(item.key),
+          )}
         />
+        {readAiProductPricing(payload) && (
+          <AiProductPricingSummary payload={payload} />
+        )}
         {draft.validation.errors.map((error) => (
           <Alert key={error} showIcon title={error} type="error" />
         ))}
