@@ -196,6 +196,8 @@ function ProductUpdateState({
                 itemCode ? (
                   <Button
                     href={`/master-data/products/${encodeURIComponent(itemCode)}?uom_migration=1`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     size="small"
                   >
                     处理单位异常
@@ -988,6 +990,44 @@ export function AiDraftEditorModal({
                   type={draft.validation.errors.length ? 'warning' : 'info'}
                 />
               ) : null)}
+            {draft.draftType === 'inventory_adjustment' &&
+            inventorySourceItem.requires_uom_migration === true &&
+            typeof inventorySourceItem.item_code === 'string' &&
+            inventorySourceItem.item_code.trim() &&
+            inventoryItemMatchesSource ? (
+              <Alert
+                title="库存单位需要先纠正"
+                type="error"
+                showIcon
+                style={{ marginBottom: 16 }}
+                description={
+                  <Space orientation="vertical">
+                    <Typography.Text>
+                      商品页面将在新标签页打开，当前草稿输入会保留。处理后返回保存草稿并重新校验；若产生继任商品，请返回对话确认新商品并重新生成草稿。
+                    </Typography.Text>
+                    <Space wrap>
+                      <Button
+                        href={`/master-data/products/${encodeURIComponent(inventorySourceItem.item_code)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        查看商品
+                      </Button>
+                      <Button
+                        href={`/master-data/products/${encodeURIComponent(inventorySourceItem.item_code)}?uom_migration=1`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        处理单位异常
+                      </Button>
+                    </Space>
+                    <Typography.Text type="secondary">
+                      纠正页面会检查操作权限、现有库存和历史引用，并说明需要先处理的事项。
+                    </Typography.Text>
+                  </Space>
+                }
+              />
+            ) : null}
             {dirty && draft.draftType === 'inventory_adjustment' ? (
               <Alert
                 message="当前顶部校验来自已保存版本；保存草稿后会按最新单位、价格和实时库存重新校验。"

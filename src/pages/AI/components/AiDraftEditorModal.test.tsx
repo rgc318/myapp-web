@@ -1004,6 +1004,60 @@ describe('AiDraftEditorModal', () => {
     });
   });
 
+  it.each([
+    true,
+    false,
+  ])('offers inventory repair links only for governed unit errors: %s', async (requiresMigration) => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      draftType: 'inventory_adjustment',
+      payload: {
+        company: draft.company,
+        adjustment_type: 'increase',
+        warehouse: 'Stores - RD',
+        items: [
+          {
+            item_code: '可口可乐/500ML',
+            qty: 500,
+            uom: 'Unit',
+            requires_uom_migration: requiresMigration,
+          },
+        ],
+      },
+    });
+    const onClose = jest.fn();
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose,
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+    const quantity = await screen.findByRole('spinbutton', { name: '数量' });
+    fireEvent.change(quantity, { target: { value: '501' } });
+    if (requiresMigration) {
+      const link = await screen.findByRole('link', { name: '处理单位异常' });
+      expect(link.getAttribute('href')).toBe(
+        '/master-data/products/%E5%8F%AF%E5%8F%A3%E5%8F%AF%E4%B9%90%2F500ML?uom_migration=1',
+      );
+      expect(link.getAttribute('target')).toBe('_blank');
+      expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+      expect(
+        screen.getByRole('link', { name: '查看商品' }).getAttribute('target'),
+      ).toBe('_blank');
+    } else {
+      expect(screen.queryByRole('link', { name: '处理单位异常' })).toBeNull();
+    }
+    expect(Number((quantity as HTMLInputElement).value)).toBe(501);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(mockedUpdate).not.toHaveBeenCalled();
+    expect(mockedExecute).not.toHaveBeenCalled();
+  });
+
   it('reloads inventory edits and rejects zero for increase adjustments', async () => {
     const inventoryDraft = {
       ...draft,
