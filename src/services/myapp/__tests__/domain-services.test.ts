@@ -1263,6 +1263,7 @@ describe('myapp domain services', () => {
         barcodes: [],
         blockers: [],
         can_execute: 1,
+        can_execute_with_inventory_conversion: 0,
         history: { stock_ledger_entry_count: 2 },
         inventory: {
           bins: [
@@ -1329,6 +1330,7 @@ describe('myapp domain services', () => {
       { item_code: 'ITEM-OLD' },
     );
     expect(result.canExecute).toBe(true);
+    expect(result.canExecuteWithInventoryConversion).toBe(false);
     expect(result.history.stockLedgerEntryCount).toBe(2);
     expect(result.recommendedStrategy).toBe('replacement');
     expect(result.strategies.inPlace).toEqual({
@@ -1364,6 +1366,15 @@ describe('myapp domain services', () => {
         },
         source_disabled: 1,
         source_item_code: 'ITEM-OLD',
+        repack_entries: [
+          {
+            company: 'rgc (Demo)',
+            name: 'MAT-STE-0001',
+            source_qty: 10,
+            target_qty: 240,
+            warehouse: 'Stores - RD',
+          },
+        ],
       },
       meta: {},
       raw: {},
@@ -1373,7 +1384,15 @@ describe('myapp domain services', () => {
       barcodeMappings: [],
       confirmDisableSource: true,
       confirmHistoryPreserved: true,
+      confirmInventoryConversion: true,
       itemCode: 'ITEM-OLD',
+      inventoryMappings: [
+        {
+          sourceQty: 10,
+          targetQty: 240,
+          warehouse: 'Stores - RD',
+        },
+      ],
       newItemCode: 'ITEM-NEW',
       newItemName: '测试商品',
       newPrices: [
@@ -1406,7 +1425,15 @@ describe('myapp domain services', () => {
       expect.objectContaining({
         confirm_disable_source: 1,
         confirm_history_preserved: 1,
+        confirm_inventory_conversion: 1,
         item_code: 'ITEM-OLD',
+        inventory_mappings: [
+          {
+            source_qty: 10,
+            target_qty: 240,
+            warehouse: 'Stores - RD',
+          },
+        ],
         new_item_code: 'ITEM-NEW',
         new_prices: [
           {
@@ -1430,6 +1457,15 @@ describe('myapp domain services', () => {
     );
     expect(result.data.newItem.itemCode).toBe('ITEM-NEW');
     expect(result.data.historyPreserved).toBe(true);
+    expect(result.data.repackEntries).toEqual([
+      {
+        company: 'rgc (Demo)',
+        name: 'MAT-STE-0001',
+        sourceQty: 10,
+        targetQty: 240,
+        warehouse: 'Stores - RD',
+      },
+    ]);
   });
 
   it('resolves a historical product reference to the current active product', async () => {

@@ -43,7 +43,13 @@ type MigrationFormValues = SaveProductPayload & {
   confirmDisableSource: boolean;
   confirmHistoryPreserved: boolean;
   confirmInPlaceCorrection: boolean;
+  confirmInventoryConversion: boolean;
   correctionReason?: string;
+  inventoryMappings: {
+    sourceQty: number;
+    targetQty?: number;
+    warehouse: string;
+  }[];
   newItemCode: string;
   newPrices: {
     currency?: string;
@@ -136,6 +142,7 @@ export function ProductUomMigrationModal({
   const priceMappings = Form.useWatch('priceMappings', form) ?? [];
   const barcodeMappings = Form.useWatch('barcodeMappings', form) ?? [];
   const strategy = Form.useWatch('strategy', form) ?? 'replacement';
+  const targetStockUom = Form.useWatch('stockUom', form);
   const uomOptions = useMemo(
     () => migrationUomOptions(uomConversions),
     [uomConversions],
@@ -174,7 +181,15 @@ export function ProductUomMigrationModal({
           confirmDisableSource: false,
           confirmHistoryPreserved: false,
           confirmInPlaceCorrection: false,
+          confirmInventoryConversion: false,
           correctionReason: '纠正错误库存基准单位',
+          inventoryMappings: result.inventory.bins
+            .filter((row) => Number(row.actualQty ?? 0) > 0.000001)
+            .map((row) => ({
+              sourceQty: Number(row.actualQty),
+              targetQty: undefined,
+              warehouse: row.warehouse,
+            })),
           itemName: result.source.itemName,
           newItemCode: result.suggestedNewItemCode,
           newPrices: [],
@@ -220,8 +235,14 @@ export function ProductUomMigrationModal({
         confirmDisableSource: values.confirmDisableSource,
         confirmHistoryPreserved: values.confirmHistoryPreserved,
         confirmInPlaceCorrection: values.confirmInPlaceCorrection,
+        confirmInventoryConversion: values.confirmInventoryConversion,
         correctionReason: values.correctionReason,
         itemCode: assessment.source.itemCode,
+        inventoryMappings: (values.inventoryMappings ?? []).map((mapping) => ({
+          sourceQty: Number(mapping.sourceQty),
+          targetQty: Number(mapping.targetQty),
+          warehouse: mapping.warehouse,
+        })),
         newItemCode:
           values.strategy === 'replacement'
             ? values.newItemCode?.trim() || undefined
@@ -265,6 +286,7 @@ export function ProductUomMigrationModal({
     setPreviewValues({
       ...values,
       barcodeMappings: values.barcodeMappings ?? [],
+      inventoryMappings: values.inventoryMappings ?? [],
       newPrices: values.newPrices ?? [],
       priceMappings: values.priceMappings ?? [],
       uomConversions: values.uomConversions ?? [],
@@ -301,6 +323,21 @@ export function ProductUomMigrationModal({
       })),
     ];
   }, [assessment, previewValues]);
+
+  const positiveInventoryBins = useMemo(
+    () =>
+      assessment?.inventory.bins.filter(
+        (row) => Number(row.actualQty ?? 0) > 0.000001,
+      ) ?? [],
+    [assessment],
+  );
+  const requiresInventoryConversion =
+    strategy === 'replacement' &&
+    Boolean(assessment?.canExecuteWithInventoryConversion) &&
+    positiveInventoryBins.length > 0;
+  const canProceed = Boolean(
+    assessment?.canExecute || requiresInventoryConversion,
+  );
 
   return (
     <>
@@ -365,7 +402,12 @@ export function ProductUomMigrationModal({
                   key={issue.code}
                   showIcon
                   title={issue.code}
-                  type="error"
+                  type={
+                    issue.code === 'NON_ZERO_STOCK' &&
+                    assessment.canExecuteWithInventoryConversion
+                      ? 'warning'
+                      : 'error'
+                  }
                 />
               ))}
               {assessment.warnings.map((issue) => (
@@ -554,6 +596,86 @@ export function ProductUomMigrationModal({
                   form={form as unknown as FormInstance<SaveProductPayload>}
                 />
               </ProCard>
+
+              {requiresInventoryConversion ? (
+                <ProCard title="现有库存转换（正式 Repack）">
+                  <Alert
+                    description={`旧单位本身不可信，系统不会自动推算数量。请按实际盘点结果，逐仓填写继任商品应入账的“${resolveDisplayUom(String(targetStockUom || ''))}”数量。执行时会先创建继任商品，再用正式 Repack 同时扣减旧商品并增加新商品；任一步失败都会整体回滚。`}
+                    showIcon
+                    title="必须人工确认旧库存对应的新库存数量"
+                    type="warning"
+                  />
+                  <Table
+                    columns={[
+                      { dataIndex: 'warehouse', title: '仓库' },
+                      { dataIndex: 'company', title: '公司' },
+                      {
+                        align: 'right' as const,
+                        dataIndex: 'actualQty',
+                        render: (value) =>
+                          `${formatNumber(value)} ${resolveDisplayUom(
+                            assessment.source.stockUom,
+                            assessment.source.stockUomDisplay,
+                          )}`,
+                        title: '待转出旧库存',
+                      },
+                      {
+                        render: (_value, row, index) => (
+                          <>
+                            <Form.Item
+                              hidden
+                              name={['inventoryMappings', index, 'warehouse']}
+                            >
+                              <Input />
+                            </Form.Item>
+                            <Form.Item
+                              hidden
+                              name={['inventoryMappings', index, 'sourceQty']}
+                            >
+                              <InputNumber />
+                            </Form.Item>
+                            <Form.Item
+                              extra={`按新的库存基准单位 ${resolveDisplayUom(
+                                String(targetStockUom || ''),
+                              )} 填写，不按旧抽象单位自动换算`}
+                              name={['inventoryMappings', index, 'targetQty']}
+                              rules={[
+                                {
+                                  required: true,
+                                  message: `请确认仓库 ${row.warehouse} 的新库存数量`,
+                                },
+                                {
+                                  validator: async (_, value) => {
+                                    if (Number(value ?? 0) <= 0) {
+                                      throw new Error('新库存数量必须大于 0');
+                                    }
+                                  },
+                                },
+                              ]}
+                              style={{ marginBottom: 0 }}
+                            >
+                              <InputNumber
+                                aria-label={`仓库 ${row.warehouse} 的继任商品数量`}
+                                min={0.000001}
+                                precision={6}
+                                style={{ width: 220 }}
+                              />
+                            </Form.Item>
+                          </>
+                        ),
+                        title: `继任商品入账数量（${resolveDisplayUom(
+                          String(targetStockUom || ''),
+                        )}）`,
+                      },
+                    ]}
+                    dataSource={positiveInventoryBins}
+                    pagination={false}
+                    rowKey="warehouse"
+                    size="small"
+                    style={{ marginTop: 16 }}
+                  />
+                </ProCard>
+              ) : null}
 
               <ProCard title="价格单位人工映射">
                 <Alert
@@ -915,19 +1037,41 @@ export function ProductUomMigrationModal({
                     : '执行成功后，源商品会立即停用；新交易应改用继任商品。该操作不会修改历史单据、历史库存流水或历史价格记录。'}
                 </Typography.Paragraph>
                 {strategy === 'replacement' ? (
-                  <Form.Item
-                    name="confirmDisableSource"
-                    rules={[
-                      {
-                        validator: async (_, value) => {
-                          if (!value) throw new Error('请确认停用源商品');
+                  <>
+                    {requiresInventoryConversion ? (
+                      <Form.Item
+                        name="confirmInventoryConversion"
+                        rules={[
+                          {
+                            validator: async (_, value) => {
+                              if (!value) {
+                                throw new Error('请确认逐仓库存转换数量');
+                              }
+                            },
+                          },
+                        ]}
+                        valuePropName="checked"
+                      >
+                        <Checkbox>
+                          我确认上述逐仓数量来自实际盘点，并同意通过正式 Repack
+                          将旧库存全部转入继任商品
+                        </Checkbox>
+                      </Form.Item>
+                    ) : null}
+                    <Form.Item
+                      name="confirmDisableSource"
+                      rules={[
+                        {
+                          validator: async (_, value) => {
+                            if (!value) throw new Error('请确认停用源商品');
+                          },
                         },
-                      },
-                    ]}
-                    valuePropName="checked"
-                  >
-                    <Checkbox>我确认迁移成功后停用源商品</Checkbox>
-                  </Form.Item>
+                      ]}
+                      valuePropName="checked"
+                    >
+                      <Checkbox>我确认迁移成功后停用源商品</Checkbox>
+                    </Form.Item>
+                  </>
                 ) : (
                   <Form.Item
                     name="confirmInPlaceCorrection"
@@ -962,16 +1106,28 @@ export function ProductUomMigrationModal({
                 </Form.Item>
               </ProCard>
 
+              {!canProceed ? (
+                <Alert
+                  description={assessment.blockers
+                    .map((issue) => issue.message)
+                    .join('；')}
+                  showIcon
+                  title="当前仍有不能在本向导中解除的阻断项"
+                  type="error"
+                />
+              ) : null}
               <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
                 <Button onClick={onClose}>取消</Button>
                 <Button
                   danger={strategy === 'replacement'}
-                  disabled={!assessment.canExecute}
+                  disabled={!canProceed}
                   loading={submitting}
                   onClick={() => form.submit()}
                   type="primary"
                 >
-                  预览并确认纠正
+                  {requiresInventoryConversion
+                    ? '预览库存转换与纠正'
+                    : '预览并确认纠正'}
                 </Button>
               </Space>
             </Space>
@@ -1001,7 +1157,9 @@ export function ProductUomMigrationModal({
               description={
                 previewValues.strategy === 'in_place'
                   ? '确认后会保留原商品编码，修正单位、价格和条码；历史账本仍保持原记录。'
-                  : '确认后会创建继任商品、创建下列价格、处理条码并停用源商品；历史账本仍保留在源商品下。'
+                  : previewValues.inventoryMappings.length
+                    ? '确认后会创建继任商品，通过正式 Repack 按下列逐仓数量转移库存，再创建价格、处理条码并停用源商品；任一步失败都会整体回滚。'
+                    : '确认后会创建继任商品、创建下列价格、处理条码并停用源商品；历史账本仍保留在源商品下。'
               }
               showIcon
               title="请核对最终变更"
@@ -1052,6 +1210,12 @@ export function ProductUomMigrationModal({
                   )
                   .join('；') || '-'}
               </ProDescriptions.Item>
+              {previewValues.inventoryMappings.length ? (
+                <ProDescriptions.Item label="库存转换" span={2}>
+                  {previewValues.inventoryMappings.length} 个仓库将通过正式
+                  Repack 转移；旧商品库存必须全部归零后才会停用
+                </ProDescriptions.Item>
+              ) : null}
               <ProDescriptions.Item label="条码处理" span={2}>
                 {previewValues.barcodeMappings.length
                   ? `${previewValues.strategy === 'in_place' ? '改绑' : '迁移'} ${previewValues.barcodeMappings.filter((row) => row.action === 'move').length} 条，保留 ${previewValues.barcodeMappings.filter((row) => row.action === 'keep').length} 条`
@@ -1073,6 +1237,36 @@ export function ProductUomMigrationModal({
                 条
               </ProDescriptions.Item>
             </ProDescriptions>
+            {previewValues.inventoryMappings.length ? (
+              <Table
+                columns={[
+                  { dataIndex: 'warehouse', title: '仓库' },
+                  {
+                    align: 'right' as const,
+                    dataIndex: 'sourceQty',
+                    render: (value) =>
+                      `${formatNumber(value)} ${resolveDisplayUom(
+                        assessment.source.stockUom,
+                        assessment.source.stockUomDisplay,
+                      )}`,
+                    title: '转出旧库存',
+                  },
+                  {
+                    align: 'right' as const,
+                    dataIndex: 'targetQty',
+                    render: (value) =>
+                      `${formatNumber(value)} ${resolveDisplayUom(
+                        String(previewValues.stockUom || ''),
+                      )}`,
+                    title: '转入继任商品',
+                  },
+                ]}
+                dataSource={previewValues.inventoryMappings}
+                pagination={false}
+                rowKey="warehouse"
+                size="small"
+              />
+            ) : null}
             <Table
               columns={[
                 {

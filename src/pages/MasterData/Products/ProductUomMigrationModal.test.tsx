@@ -26,6 +26,7 @@ function assessment(
   overrides: Partial<{
     blockers: { code: string; message: string }[];
     canExecute: boolean;
+    canExecuteWithInventoryConversion: boolean;
     recommendedStrategy: 'in_place' | 'replacement' | null;
   }> = {},
 ) {
@@ -34,6 +35,7 @@ function assessment(
     barcodes: [],
     blockers: [],
     canExecute: true,
+    canExecuteWithInventoryConversion: false,
     history: {
       latestStockLedgerEntry: null,
       stockLedgerEntryCount: 2,
@@ -139,13 +141,88 @@ describe('ProductUomMigrationModal', () => {
       }),
     );
 
-    expect(await screen.findByText('源商品仍有库存')).toBeTruthy();
+    expect(
+      (await screen.findAllByText('源商品仍有库存')).length,
+    ).toBeGreaterThan(0);
     await waitFor(() => {
       expect(
         screen
           .getByRole('button', { name: '预览并确认纠正' })
           .hasAttribute('disabled'),
       ).toBe(true);
+    });
+  });
+
+  it('allows a non-zero stock replacement after explicit per-warehouse Repack confirmation', async () => {
+    const nonZeroAssessment = assessment({
+      blockers: [{ code: 'NON_ZERO_STOCK', message: '源商品仍有库存' }],
+      canExecute: false,
+      canExecuteWithInventoryConversion: true,
+    });
+    nonZeroAssessment.inventory.bins = [
+      {
+        actualQty: 10,
+        committedQty: 0,
+        company: 'rgc (Demo)',
+        projectedQty: 10,
+        warehouse: 'Stores - RD',
+      },
+    ];
+    nonZeroAssessment.inventory.totalActualQty = 10;
+    nonZeroAssessment.prices = [];
+    mockedAssess.mockResolvedValue(nonZeroAssessment);
+    mockedExecute.mockResolvedValue({
+      data: { newItem: { itemCode: 'ITEM-NEW' } },
+    } as never);
+
+    render(
+      React.createElement(ProductUomMigrationModal, {
+        itemCode: 'ITEM-OLD',
+        onClose: jest.fn(),
+        onCompleted: jest.fn(),
+        open: true,
+      }),
+    );
+
+    expect(
+      (await screen.findAllByText('正式 Repack', { exact: false })).length,
+    ).toBeGreaterThan(0);
+    const proceedButton = screen.getByRole('button', {
+      name: '预览库存转换与纠正',
+    });
+    expect(proceedButton.hasAttribute('disabled')).toBe(false);
+    fireEvent.change(screen.getByLabelText('仓库 Stores - RD 的继任商品数量'), {
+      target: { value: '240' },
+    });
+    fireEvent.click(
+      screen.getByLabelText(
+        /我确认上述逐仓数量来自实际盘点，并同意通过正式 Repack/,
+      ),
+    );
+    fireEvent.click(screen.getByLabelText('我确认迁移成功后停用源商品'));
+    fireEvent.click(
+      screen.getByLabelText(
+        '我确认历史库存流水继续保留在源商品下，不要求重写历史',
+      ),
+    );
+    fireEvent.click(proceedButton);
+    fireEvent.click(
+      await screen.findByRole('button', { name: '确认创建继任商品' }),
+    );
+
+    await waitFor(() => {
+      expect(mockedExecute).toHaveBeenCalledWith(
+        expect.objectContaining({
+          confirmInventoryConversion: true,
+          inventoryMappings: [
+            {
+              sourceQty: 10,
+              targetQty: 240,
+              warehouse: 'Stores - RD',
+            },
+          ],
+        }),
+      );
     });
   });
 

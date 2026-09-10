@@ -137,6 +137,7 @@ export type ProductUomMigrationAssessment = {
   barcodes: ProductBarcode[];
   blockers: ProductUomMigrationIssue[];
   canExecute: boolean;
+  canExecuteWithInventoryConversion: boolean;
   history: {
     latestStockLedgerEntry: {
       postingDate: string | null;
@@ -191,8 +192,14 @@ export type ExecuteProductUomMigrationPayload = {
   confirmDisableSource: boolean;
   confirmHistoryPreserved: boolean;
   confirmInPlaceCorrection?: boolean;
+  confirmInventoryConversion?: boolean;
   correctionReason?: string | null;
   itemCode: string;
+  inventoryMappings?: {
+    sourceQty: number;
+    targetQty: number;
+    warehouse: string;
+  }[];
   newItemCode?: string | null;
   newItemName?: string | null;
   newPrices?: {
@@ -628,6 +635,9 @@ function mapProductUomMigrationAssessment(
     barcodes: mapProductBarcodes(row.barcodes, null),
     blockers: mapIssues(row.blockers),
     canExecute: Boolean(row.can_execute),
+    canExecuteWithInventoryConversion: Boolean(
+      row.can_execute_with_inventory_conversion,
+    ),
     history: {
       latestStockLedgerEntry: Object.keys(latestStockLedgerEntry).length
         ? {
@@ -1441,6 +1451,13 @@ export async function executeProductUomMigration(
     historyPreserved: boolean;
     movedBarcodes: string[];
     newItem: ProductSummary;
+    repackEntries: {
+      company: string;
+      name: string;
+      sourceQty: number;
+      targetQty: number;
+      warehouse: string;
+    }[];
     sourceDisabled: boolean;
     sourceItemCode: string;
   }>('execute_product_uom_migration_v1', {
@@ -1453,8 +1470,14 @@ export async function executeProductUomMigration(
       confirm_disable_source: payload.confirmDisableSource ? 1 : 0,
       confirm_history_preserved: payload.confirmHistoryPreserved ? 1 : 0,
       confirm_in_place_correction: payload.confirmInPlaceCorrection ? 1 : 0,
+      confirm_inventory_conversion: payload.confirmInventoryConversion ? 1 : 0,
       correction_reason: toOptionalText(payload.correctionReason),
       item_code: payload.itemCode,
+      inventory_mappings: (payload.inventoryMappings ?? []).map((mapping) => ({
+        source_qty: mapping.sourceQty,
+        target_qty: mapping.targetQty,
+        warehouse: mapping.warehouse,
+      })),
       new_item_code: payload.newItemCode,
       new_item_name: toOptionalText(payload.newItemName),
       new_prices: (payload.newPrices ?? []).map((price) => ({
@@ -1511,6 +1534,19 @@ export async function executeProductUomMigration(
               .filter((value): value is string => Boolean(value))
           : [],
         newItem: mapProduct(readObject(row.new_item)),
+        repackEntries: (Array.isArray(row.repack_entries)
+          ? row.repack_entries
+          : []
+        ).map((entry) => {
+          const repack = readObject(entry);
+          return {
+            company: toOptionalText(repack.company) ?? '',
+            name: toOptionalText(repack.name) ?? '',
+            sourceQty: toOptionalNumber(repack.source_qty) ?? 0,
+            targetQty: toOptionalNumber(repack.target_qty) ?? 0,
+            warehouse: toOptionalText(repack.warehouse) ?? '',
+          };
+        }),
         sourceDisabled: Boolean(row.source_disabled),
         sourceItemCode: toOptionalText(row.source_item_code) ?? '',
       };
