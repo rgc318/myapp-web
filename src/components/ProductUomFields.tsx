@@ -98,18 +98,23 @@ export function ProductUomFields({
       }));
   }, [conversions, uomDisplays]);
 
+  const stockUomValue = normalizeUom(stockUom);
+  const stockUomRowIndex = conversions.findIndex(
+    (entry) => normalizeUom(entry?.uom) === stockUomValue,
+  );
+
   return (
-    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={12} style={{ width: '100%' }}>
       <Alert
         showIcon
         type="info"
-        message="库存基准单位用于库存账本；包装单位必须明确配置换算关系。换算含义统一为：1 当前单位 = 换算系数 × 库存基准单位。"
+        title="库存基准单位用于库存账本；包装单位必须明确配置换算关系。换算含义统一为：1 当前单位 = 换算系数 × 库存基准单位。"
       />
       {lockStockUom ? (
         <Alert
           showIcon
           type="warning"
-          message="已有商品的库存基准单位不在普通编辑中修改，避免破坏历史库存账本；如确需变更，应使用受控单位迁移流程。"
+          title="已有商品的库存基准单位不在普通编辑中修改，避免破坏历史库存账本；如确需变更，应使用受控单位迁移流程。"
         />
       ) : null}
       <Form.Item
@@ -124,15 +129,17 @@ export function ProductUomFields({
       </Form.Item>
       <Form.List name="uomConversions">
         {(fields, { add, remove }) => (
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             <Typography.Text strong>商品单位与换算</Typography.Text>
             {fields.map((field) => {
               const rowUom = normalizeUom(conversions[field.name]?.uom);
-              const isStockUom = rowUom === normalizeUom(stockUom);
+              // Only the canonical stock-UOM row is immutable. Duplicate rows
+              // must stay editable/removable so users can resolve validation
+              // errors instead of being locked out of the form.
+              const isStockUom = field.name === stockUomRowIndex;
               return (
                 <Space align="start" key={field.key} style={{ width: '100%' }}>
                   <Form.Item
-                    {...field}
                     label={field.name === 0 ? '单位' : undefined}
                     name={[field.name, 'uom']}
                     rules={[
@@ -157,7 +164,6 @@ export function ProductUomFields({
                     />
                   </Form.Item>
                   <Form.Item
-                    {...field}
                     extra={isStockUom ? '基准单位固定为 1' : undefined}
                     label={field.name === 0 ? '换算系数' : undefined}
                     name={[field.name, 'conversionFactor']}
