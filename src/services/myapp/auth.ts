@@ -242,12 +242,27 @@ export async function getMyAppCurrentUser() {
     : mapCurrentUser(response.message?.data);
 }
 
-export async function refreshMyAppJwt() {
+let pendingRefresh: { token: string; promise: Promise<boolean> } | undefined;
+
+export function refreshMyAppJwt(): Promise<boolean> {
   const { refreshToken } = loadMyAppTokens();
   if (!refreshToken) {
-    return false;
+    return Promise.resolve(false);
+  }
+  if (pendingRefresh?.token === refreshToken) {
+    return pendingRefresh.promise;
   }
 
+  const promise = rotateMyAppJwt(refreshToken).finally(() => {
+    if (pendingRefresh?.promise === promise) {
+      pendingRefresh = undefined;
+    }
+  });
+  pendingRefresh = { token: refreshToken, promise };
+  return promise;
+}
+
+async function rotateMyAppJwt(refreshToken: string): Promise<boolean> {
   try {
     const response = await callAuthMethod<LoginMessage>(
       'myapp.auth.token_api.refresh_v1',
@@ -258,6 +273,11 @@ export async function refreshMyAppJwt() {
       },
     );
 
+    // A different login, logout or tab may have replaced this session while
+    // the request was in flight. Never overwrite that newer state.
+    if (loadMyAppTokens().refreshToken !== refreshToken) {
+      return Boolean(loadMyAppTokens().accessToken);
+    }
     const data = response.message?.data;
     if (!data?.access_token || !data.refresh_token) {
       clearMyAppTokens();
@@ -273,6 +293,9 @@ export async function refreshMyAppJwt() {
 
     return true;
   } catch {
+    if (loadMyAppTokens().refreshToken !== refreshToken) {
+      return Boolean(loadMyAppTokens().accessToken);
+    }
     clearMyAppTokens();
     return false;
   }
