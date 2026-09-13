@@ -380,7 +380,8 @@ describe('ProductMaintenanceWorkspace', () => {
     renderWorkspace();
 
     expect(await screen.findByText('正式变更审计')).toBeTruthy();
-    expect(screen.getByText('终止价格')).toBeTruthy();
+    // The static heading can render before the history request resolves.
+    expect(await screen.findByText('终止价格')).toBeTruthy();
     expect(screen.getByText('标准销售 · 件')).toBeTruthy();
     expect(screen.getByText(/失效日期/)).toBeTruthy();
     expect(mockedListProductChangeHistory).toHaveBeenCalledWith('ITEM-001', {

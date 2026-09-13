@@ -574,7 +574,9 @@ export function mapAiDataTask(value: unknown): AiDataTask {
     evidence: readObject(row.evidence),
     executedAt: text(row.executed_at),
     executedBy: text(row.executed_by),
-    executionResult: Object.keys(executionResult).length ? executionResult : null,
+    executionResult: Object.keys(executionResult).length
+      ? executionResult
+      : null,
     modelAlias: text(row.model_alias),
     modified: text(row.modified),
     name: String(row.name ?? ''),
@@ -656,16 +658,18 @@ export async function getAiGovernanceOverview() {
   } satisfies AiGovernanceOverview;
 }
 
-export async function listAiAuditEvents(params: {
-  action?: string;
-  current?: number;
-  dateFrom?: string;
-  dateTo?: string;
-  objectType?: string;
-  pageSize?: number;
-  priority?: string;
-  search?: string;
-} = {}) {
+export async function listAiAuditEvents(
+  params: {
+    action?: string;
+    current?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    objectType?: string;
+    pageSize?: number;
+    priority?: string;
+    search?: string;
+  } = {},
+) {
   const pageSize = params.pageSize ?? 20;
   const start = Math.max(0, ((params.current ?? 1) - 1) * pageSize);
   const result = await callGatewayMethod<unknown>(
@@ -688,14 +692,19 @@ export async function listAiAuditEvents(params: {
   };
 }
 
-export async function listAiModels(params: {
-  capability?: string;
-  current?: number;
-  pageSize?: number;
-  search?: string;
-  status?: string;
-} = {}) {
-  const start = Math.max(0, ((params.current ?? 1) - 1) * (params.pageSize ?? 20));
+export async function listAiModels(
+  params: {
+    capability?: string;
+    current?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+  } = {},
+) {
+  const start = Math.max(
+    0,
+    ((params.current ?? 1) - 1) * (params.pageSize ?? 20),
+  );
   const result = await callGatewayMethod<unknown>(
     'list_ai_models_v1',
     compactPayload({
@@ -736,40 +745,62 @@ export type AiModelCheckJob = {
   total: number;
   completed: number;
   cancelRequested: boolean;
-  items: { modelAlias: string; checkStatus: string; available: boolean; errorCode: string; healthStatus: string }[];
+  items: {
+    modelAlias: string;
+    checkStatus: string;
+    available: boolean;
+    errorCode: string;
+    healthStatus: string;
+  }[];
 };
 
 function mapModelCheckJob(data: unknown): AiModelCheckJob {
   const row = readObject(data);
   return {
-    jobId: String(row.job_id), status: String(row.status),
+    jobId: String(row.job_id),
+    status: String(row.status),
     mode: row.mode === 'basic' ? 'basic' : 'full',
     modelAliases: toStringList(row.model_aliases),
-    total: toNumber(row.total), completed: toNumber(row.completed),
+    total: toNumber(row.total),
+    completed: toNumber(row.completed),
     cancelRequested: Boolean(row.cancel_requested),
-    items: Array.isArray(row.items) ? row.items.map((item) => {
-      const value = readObject(item);
-      return { modelAlias: String(value.model_alias), checkStatus: String(value.check_status),
-        available: Boolean(value.available), errorCode: toOptionalText(value.error_code) ?? '',
-        healthStatus: toOptionalText(value.health_status) ?? '' };
-    }) : [],
+    items: Array.isArray(row.items)
+      ? row.items.map((item) => {
+          const value = readObject(item);
+          return {
+            modelAlias: String(value.model_alias),
+            checkStatus: String(value.check_status),
+            available: Boolean(value.available),
+            errorCode: toOptionalText(value.error_code) ?? '',
+            healthStatus: toOptionalText(value.health_status) ?? '',
+          };
+        })
+      : [],
   };
 }
 
-export async function startAiModelCheck(modelAliases?: string[], mode: 'basic' | 'full' = 'full') {
+export async function startAiModelCheck(
+  modelAliases?: string[],
+  mode: 'basic' | 'full' = 'full',
+) {
   return runGatewayMutation<AiModelCheckJob>('start_ai_model_check_v1', {
-    payload: { model_aliases: modelAliases, mode }, transform: mapModelCheckJob,
+    payload: { model_aliases: modelAliases, mode },
+    transform: mapModelCheckJob,
   });
 }
 
 export async function getAiModelCheck(jobId?: string) {
-  const result = await callGatewayMethod<unknown>('get_ai_model_check_v1', compactPayload({ job_id: jobId }));
+  const result = await callGatewayMethod<unknown>(
+    'get_ai_model_check_v1',
+    compactPayload({ job_id: jobId }),
+  );
   return result.data ? mapModelCheckJob(result.data) : null;
 }
 
 export async function cancelAiModelCheck(jobId: string) {
   return runGatewayMutation<AiModelCheckJob>('cancel_ai_model_check_v1', {
-    payload: { job_id: jobId }, transform: mapModelCheckJob,
+    payload: { job_id: jobId },
+    transform: mapModelCheckJob,
   });
 }
 
@@ -796,14 +827,14 @@ export async function checkAiModelAvailability(modelAliases?: string[]) {
                   effectiveHealthStatus:
                     toOptionalText(row.effective_health_status) ??
                     toOptionalText(row.health_status) ??
-                    (Boolean(row.available) ? 'available' : 'unavailable'),
+                    (row.available ? 'available' : 'unavailable'),
                   errorCode: toOptionalText(row.error_code) ?? null,
                   healthExpiresAt:
                     toOptionalText(row.health_expires_at) ?? null,
                   healthFailureCount: toNumber(row.health_failure_count),
                   healthStatus:
                     toOptionalText(row.health_status) ??
-                    (Boolean(row.available) ? 'available' : 'unavailable'),
+                    (row.available ? 'available' : 'unavailable'),
                   latencyMs: toNumber(row.latency_ms),
                   modelAlias: toOptionalText(row.model_alias) ?? '',
                   providerModel: toOptionalText(row.provider_model) ?? null,
@@ -864,13 +895,18 @@ export async function updateAiModel(
   });
 }
 
-export async function listAiPolicies(params: {
-  current?: number;
-  pageSize?: number;
-  search?: string;
-  status?: string;
-} = {}) {
-  const start = Math.max(0, ((params.current ?? 1) - 1) * (params.pageSize ?? 20));
+export async function listAiPolicies(
+  params: {
+    current?: number;
+    pageSize?: number;
+    search?: string;
+    status?: string;
+  } = {},
+) {
+  const start = Math.max(
+    0,
+    ((params.current ?? 1) - 1) * (params.pageSize ?? 20),
+  );
   const result = await callGatewayMethod<unknown>(
     'list_ai_model_policies_v1',
     compactPayload({
@@ -981,12 +1017,14 @@ export const rollbackAiPolicy = (
     target_version: targetVersion,
   });
 
-export async function getAiUsage(params: {
-  company?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  environment?: string;
-} = {}) {
+export async function getAiUsage(
+  params: {
+    company?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    environment?: string;
+  } = {},
+) {
   const result = await callGatewayMethod<unknown>(
     'get_ai_model_usage_summary_v1',
     compactPayload({
@@ -1000,15 +1038,20 @@ export async function getAiUsage(params: {
   return Array.isArray(payload.items) ? payload.items.map(mapUsage) : [];
 }
 
-export async function listAiVectorReleases(params: {
-  current?: number;
-  pageSize?: number;
-} = {}) {
-  const start = Math.max(0, ((params.current ?? 1) - 1) * (params.pageSize ?? 20));
-  const result = await callGatewayMethod<unknown>('list_ai_vector_releases_v1', {
-    limit: params.pageSize ?? 20,
-    start,
-  });
+export async function listAiVectorReleases(
+  params: { current?: number; pageSize?: number } = {},
+) {
+  const start = Math.max(
+    0,
+    ((params.current ?? 1) - 1) * (params.pageSize ?? 20),
+  );
+  const result = await callGatewayMethod<unknown>(
+    'list_ai_vector_releases_v1',
+    {
+      limit: params.pageSize ?? 20,
+      start,
+    },
+  );
   const payload = readObject(result.data);
   return {
     items: Array.isArray(payload.items)
@@ -1109,7 +1152,8 @@ const vectorReleaseAction = (
   runGatewayMutation(method, {
     payload: compactPayload({
       reason,
-      release_code: method === 'rollback_ai_vector_release_v1' ? undefined : releaseCode,
+      release_code:
+        method === 'rollback_ai_vector_release_v1' ? undefined : releaseCode,
       target_release_code:
         method === 'rollback_ai_vector_release_v1' ? releaseCode : undefined,
     }),
@@ -1126,13 +1170,15 @@ export const publishAiVectorRelease = (releaseCode: string, reason: string) =>
 export const rollbackAiVectorRelease = (releaseCode: string, reason: string) =>
   vectorReleaseAction('rollback_ai_vector_release_v1', releaseCode, reason);
 
-export async function listAiDataTasks(params: {
-  current?: number;
-  pageSize?: number;
-  riskLevel?: string;
-  status?: string;
-  taskType?: string;
-} = {}) {
+export async function listAiDataTasks(
+  params: {
+    current?: number;
+    pageSize?: number;
+    riskLevel?: string;
+    status?: string;
+    taskType?: string;
+  } = {},
+) {
   const start = Math.max(
     0,
     ((params.current ?? 1) - 1) * (params.pageSize ?? 20),
@@ -1149,9 +1195,7 @@ export async function listAiDataTasks(params: {
   );
   const payload = readObject(result.data);
   return {
-    items: Array.isArray(payload.tasks)
-      ? payload.tasks.map(mapAiDataTask)
-      : [],
+    items: Array.isArray(payload.tasks) ? payload.tasks.map(mapAiDataTask) : [],
     total: toNumber(payload.total),
   };
 }

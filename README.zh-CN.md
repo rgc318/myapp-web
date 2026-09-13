@@ -2,6 +2,8 @@
 
 MyApp 的桌面端业务前端，基于 Ant Design Pro、Umi 和 ProComponents。
 
+开发与验证基线为 Node.js 22，与 CI 和 Docker 构建保持一致；不再支持 Node.js 20。使用 nvm 时运行 `nvm install && nvm use`，然后通过 `npm ci` 按锁文件安装依赖。CI 禁用安装脚本时须另外执行 `npx max setup` 生成 Umi 文件。
+
 - 开发规范：[WEB_DEVELOPMENT.zh-CN.md](./WEB_DEVELOPMENT.zh-CN.md)
 - 部署说明：[DEPLOYMENT.zh-CN.md](./DEPLOYMENT.zh-CN.md)
 - AI Web 企业级设计：[AI_WEB_FRONTEND_DESIGN.zh-CN.md](./AI_WEB_FRONTEND_DESIGN.zh-CN.md)

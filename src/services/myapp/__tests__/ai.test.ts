@@ -1,23 +1,23 @@
-import { callGatewayMethod } from '../api-client';
+import { TextDecoder } from 'node:util';
 import {
-  mapAiDraft,
   AiDraftVersionConflictError,
   cancelAiRun,
   executeAiDraft,
   fetchAiAttachmentPreview,
   generateAiInventoryAdjustmentDraft,
   generateAiProductSetupDraft,
-  generateAiSalesOrderDraft,
   generateAiPurchaseOrderDraft,
+  generateAiSalesOrderDraft,
   getAiConversation,
-  listAiConversations,
   listAiAgentApprovals,
+  listAiConversations,
   listAiDrafts,
   listAiSelectableModels,
+  mapAiDraft,
   prepareAiInventoryAdjustmentDraft,
   prepareAiProductUpdateDraft,
-  renameAiConversation,
   refreshAiBusinessResult,
+  renameAiConversation,
   resetAiConversationContext,
   resolveAiBusinessResultSet,
   resolveAiDraftCitation,
@@ -30,30 +30,56 @@ import {
   submitAiFeedback,
   updateAiDraft,
 } from '../ai';
+import { callGatewayMethod } from '../api-client';
 import { runGatewayMutation } from '../mutation';
-import { TextDecoder } from 'util';
 
 Object.assign(globalThis, { TextDecoder });
 
 it('locks only persisted actions and resolved fields, keeping unresolved choices open', () => {
-  expect(mapAiDraft({ payload: { operation: 'update', item_code: 'UNTRUSTED' } }).boundFields).toEqual({
-    operation: false, target: false, warehouse: false, adjustmentType: false,
+  expect(
+    mapAiDraft({ payload: { operation: 'update', item_code: 'UNTRUSTED' } })
+      .boundFields,
+  ).toEqual({
+    operation: false,
+    target: false,
+    warehouse: false,
+    adjustmentType: false,
   });
-  const mapped = mapAiDraft({ payload: { _action_contract: {
-    action: { operations: ['update'] }, resolved_scope: { warehouse: 'Stores', adjustment_type: 'increase' },
-  } } });
-  expect(mapped.boundFields).toEqual({ operation: true, target: false, warehouse: true, adjustmentType: true });
+  const mapped = mapAiDraft({
+    payload: {
+      _action_contract: {
+        action: { operations: ['update'] },
+        resolved_scope: { warehouse: 'Stores', adjustment_type: 'increase' },
+      },
+    },
+  });
+  expect(mapped.boundFields).toEqual({
+    operation: true,
+    target: false,
+    warehouse: true,
+    adjustmentType: true,
+  });
   expect(mapped.boundScopeSummary).toContain('操作：修改');
 });
 
 it('maps only persisted bound scope into display summaries', () => {
   expect(mapAiDraft({ payload: {} }).boundScopeSummary).toEqual([]);
-  expect(mapAiDraft({ payload: { item_code: 'unbound' } }).boundScopeSummary).toEqual([]);
-  expect(mapAiDraft({ payload: { _action_contract: { resolved_scope: {
-    target: 'ITEM-1', warehouse: 'Stores', adjustment_type: 'decrease',
-  } } } }).boundScopeSummary).toEqual([
-    '目标：ITEM-1', '仓库：Stores', '调整方式：减少库存',
-  ]);
+  expect(
+    mapAiDraft({ payload: { item_code: 'unbound' } }).boundScopeSummary,
+  ).toEqual([]);
+  expect(
+    mapAiDraft({
+      payload: {
+        _action_contract: {
+          resolved_scope: {
+            target: 'ITEM-1',
+            warehouse: 'Stores',
+            adjustment_type: 'decrease',
+          },
+        },
+      },
+    }).boundScopeSummary,
+  ).toEqual(['目标：ITEM-1', '仓库：Stores', '调整方式：减少库存']);
 });
 
 jest.mock('../api-client', () => ({
@@ -68,10 +94,26 @@ const mockedRunGatewayMutation = jest.mocked(runGatewayMutation);
 
 describe('AI domain service', () => {
   it('forwards resolution credentials for every generated draft type', async () => {
-    for (const generate of [generateAiSalesOrderDraft, generateAiPurchaseOrderDraft, generateAiInventoryAdjustmentDraft, generateAiProductSetupDraft]) {
-      mockedCallGatewayMethod.mockResolvedValue({ data: { draft: { payload: {}, validation: {} } }, meta: {}, raw: {} });
-      await generate({ content: '请求', company: 'c', scenarioResolutionId: 'proof' });
-      expect(mockedCallGatewayMethod).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ scenario_resolution_id: 'proof' }));
+    for (const generate of [
+      generateAiSalesOrderDraft,
+      generateAiPurchaseOrderDraft,
+      generateAiInventoryAdjustmentDraft,
+      generateAiProductSetupDraft,
+    ]) {
+      mockedCallGatewayMethod.mockResolvedValue({
+        data: { draft: { payload: {}, validation: {} } },
+        meta: {},
+        raw: {},
+      });
+      await generate({
+        content: '请求',
+        company: 'c',
+        scenarioResolutionId: 'proof',
+      });
+      expect(mockedCallGatewayMethod).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ scenario_resolution_id: 'proof' }),
+      );
     }
   });
   beforeEach(() => {
@@ -192,7 +234,11 @@ describe('AI domain service', () => {
             name: 'AI-DRAFT-PRODUCT',
             payload: { item_code: 'ITEM-001' },
             status: 'draft',
-            validation: { errors: ['尚未修改'], ready_for_handoff: false, warnings: [] },
+            validation: {
+              errors: ['尚未修改'],
+              ready_for_handoff: false,
+              warnings: [],
+            },
             version: 1,
           },
           messages: [],
@@ -208,7 +254,11 @@ describe('AI domain service', () => {
             name: 'AI-DRAFT-INVENTORY',
             payload: { items: [{ item_code: 'ITEM-001' }] },
             status: 'draft',
-            validation: { errors: ['请选择仓库'], ready_for_handoff: false, warnings: [] },
+            validation: {
+              errors: ['请选择仓库'],
+              ready_for_handoff: false,
+              warnings: [],
+            },
             version: 1,
           },
           messages: [],
@@ -287,8 +337,7 @@ describe('AI domain service', () => {
     expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
       'select_ai_draft_product_candidate_v1',
       {
-        idempotencyKey:
-          'web-select-ai-draft-product-AI-DRAFT-1-v1-COKE-5000',
+        idempotencyKey: 'web-select-ai-draft-product-AI-DRAFT-1-v1-COKE-5000',
         notifyError: false,
         payload: {
           draft_id: 'AI-DRAFT-1',
@@ -310,13 +359,10 @@ describe('AI domain service', () => {
 
     const result = await cancelAiRun('AI-RUN-1');
 
-    expect(mockedRunGatewayMutation).toHaveBeenCalledWith(
-      'cancel_ai_run_v1',
-      {
-        notifyError: false,
-        payload: { run_id: 'AI-RUN-1' },
-      },
-    );
+    expect(mockedRunGatewayMutation).toHaveBeenCalledWith('cancel_ai_run_v1', {
+      notifyError: false,
+      payload: { run_id: 'AI-RUN-1' },
+    });
     expect(result).toEqual({ run_id: 'AI-RUN-1', status: 'cancelled' });
   });
 
@@ -692,14 +738,13 @@ describe('AI domain service', () => {
             min_amount: null,
             limit_per_group: 3,
           },
-          groups: [
-            { entity: 'sales_order', requested_count: 3 },
-          ],
+          groups: [{ entity: 'sales_order', requested_count: 3 }],
         },
       },
     ]);
 
-    const refreshed = await refreshAiBusinessResult(original!);
+    if (!original) throw new Error('Expected a mapped business result');
+    const refreshed = await refreshAiBusinessResult(original);
 
     expect(mockedCallGatewayMethod).toHaveBeenCalledWith(
       'refresh_ai_business_result_v1',
@@ -813,7 +858,11 @@ describe('AI domain service', () => {
             status: 'draft',
             draft_type: 'product_setup',
             payload: { item_name: '传承结晶' },
-            validation: { ready_for_handoff: false, errors: ['缺少估值价'], warnings: [] },
+            validation: {
+              ready_for_handoff: false,
+              errors: ['缺少估值价'],
+              warnings: [],
+            },
           },
         },
         meta: {},
@@ -1161,10 +1210,11 @@ describe('AI domain service', () => {
       status: 200,
       body: {
         getReader: () => ({
-          read: async () =>
-            read
-              ? { done: true, value: undefined }
-              : ((read = true), { done: false, value: chunk }),
+          read: async () => {
+            if (read) return { done: true, value: undefined };
+            read = true;
+            return { done: false, value: chunk };
+          },
         }),
       },
     } as Response);
@@ -1236,10 +1286,11 @@ describe('AI domain service', () => {
       status: 200,
       body: {
         getReader: () => ({
-          read: async () =>
-            read
-              ? { done: true, value: undefined }
-              : ((read = true), { done: false, value: chunk }),
+          read: async () => {
+            if (read) return { done: true, value: undefined };
+            read = true;
+            return { done: false, value: chunk };
+          },
         }),
       },
     } as Response);

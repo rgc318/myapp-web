@@ -1,16 +1,16 @@
-import { callGatewayMethod } from './api-client';
-import { resolveMediaUrl } from './media-url';
-import { runGatewayMutation } from './mutation';
 import { sortUomsByBusinessPriority } from '@/utils/display-uom';
+import { callGatewayMethod } from './api-client';
 import {
   compactPayload,
+  type PageResult,
   readObject,
   readPaginationMeta,
   readRows,
   toOptionalNumber,
   toOptionalText,
-  type PageResult,
 } from './api-utils';
+import { resolveMediaUrl } from './media-url';
+import { runGatewayMutation } from './mutation';
 
 export type ListOptions = {
   disabled?: 0 | 1 | boolean;
@@ -495,7 +495,10 @@ export type LinkOption = {
   value: string;
 };
 
-export type LinkOptionFilters = Record<string, string | number | boolean | null | undefined>;
+export type LinkOptionFilters = Record<
+  string,
+  string | number | boolean | null | undefined
+>;
 
 function mapProduct(row: Record<string, any>): ProductSummary {
   const allUoms = mapUomNames(row.all_uoms);
@@ -586,9 +589,7 @@ function mapProductUomMigrationAssessment(
   const source = readObject(row.source);
   const inventory = readObject(row.inventory);
   const history = readObject(row.history);
-  const latestStockLedgerEntry = readObject(
-    history.latest_stock_ledger_entry,
-  );
+  const latestStockLedgerEntry = readObject(history.latest_stock_ledger_entry);
   const openTransactions = readObject(row.open_transactions);
   const committedBinFields = [
     'reserved_qty',
@@ -655,22 +656,28 @@ function mapProductUomMigrationAssessment(
     },
     inventory: {
       bins: (Array.isArray(inventory.bins) ? inventory.bins : [])
-        .map((entry): ProductUomMigrationAssessment['inventory']['bins'][number] | null => {
-          const bin = readObject(entry);
-          const warehouse = toOptionalText(bin.warehouse);
-          if (!warehouse) return null;
-          return {
-            actualQty: toOptionalNumber(bin.actual_qty),
-            committedQty: committedBinFields.reduce(
-              (total, fieldname) =>
-                total + Math.abs(toOptionalNumber(bin[fieldname]) ?? 0),
-              0,
-            ),
-            company: toOptionalText(bin.company) ?? '',
-            projectedQty: toOptionalNumber(bin.projected_qty),
-            warehouse,
-          };
-        })
+        .map(
+          (
+            entry,
+          ):
+            | ProductUomMigrationAssessment['inventory']['bins'][number]
+            | null => {
+            const bin = readObject(entry);
+            const warehouse = toOptionalText(bin.warehouse);
+            if (!warehouse) return null;
+            return {
+              actualQty: toOptionalNumber(bin.actual_qty),
+              committedQty: committedBinFields.reduce(
+                (total, fieldname) =>
+                  total + Math.abs(toOptionalNumber(bin[fieldname]) ?? 0),
+                0,
+              ),
+              company: toOptionalText(bin.company) ?? '',
+              projectedQty: toOptionalNumber(bin.projected_qty),
+              warehouse,
+            };
+          },
+        )
         .filter(
           (
             entry,
@@ -706,18 +713,25 @@ function mapProductUomMigrationAssessment(
         : null,
     strategies: {
       inPlace: {
-        available: Boolean(readObject(readObject(row.strategies).in_place).available),
+        available: Boolean(
+          readObject(readObject(row.strategies).in_place).available,
+        ),
         reason:
-          toOptionalText(readObject(readObject(row.strategies).in_place).reason) ?? '',
+          toOptionalText(
+            readObject(readObject(row.strategies).in_place).reason,
+          ) ?? '',
       },
       replacement: {
-        available: Boolean(readObject(readObject(row.strategies).replacement).available),
+        available: Boolean(
+          readObject(readObject(row.strategies).replacement).available,
+        ),
         reason:
-          toOptionalText(readObject(readObject(row.strategies).replacement).reason) ?? '',
+          toOptionalText(
+            readObject(readObject(row.strategies).replacement).reason,
+          ) ?? '',
       },
     },
-    suggestedNewItemCode:
-      toOptionalText(row.suggested_new_item_code) ?? '',
+    suggestedNewItemCode: toOptionalText(row.suggested_new_item_code) ?? '',
     source: {
       disabled: Boolean(source.disabled),
       itemCode: toOptionalText(source.item_code) ?? '',
@@ -727,8 +741,7 @@ function mapProductUomMigrationAssessment(
       stockUom: toOptionalText(source.stock_uom) ?? '',
       stockUomDisplay: toOptionalText(source.stock_uom_display) ?? null,
       uomConversions: mapUomConversions(source.uom_conversions),
-      wholesaleDefaultUom:
-        toOptionalText(source.wholesale_default_uom) ?? null,
+      wholesaleDefaultUom: toOptionalText(source.wholesale_default_uom) ?? null,
     },
     warnings: mapIssues(row.warnings),
   };
@@ -865,9 +878,8 @@ function mapUomConversions(value: unknown) {
           uom,
         };
       })
-      .filter(
-        (entry): entry is ProductSummary['uomConversions'][number] =>
-          Boolean(entry),
+      .filter((entry): entry is ProductSummary['uomConversions'][number] =>
+        Boolean(entry),
       ),
     (entry) => entry.uom,
   );
@@ -969,7 +981,13 @@ function mapProductPriceCollection(value: unknown): ProductPriceCollection {
 function mapProductChangeHistory(value: unknown): ProductChangeHistory {
   const row = readObject(value);
   const pagination = readObject(row.pagination);
-  const categories = new Set(['product', 'price', 'barcode', 'uom', 'valuation']);
+  const categories = new Set([
+    'product',
+    'price',
+    'barcode',
+    'uom',
+    'valuation',
+  ]);
   const actions = new Set(['created', 'updated', 'terminated', 'corrected']);
   return {
     events: (Array.isArray(row.events) ? row.events : []).map((entry) => {
@@ -977,25 +995,30 @@ function mapProductChangeHistory(value: unknown): ProductChangeHistory {
       const category = String(event.category ?? 'product');
       const action = String(event.action ?? 'updated');
       return {
-        action: (actions.has(action) ? action : 'updated') as ProductChangeHistoryEvent['action'],
+        action: (actions.has(action)
+          ? action
+          : 'updated') as ProductChangeHistoryEvent['action'],
         actor: toOptionalText(event.actor) ?? null,
         category: (categories.has(category)
           ? category
           : 'product') as ProductChangeHistoryEvent['category'],
-        changes: (Array.isArray(event.changes) ? event.changes : []).map((change) => {
-          const changeRow = readObject(change);
-          const rowAction =
-            changeRow.row_action === 'added' || changeRow.row_action === 'removed'
-              ? changeRow.row_action
-              : null;
-          return {
-            field: toOptionalText(changeRow.field) ?? '',
-            label: toOptionalText(changeRow.label) ?? '',
-            newValue: changeRow.new_value,
-            oldValue: changeRow.old_value,
-            rowAction,
-          };
-        }),
+        changes: (Array.isArray(event.changes) ? event.changes : []).map(
+          (change) => {
+            const changeRow = readObject(change);
+            const rowAction =
+              changeRow.row_action === 'added' ||
+              changeRow.row_action === 'removed'
+                ? changeRow.row_action
+                : null;
+            return {
+              field: toOptionalText(changeRow.field) ?? '',
+              label: toOptionalText(changeRow.label) ?? '',
+              newValue: changeRow.new_value,
+              oldValue: changeRow.old_value,
+              rowAction,
+            };
+          },
+        ),
         id: toOptionalText(event.id) ?? '',
         occurredAt: toOptionalText(event.occurred_at) ?? '',
         sourceDoctype: toOptionalText(event.source_doctype) ?? '',
@@ -1041,8 +1064,7 @@ function mapSalesProfiles(value: unknown): ProductSummary['salesProfiles'] {
             ? row.default_uom_display
             : null,
         modeCode,
-        priceList:
-          typeof row.price_list === 'string' ? row.price_list : null,
+        priceList: typeof row.price_list === 'string' ? row.price_list : null,
       };
     })
     .filter((entry): entry is ProductSummary['salesProfiles'][number] =>
@@ -1110,7 +1132,9 @@ function mapCustomer(row: Record<string, any>): PartySummary {
     defaultCurrency: optionalString(row.default_currency),
     defaultPriceList: optionalString(row.default_price_list),
     disabled: Boolean(toOptionalNumber(row.disabled)),
-    displayName: String(row.customer_name ?? row.display_name ?? row.name ?? ''),
+    displayName: String(
+      row.customer_name ?? row.display_name ?? row.name ?? '',
+    ),
     email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
     group: optionalString(row.customer_group),
     mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
@@ -1135,7 +1159,9 @@ function mapSupplier(row: Record<string, any>): PartySummary {
     defaultCurrency: optionalString(row.default_currency),
     defaultPriceList: optionalString(row.default_price_list),
     disabled: Boolean(toOptionalNumber(row.disabled)),
-    displayName: String(row.supplier_name ?? row.display_name ?? row.name ?? ''),
+    displayName: String(
+      row.supplier_name ?? row.display_name ?? row.name ?? '',
+    ),
     email: optionalString(row.email_id) ?? defaultContact?.email ?? null,
     group: optionalString(row.supplier_group),
     mobileNo: optionalString(row.mobile_no) ?? defaultContact?.phone ?? null,
@@ -1152,7 +1178,7 @@ function mapSupplier(row: Record<string, any>): PartySummary {
 
 function mapUom(row: Record<string, any>): UomSummary {
   const hasEnabled = row.enabled !== undefined && row.enabled !== null;
-  const enabled = hasEnabled ? Boolean(Number(row.enabled)) : !Boolean(row.disabled);
+  const enabled = hasEnabled ? Boolean(Number(row.enabled)) : !row.disabled;
   const name = String(row.name ?? row.uom_name ?? '');
   const uomName = String(row.uom_name ?? row.name ?? '');
   const displayName =
@@ -1233,7 +1259,10 @@ function mapWarehouse(row: Record<string, any>): WarehouseSummary {
   };
 }
 
-function pageResult<T>(raw: unknown, mapper: (row: Record<string, any>) => T): PageResult<T> {
+function pageResult<T>(
+  raw: unknown,
+  mapper: (row: Record<string, any>) => T,
+): PageResult<T> {
   const rows = readRows(raw);
   const meta = readPaginationMeta(raw, rows.length);
   return {
@@ -1245,13 +1274,16 @@ function pageResult<T>(raw: unknown, mapper: (row: Record<string, any>) => T): P
 
 function definedPayload<T extends Record<string, unknown>>(payload: T) {
   return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => value !== undefined && value !== null),
+    Object.entries(payload).filter(
+      ([, value]) => value !== undefined && value !== null,
+    ),
   ) as Partial<T>;
 }
 
 function buildPartyContactPayload(payload: SavePartyPayload) {
   const contactPayload = compactPayload({
-    display_name: toOptionalText(payload.contactName) ?? toOptionalText(payload.name),
+    display_name:
+      toOptionalText(payload.contactName) ?? toOptionalText(payload.name),
     email: toOptionalText(payload.email),
     phone: toOptionalText(payload.mobileNo),
   });
@@ -1348,11 +1380,14 @@ export async function listProductChangeHistory(
   itemCode: string,
   options: Pick<ListOptions, 'limit' | 'start'> = {},
 ) {
-  const result = await callGatewayMethod<unknown>('list_product_change_history_v1', {
-    item_code: itemCode,
-    limit: options.limit ?? 100,
-    start: options.start ?? 0,
-  });
+  const result = await callGatewayMethod<unknown>(
+    'list_product_change_history_v1',
+    {
+      item_code: itemCode,
+      limit: options.limit ?? 100,
+      start: options.start ?? 0,
+    },
+  );
   return mapProductChangeHistory(result.data);
 }
 
@@ -1371,8 +1406,7 @@ export async function saveProductPrice(payload: SaveProductPricePayload) {
       valid_upto: toOptionalText(payload.validUpto),
     }),
     successMessage: payload.priceName ? '价格已更新' : '价格已新增',
-    transform: (raw) =>
-      mapProductPriceRecord(raw) as ProductPriceRecord,
+    transform: (raw) => mapProductPriceRecord(raw) as ProductPriceRecord,
   });
 }
 
@@ -1381,20 +1415,16 @@ export async function terminateProductPrice(
   price: Pick<ProductPriceRecord, 'modified' | 'name'>,
   validUpto?: string | null,
 ) {
-  return runGatewayMutation<ProductPriceRecord>(
-    'terminate_product_price_v1',
-    {
-      payload: definedPayload({
-        item_code: itemCode,
-        price_modified: toOptionalText(price.modified),
-        price_name: price.name,
-        valid_upto: toOptionalText(validUpto),
-      }),
-      successMessage: '价格已终止',
-      transform: (raw) =>
-        mapProductPriceRecord(raw) as ProductPriceRecord,
-    },
-  );
+  return runGatewayMutation<ProductPriceRecord>('terminate_product_price_v1', {
+    payload: definedPayload({
+      item_code: itemCode,
+      price_modified: toOptionalText(price.modified),
+      price_name: price.name,
+      valid_upto: toOptionalText(validUpto),
+    }),
+    successMessage: '价格已终止',
+    transform: (raw) => mapProductPriceRecord(raw) as ProductPriceRecord,
+  });
 }
 
 export async function assessProductUomMigration(itemCode: string) {
@@ -1564,8 +1594,7 @@ function productSavePayload(
     rate: number;
     uom: string | undefined;
   };
-  const hasOwn = (key: keyof SaveProductPayload) =>
-    Object.prototype.hasOwnProperty.call(payload, key);
+  const hasOwn = (key: keyof SaveProductPayload) => Object.hasOwn(payload, key);
   const optionalTextField = (key: keyof SaveProductPayload) => {
     if (!options.includeEmptyFields && !hasOwn(key)) {
       return undefined;
@@ -1574,7 +1603,8 @@ function productSavePayload(
   };
 
   const sellingPrices = [
-    payload.standardSellingRate === undefined || payload.standardSellingRate === null
+    payload.standardSellingRate === undefined ||
+    payload.standardSellingRate === null
       ? null
       : {
           currency: toOptionalText(payload.currency),
@@ -1600,7 +1630,8 @@ function productSavePayload(
         },
   ].filter((entry): entry is PricePayloadEntry => Boolean(entry));
   const buyingPrices =
-    payload.standardBuyingRate === undefined || payload.standardBuyingRate === null
+    payload.standardBuyingRate === undefined ||
+    payload.standardBuyingRate === null
       ? undefined
       : [
           {
@@ -1624,14 +1655,15 @@ function productSavePayload(
     company: toOptionalText(payload.company),
     currency: optionalTextField('currency'),
     description: optionalTextField('description'),
-    disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+    disabled:
+      payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
     image: payload.image === undefined ? undefined : payload.image,
     item_group: optionalTextField('itemGroup'),
     item_name: payload.itemName,
     posting_date: toOptionalText(payload.postingDate),
     retail_default_uom:
       options.includeEmptyFields || hasOwn('retailDefaultUom')
-        ? payload.retailDefaultUom ?? stockUom ?? ''
+        ? (payload.retailDefaultUom ?? stockUom ?? '')
         : undefined,
     selling_prices: sellingPrices.length ? sellingPrices : undefined,
     standard_rate: payload.standardSellingRate ?? undefined,
@@ -1647,7 +1679,7 @@ function productSavePayload(
     warehouse_stock_uom: toOptionalText(payload.warehouseStockUom),
     wholesale_default_uom:
       options.includeEmptyFields || hasOwn('wholesaleDefaultUom')
-        ? payload.wholesaleDefaultUom ?? stockUom ?? ''
+        ? (payload.wholesaleDefaultUom ?? stockUom ?? '')
         : undefined,
     buying_prices: buyingPrices,
   });
@@ -1773,10 +1805,14 @@ export async function bulkUpdateProducts(
   const result: ProductBulkMutationResult = { failed: [], succeeded: [] };
   for (const target of targets) {
     try {
-      const response = await updateProduct(target.itemCode, {
-        ...payload,
-        itemModified: target.itemModified,
-      }, { notifyError: false, notifySuccess: false });
+      const response = await updateProduct(
+        target.itemCode,
+        {
+          ...payload,
+          itemModified: target.itemModified,
+        },
+        { notifyError: false, notifySuccess: false },
+      );
       result.succeeded.push(response.data);
     } catch (caught) {
       result.failed.push({
@@ -1903,7 +1939,8 @@ export async function updateCustomer(
       default_contact: buildPartyContactPayload(payload as SavePartyPayload),
       default_currency: payload.defaultCurrency ?? '',
       default_price_list: payload.defaultPriceList ?? '',
-      disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+      disabled:
+        payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
       payment_terms: payload.paymentTerms ?? '',
       remarks: payload.remarks ?? '',
       tax_category: payload.taxCategory ?? '',
@@ -1976,7 +2013,8 @@ export async function updateSupplier(
   return runGatewayMutation<PartySummary>('update_supplier_v2', {
     payload: definedPayload({
       default_currency: payload.defaultCurrency ?? '',
-      disabled: payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
+      disabled:
+        payload.disabled === undefined ? undefined : payload.disabled ? 1 : 0,
       contact_email: payload.email ?? '',
       contact_phone: payload.mobileNo ?? '',
       default_address: buildPartyAddressPayload(payload as SavePartyPayload),
@@ -2103,7 +2141,10 @@ function mapMutationWarehouse(raw: unknown) {
 }
 
 export async function listWarehouses(
-  options: ListOptions & { company?: string; isGroup?: boolean | 0 | 1 | 'all' } = {},
+  options: ListOptions & {
+    company?: string;
+    isGroup?: boolean | 0 | 1 | 'all';
+  } = {},
 ) {
   const result = await callGatewayMethod<unknown>(
     'list_warehouses_v2',
@@ -2248,8 +2289,7 @@ export async function searchLinkOptions(
 
   return rows
     .map((row: any) => ({
-      description:
-        typeof row.description === 'string' ? row.description : null,
+      description: typeof row.description === 'string' ? row.description : null,
       label: String(row.label ?? row.value ?? ''),
       value: String(row.value ?? row.label ?? ''),
     }))

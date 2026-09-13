@@ -1,10 +1,10 @@
+import { buildMyAppApiUrl } from './api-base';
 import {
   clearMyAppTokens,
   getMyAppAuthHeaders,
   loadMyAppTokens,
   saveMyAppTokens,
 } from './auth-storage';
-import { buildMyAppApiUrl } from './api-base';
 
 type FrappeMethodResponse<T> = {
   message?: T;
@@ -141,6 +141,7 @@ async function callAuthMethod<T>(
     data?: Record<string, unknown>;
     headers?: Record<string, string>;
     method?: 'GET' | 'POST';
+    signal?: AbortSignal;
   },
 ) {
   const method = options?.method ?? 'POST';
@@ -148,12 +149,17 @@ async function callAuthMethod<T>(
     body: method === 'GET' ? undefined : JSON.stringify(options?.data ?? {}),
     credentials: 'same-origin',
     headers: {
-      ...(method === 'GET' ? undefined : { 'Content-Type': 'application/json' }),
+      ...(method === 'GET'
+        ? undefined
+        : { 'Content-Type': 'application/json' }),
       ...options?.headers,
     },
     method,
+    signal: options?.signal,
   });
-  const payload = (await response.json().catch(() => ({}))) as FrappeMethodResponse<T>;
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as FrappeMethodResponse<T>;
 
   if (!response.ok) {
     throw new MyAppAuthError(
@@ -253,7 +259,7 @@ export function refreshMyAppJwt(): Promise<boolean> {
     return pendingRefresh.promise;
   }
 
-  const promise = rotateMyAppJwt(refreshToken).finally(() => {
+  const promise = coordinateRefresh(refreshToken).finally(() => {
     if (pendingRefresh?.promise === promise) {
       pendingRefresh = undefined;
     }
@@ -262,7 +268,35 @@ export function refreshMyAppJwt(): Promise<boolean> {
   return promise;
 }
 
-async function rotateMyAppJwt(refreshToken: string): Promise<boolean> {
+async function coordinateRefresh(refreshToken: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const rotate = () => {
+    if (loadMyAppTokens().refreshToken !== refreshToken) {
+      return Promise.resolve(Boolean(loadMyAppTokens().accessToken));
+    }
+    return rotateMyAppJwt(refreshToken, controller.signal);
+  };
+  try {
+    // Web Locks serialize refreshes across same-origin tabs. Re-read storage
+    // after acquiring the lock: another tab may already have rotated the pair.
+    if (typeof navigator !== 'undefined' && navigator.locks?.request) {
+      return await navigator.locks.request(
+        'myapp-web.jwt-refresh',
+        { signal: controller.signal },
+        rotate,
+      );
+    }
+    return await rotate();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function rotateMyAppJwt(
+  refreshToken: string,
+  signal: AbortSignal,
+): Promise<boolean> {
   try {
     const response = await callAuthMethod<LoginMessage>(
       'myapp.auth.token_api.refresh_v1',
@@ -270,6 +304,7 @@ async function rotateMyAppJwt(refreshToken: string): Promise<boolean> {
         data: {
           refresh_token: refreshToken,
         },
+        signal,
       },
     );
 
@@ -280,8 +315,7 @@ async function rotateMyAppJwt(refreshToken: string): Promise<boolean> {
     }
     const data = response.message?.data;
     if (!data?.access_token || !data.refresh_token) {
-      clearMyAppTokens();
-      return false;
+      throw new MyAppAuthError('刷新响应不完整，请稍后重试。', 502);
     }
 
     saveMyAppTokens({
@@ -292,24 +326,31 @@ async function rotateMyAppJwt(refreshToken: string): Promise<boolean> {
     });
 
     return true;
-  } catch {
+  } catch (error) {
     if (loadMyAppTokens().refreshToken !== refreshToken) {
       return Boolean(loadMyAppTokens().accessToken);
     }
-    clearMyAppTokens();
-    return false;
+    if (
+      error instanceof MyAppAuthError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      clearMyAppTokens();
+      return false;
+    }
+    // Network, server and timeout failures are not proof of revocation.
+    // Reject so callers do not interpret false as an expired session.
+    throw error;
   }
 }
 
 export async function logoutMyAppJwt() {
   const { refreshToken } = loadMyAppTokens();
-
-  try {
-    await callAuthMethod('myapp.auth.token_api.logout_v1', {
-      data: refreshToken ? { refresh_token: refreshToken } : undefined,
-      headers: getMyAppAuthHeaders(),
-    });
-  } finally {
-    clearMyAppTokens();
-  }
+  const headers = getMyAppAuthHeaders();
+  // Invalidate locally immediately. A delayed logout response must not clear
+  // a different session established while this request was in flight.
+  clearMyAppTokens();
+  await callAuthMethod('myapp.auth.token_api.logout_v1', {
+    data: refreshToken ? { refresh_token: refreshToken } : undefined,
+    headers,
+  });
 }

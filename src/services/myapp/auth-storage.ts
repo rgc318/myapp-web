@@ -29,8 +29,10 @@ function setStoredValue(key: string, value: string | null) {
 }
 
 function getStoredTimestamp(key: string) {
-  const value = Number(getStoredValue(key));
-  return Number.isFinite(value) ? value : null;
+  const stored = getStoredValue(key);
+  if (stored === null) return null;
+  const value = Number(stored);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 export type MyAppStoredTokens = {
@@ -65,7 +67,9 @@ export function saveMyAppTokens(tokens: {
   );
   setStoredValue(
     REFRESH_EXPIRES_AT_KEY,
-    tokens.refreshExpiresIn ? String(now + tokens.refreshExpiresIn * 1000) : null,
+    tokens.refreshExpiresIn
+      ? String(now + tokens.refreshExpiresIn * 1000)
+      : null,
   );
 }
 

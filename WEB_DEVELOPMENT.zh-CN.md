@@ -1,6 +1,20 @@
 # myapp Web 前端开发文档
 
-2026-09-13 JWT 刷新：`refreshMyAppJwt` 对同一 refresh token 共享当前页面内的在途 Promise。响应落地前必须比较当前 token，迟到成功不能覆盖新登录或恢复已退出会话，迟到失败不能清除新 token。`auth-refresh.test.ts` 覆盖并发、账号切换、退出及失败后重试。当前未实现跨标签页互斥；跨标签页仍可能同时发出刷新请求，但本页检测到存储已变化时不再覆盖它。
+开发环境以 Node.js 22 为验证基线，`.nvmrc` 固定主版本 22，package.json 与 lock 的 engines 同步为 >=22，和 CI / Docker 一致；更高 Node 主版本未单独验收。依赖通过 npm 锁文件安装。
+
+异步页面测试必须等待实际业务数据渲染，不以静态区块标题出现作为请求完成的证据。商品审计时间线回归改为等待“终止价格”记录，修复标题先出现时的测试竞态，不增加固定 sleep 或放宽断言。
+
+2026-09-13 续批认证加固：HTTP 200 但刷新 token 对缺失时按暂时性 502 拒绝，不清空现有会话；退出时先捕获旧凭据并立即清除本地状态，迟到退出响应不得清除随后建立的新登录。缺失、非有限或非正数的过期时间统一读取为 null。认证专项现有 14 tests（refresh 12、storage 2）。
+
+CI 一致性：coverage workflow 改为与主 CI 一致的 Node 22、npm ci（使用 package-lock、禁用安装脚本）、显式 max setup 和 npm coverage 命令；主 CI 新增生产依赖 audit 门禁。开发依赖 form-data 4.0.5→4.0.6，旧 request 的 ~2.3.2 约束仍锁在 2.3.3；没有通过强制 override 绕过上游兼容性。完整开发工具链仍需后续治理。
+
+续批资源诊断：63 suites / 428 tests 的 coverage 运行通过并 exit 0，但再次出现 Jest 未及时退出提示；此前普通测试未提示不代表根因消除。未加入 forceExit 或屏蔽告警。
+
+2026-09-13 JWT 刷新：`refreshMyAppJwt` 对同一 refresh token 共享当前页面内的 Promise，并在支持 Web Locks 的安全上下文中通过固定同源锁跨标签页串行执行。拿到锁后重读 token，其他标签页已刷新时复用新状态；响应落地前也必须比较 token，防止迟到响应覆盖新登录或恢复已退出会话。等待锁与请求共用 30 秒 AbortSignal，finally 清理计时器。401/403 清除匹配的无效会话；网络/5xx/超时抛出错误而不清空 token，调用方不得把这些错误当作确认失效。HTTP 非安全上下文或旧浏览器没有 Web Locks 时仍仅有单页面合并及迟到保护，不声称跨页互斥。`auth-refresh.test.ts` 12 tests 覆盖上述核心分支与两套独立模块共享锁，后者不替代真实跨标签页浏览器验收。
+
+服务层静态检查：不再从 Biome 排除 `src/services`。本轮纳入 46 个服务/测试文件，清理无效 ts-ignore、断言、表达式内赋值及冗余布尔等告警，全仓现检查 324 files。模板服务仍仅作为模板保留，不用于业务页面。
+
+运行依赖修复：锁文件将 DOMPurify 更新为 3.4.15、Mermaid 更新为 11.17.2（上游允许的同主版本范围，连带必要解析器/dayjs 等依赖）；未新增 override、未执行 audit fix --force。`npm audit --omit=dev` 当前 0 vulnerabilities；完整含 dev 的审计仍有 Umi/CLI 等工具链传递依赖告警，不可把生产依赖结果表述为全依赖零风险。
 
 库存调整草稿在当前商品标记 `requires_uom_migration` 时提供“查看商品”和“处理单位异常”新标签页入口，保留当前编辑输入；目标改变后不展示旧商品的纠正链接。商品完善草稿的纠正链接也在新标签页打开。处理后返回保存草稿以重新校验；产生继任商品时返回对话确认新目标并重新生成，不自动替换已绑定商品。纠正页继续检查权限、库存和历史引用。
 

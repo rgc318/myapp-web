@@ -29,6 +29,9 @@ jobs:
       - name: Generate Umi files
         run: npx max setup
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=low
+
       - name: Typecheck
         run: npm run tsc
 

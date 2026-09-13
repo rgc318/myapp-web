@@ -11,6 +11,15 @@ describe('myapp auth storage', () => {
     window.localStorage.clear();
   });
 
+  it('returns null rather than epoch zero for missing or invalid expiry', () => {
+    expect(loadMyAppTokens().accessExpiresAt).toBeNull();
+    expect(loadMyAppTokens().refreshExpiresAt).toBeNull();
+    for (const value of ['0', '-1', 'invalid', 'Infinity']) {
+      window.localStorage.setItem('myapp-web.access-expires-at', value);
+      expect(loadMyAppTokens().accessExpiresAt).toBeNull();
+    }
+  });
+
   it('saves, loads, and clears token values', () => {
     saveMyAppTokens({
       accessToken: 'access-token',

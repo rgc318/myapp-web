@@ -1,10 +1,10 @@
 import { callGatewayMethod } from './api-client';
 import {
   compactPayload,
+  type PageResult,
   readObject,
   toNumber,
   toOptionalText,
-  type PageResult,
 } from './api-utils';
 import { runGatewayMutation } from './mutation';
 
@@ -222,9 +222,7 @@ function emptyTables(): BusinessReport['tables'] {
 function mapOverview(value: unknown): BusinessOverview {
   const row = readObject(value);
   const metric = (key: string) =>
-    Object.prototype.hasOwnProperty.call(row, key) && row[key] == null
-      ? null
-      : toNumber(row[key]);
+    Object.hasOwn(row, key) && row[key] == null ? null : toNumber(row[key]);
   return {
     netCashflowTotal: metric('net_cashflow_total'),
     paidAmountTotal: metric('paid_amount_total'),
@@ -271,9 +269,12 @@ function mapPartyRow(value: unknown): PartySummaryRow | null {
     count: toNumber(row.count),
     name,
     outstandingAmount:
-      row.outstanding_amount == null ? undefined : toNumber(row.outstanding_amount),
+      row.outstanding_amount == null
+        ? undefined
+        : toNumber(row.outstanding_amount),
     paidAmount: row.paid_amount == null ? undefined : toNumber(row.paid_amount),
-    totalAmount: row.total_amount == null ? undefined : toNumber(row.total_amount),
+    totalAmount:
+      row.total_amount == null ? undefined : toNumber(row.total_amount),
   };
 }
 
@@ -297,7 +298,9 @@ function mapProductRow(value: unknown): ProductSummaryRow | null {
         amount: toNumber(row.amount),
         itemKey,
         itemName:
-          typeof row.item_name === 'string' && row.item_name ? row.item_name : itemKey,
+          typeof row.item_name === 'string' && row.item_name
+            ? row.item_name
+            : itemKey,
         qty: toNumber(row.qty),
         specification:
           typeof row.specification === 'string'
@@ -335,8 +338,12 @@ function mapCashflowEntry(value: unknown): CashflowEntry | null {
   const row = readObject(value);
   return {
     amount: toNumber(row.amount),
-    direction: row.direction === 'out' || row.direction === 'transfer' ? row.direction : 'in',
-    modeOfPayment: typeof row.mode_of_payment === 'string' ? row.mode_of_payment : null,
+    direction:
+      row.direction === 'out' || row.direction === 'transfer'
+        ? row.direction
+        : 'in',
+    modeOfPayment:
+      typeof row.mode_of_payment === 'string' ? row.mode_of_payment : null,
     name: typeof row.name === 'string' ? row.name : null,
     party: typeof row.party === 'string' ? row.party : null,
     partyType: typeof row.party_type === 'string' ? row.party_type : null,
@@ -347,7 +354,9 @@ function mapCashflowEntry(value: unknown): CashflowEntry | null {
 
 function mapTextList(value: unknown): string[] {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === 'string' && Boolean(item))
+    ? value.filter(
+        (item): item is string => typeof item === 'string' && Boolean(item),
+      )
     : [];
 }
 
@@ -385,7 +394,8 @@ function mapCancelPaymentEntryResult(value: unknown): CancelPaymentEntryResult {
   return {
     documentStatus:
       typeof row.document_status === 'string' ? row.document_status : '',
-    paymentEntry: typeof row.payment_entry === 'string' ? row.payment_entry : '',
+    paymentEntry:
+      typeof row.payment_entry === 'string' ? row.payment_entry : '',
     references: (Array.isArray(row.references) ? row.references : []).map(
       (item) => {
         const reference = readObject(item);
@@ -413,17 +423,22 @@ function mapPaymentEntryDetail(value: unknown): PaymentEntryDetail {
   return {
     actions: {
       canCancel: Boolean(actions.can_cancel),
-      cancelHint: typeof actions.cancel_hint === 'string' ? actions.cancel_hint : '',
+      cancelHint:
+        typeof actions.cancel_hint === 'string' ? actions.cancel_hint : '',
     },
     amount: toNumber(row.amount),
-    businessType: typeof row.business_type === 'string' ? row.business_type : '',
+    businessType:
+      typeof row.business_type === 'string' ? row.business_type : '',
     company: typeof row.company === 'string' ? row.company : null,
     currency: typeof row.currency === 'string' ? row.currency : null,
     deductions: (Array.isArray(row.deductions) ? row.deductions : []).map(
       mapPaymentEntryDeduction,
     ),
     differenceAmount: toNumber(row.difference_amount),
-    direction: row.direction === 'out' || row.direction === 'transfer' ? row.direction : 'in',
+    direction:
+      row.direction === 'out' || row.direction === 'transfer'
+        ? row.direction
+        : 'in',
     docstatus: toNumber(row.docstatus),
     documentStatus:
       typeof row.document_status === 'string' ? row.document_status : '',
@@ -457,7 +472,10 @@ function mapPaymentEntryDetail(value: unknown): PaymentEntryDetail {
   };
 }
 
-function mapReport(data: Record<string, any>, fallbackLimit = 0): BusinessReport {
+function mapReport(
+  data: Record<string, any>,
+  fallbackLimit = 0,
+): BusinessReport {
   const tables = readObject(data.tables);
   return {
     meta: mapMeta(data.meta, fallbackLimit),
@@ -515,7 +533,10 @@ function mapReport(data: Record<string, any>, fallbackLimit = 0): BusinessReport
       )
         .map(mapProductRow)
         .filter((row): row is ProductSummaryRow => Boolean(row)),
-      salesSummary: (Array.isArray(tables.sales_summary) ? tables.sales_summary : [])
+      salesSummary: (Array.isArray(tables.sales_summary)
+        ? tables.sales_summary
+        : []
+      )
         .map(mapPartyRow)
         .filter((row): row is PartySummaryRow => Boolean(row)),
       salesTrend: (Array.isArray(tables.sales_trend) ? tables.sales_trend : [])
