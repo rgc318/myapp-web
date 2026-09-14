@@ -731,6 +731,7 @@ export function buildAiDraftPayload(
 ): Record<string, unknown> {
   if (draft.draftType === 'product_setup') {
     const operation = values.operation === 'update' ? 'update' : 'create';
+    const usesUnitPricing = Boolean(readAiProductPricing(draft.payload));
     return {
       _state: draft.payload._state,
       source_attachments: draft.payload.source_attachments,
@@ -753,9 +754,14 @@ export function buildAiDraftPayload(
       operation,
       opening_qty: operation === 'create' ? values.openingQty : undefined,
       opening_uom: operation === 'create' ? values.stockUom : undefined,
-      retail_rate: values.retailRate,
-      standard_buying_rate: values.standardBuyingRate,
-      standard_selling_rate: values.standardSellingRate,
+      ...(usesUnitPricing
+        ? {}
+        : {
+            retail_rate: values.retailRate,
+            standard_buying_rate: values.standardBuyingRate,
+            standard_selling_rate: values.standardSellingRate,
+            wholesale_rate: values.wholesaleRate,
+          }),
       stock_uom: values.stockUom,
       specification: values.specification,
       warehouse: operation === 'create' ? values.warehouse : undefined,
@@ -763,7 +769,6 @@ export function buildAiDraftPayload(
         operation === 'create' && !values.warehouse
           ? unresolvedQuery(draft.payload, 'warehouse', 'warehouse_query')
           : undefined,
-      wholesale_rate: values.wholesaleRate,
       ...buildAiProductPricing(values, draft.payload),
     };
   }

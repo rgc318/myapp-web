@@ -378,6 +378,46 @@ describe('AI draft conflict form helpers', () => {
     expect(payload.warehouse).toBeUndefined();
   });
 
+  it('does not submit hidden legacy scalar prices with the per-UOM pricing contract', () => {
+    const draft = {
+      company: 'Demo Company',
+      draftType: 'product_setup',
+      payload: {
+        _state: { operation: 'update', baseline: {}, patch: {} },
+        company: 'Demo Company',
+        currency: 'CNY',
+        item_code: 'ITEM-PRICED',
+        item_name: '按单位计价商品',
+        operation: 'update',
+        pricing_contract_version: 'product-pricing-v1',
+        prices: [
+          {
+            row_id: 'retail',
+            price_list: 'Retail',
+            rate: 3,
+            uom: 'Bottle',
+            currency: 'CNY',
+          },
+        ],
+        stock_uom: 'Bottle',
+        uom_relations: [],
+      },
+    } as unknown as AiDraft;
+
+    const payload = buildAiDraftPayload(draft, getAiDraftFormValues(draft));
+
+    expect(payload).toEqual(
+      expect.objectContaining({
+        pricing_contract_version: 'product-pricing-v1',
+        prices: [expect.objectContaining({ price_list: 'Retail', rate: 3 })],
+      }),
+    );
+    expect(payload).not.toHaveProperty('standard_selling_rate');
+    expect(payload).not.toHaveProperty('wholesale_rate');
+    expect(payload).not.toHaveProperty('retail_rate');
+    expect(payload).not.toHaveProperty('standard_buying_rate');
+  });
+
   it('only marks order item replacement explicit when rows changed or the source draft required it', () => {
     const draft = {
       company: 'Demo Company',

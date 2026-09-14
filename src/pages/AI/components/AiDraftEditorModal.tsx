@@ -34,6 +34,8 @@ import {
 } from '@/services/myapp/ai';
 import { readAiProductPricing } from '@/services/myapp/ai-product-pricing';
 import { notifyMutationError } from '@/services/myapp/mutation';
+import { resolveDisplayUom } from '@/utils/display-uom';
+import { resolvePriceListDisplay } from '@/utils/price-list-display';
 import { AiDraftProgress } from './AiDraftProgress';
 import { AiDraftBusinessReview } from './AiDraftReview';
 import { AiDraftVersionConflict } from './AiDraftVersionConflict';
@@ -64,12 +66,16 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   image: '商品图片',
   item_group: '商品分类',
   item_name: '商品名称',
+  prices: '价格与计价单位',
   retail_rate: '零售价',
   standard_buying_rate: '标准采购参考价',
   standard_selling_rate: '标准销售参考价',
   specification: '规格',
   stock_uom: '库存基准单位',
+  uom_relations: '包装与单位换算',
+  wholesale_default_uom: '批发默认单位',
   wholesale_rate: '批发价',
+  retail_default_uom: '零售默认单位',
 };
 
 const INVENTORY_REASON_PRESETS = [
@@ -87,8 +93,37 @@ function objectValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function productStateValue(value: unknown) {
+function productStateValue(value: unknown, field?: string): string {
   if (value === null || value === undefined || value === '') return '未设置';
+  if (field === 'prices' && Array.isArray(value)) {
+    return (
+      value
+        .map(objectValue)
+        .map(
+          (row) =>
+            `${resolvePriceListDisplay(typeof row.price_list === 'string' ? row.price_list : undefined)} ${productStateValue(row.rate)} ${String(row.currency ?? '')}/${resolveDisplayUom(
+              typeof row.uom === 'string' ? row.uom : undefined,
+              typeof row.uom_display === 'string' ? row.uom_display : undefined,
+            )}`,
+        )
+        .join('；') || '无价格'
+    );
+  }
+  if (field === 'uom_relations' && Array.isArray(value)) {
+    return (
+      value
+        .map(objectValue)
+        .map(
+          (row) =>
+            `${productStateValue(row.from_qty)} ${resolveDisplayUom(
+              typeof row.from_uom === 'string' ? row.from_uom : undefined,
+            )} = ${productStateValue(row.to_qty)} ${resolveDisplayUom(
+              typeof row.to_uom === 'string' ? row.to_uom : undefined,
+            )}`,
+        )
+        .join('；') || '无换算关系'
+    );
+  }
   return String(value);
 }
 
@@ -183,8 +218,8 @@ function ProductUpdateState({
             changedFields.map((field) => (
               <Typography.Text key={field}>
                 {PRODUCT_STATE_LABELS[field] ?? field}：
-                {productStateValue(baseline[field])} →{' '}
-                {productStateValue(patch[field])}
+                {productStateValue(baseline[field], field)} →{' '}
+                {productStateValue(patch[field], field)}
               </Typography.Text>
             ))
           ) : (

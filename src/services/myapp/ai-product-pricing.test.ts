@@ -56,6 +56,19 @@ describe('AI product pricing DTO', () => {
       interpretation: 'user',
     });
   });
+  it('restores hidden row identity and provenance omitted by form validation', () => {
+    const form = readAiProductPricing(payload);
+    if (!form) throw new Error('Expected valid pricing data');
+    form.productPrices = form.productPrices.map(({ priceList, rate, uom }) => ({
+      priceList,
+      rate,
+      uom,
+    }));
+
+    const result = buildAiProductPricing(form, payload);
+
+    expect(result.prices).toEqual(payload.prices);
+  });
   it('keeps legacy drafts on their existing contract', () => {
     expect(readAiProductPricing({ retail_rate: 3.5 })).toBeUndefined();
     expect(buildAiProductPricing({}, {})).toEqual({});

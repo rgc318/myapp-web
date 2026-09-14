@@ -428,6 +428,77 @@ describe('AiDraftEditorModal', () => {
     expect(screen.queryByRole('button', { name: '调整此商品库存' })).toBeNull();
   });
 
+  it('renders structured product price and UOM changes without object coercion', async () => {
+    mockedGet.mockResolvedValue({
+      ...draft,
+      payload: {
+        _state: {
+          baseline: {
+            prices: [
+              {
+                price_list: 'Retail',
+                rate: 3,
+                uom: 'Bottle',
+                currency: 'CNY',
+              },
+            ],
+            uom_relations: [],
+          },
+          context: { company_total_qty: 0, stock_uom_display: '瓶' },
+          operation: 'update',
+          patch: {
+            prices: [
+              {
+                price_list: 'Retail',
+                rate: 3.5,
+                uom: 'Bottle',
+                currency: 'CNY',
+              },
+            ],
+            uom_relations: [
+              {
+                from_qty: 24,
+                from_uom: 'Bottle',
+                to_qty: 1,
+                to_uom: 'Box',
+              },
+            ],
+          },
+        },
+        company: 'Demo Company',
+        currency: 'CNY',
+        item_code: 'ITEM-PRICED',
+        item_name: '按单位计价商品',
+        operation: 'update',
+        pricing_contract_version: 'product-pricing-v1',
+        prices: [],
+        stock_uom: 'Bottle',
+        uom_relations: [],
+      },
+    });
+
+    render(
+      React.createElement(
+        App,
+        null,
+        React.createElement(AiDraftEditorModal, {
+          draftId: draft.name,
+          onClose: jest.fn(),
+          onUpdated: jest.fn(),
+        }),
+      ),
+    );
+
+    expect(await screen.findByText('正在完善现有商品')).toBeTruthy();
+    expect(
+      screen.getByText(/价格与计价单位：零售 3 CNY\/瓶 → 零售 3.5 CNY\/瓶/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/包装与单位换算：无换算关系 → 24 瓶 = 1 箱/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/\[object Object\]/)).toBeNull();
+  });
+
   it('lets an unresolved product update draft select its existing target', async () => {
     const unresolvedDraft = {
       ...draft,
