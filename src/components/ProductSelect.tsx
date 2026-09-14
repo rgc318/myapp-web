@@ -639,6 +639,7 @@ export function ProductSelect({
     () => [
       {
         dataIndex: 'searchKey',
+        fieldProps: { placeholder: '商品编码 / 名称 / 昵称 / 条码' },
         hideInTable: true,
         title: '关键词',
       },

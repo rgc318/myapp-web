@@ -9,6 +9,7 @@ export type RemoteProductCandidate = {
   brand?: string | null;
   itemCode: string;
   itemName?: string | null;
+  nickname?: string | null;
   specification?: string | null;
 };
 
@@ -20,7 +21,13 @@ function candidateLabel(candidate: RemoteProductCandidate) {
     itemName && itemName !== candidate.itemCode
       ? `${itemName}（${candidate.itemCode}）`
       : candidate.itemCode;
-  return [identity, candidate.specification?.trim(), candidate.brand?.trim()]
+  const nickname = candidate.nickname?.trim();
+  return [
+    identity,
+    nickname ? `昵称：${nickname}` : null,
+    candidate.specification?.trim(),
+    candidate.brand?.trim(),
+  ]
     .filter(Boolean)
     .join(' · ');
 }
@@ -30,6 +37,7 @@ function productCandidate(product: ProductSummary): RemoteProductCandidate {
     brand: product.brand,
     itemCode: product.itemCode,
     itemName: product.itemName,
+    nickname: product.nickname,
     specification: product.specification,
   };
 }

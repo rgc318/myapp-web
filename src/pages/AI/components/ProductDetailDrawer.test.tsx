@@ -50,6 +50,7 @@ describe('ProductDetailDrawer', () => {
       itemCode: 'ITEM-001',
       itemGroup: 'Products',
       itemName: '煌星',
+      nickname: '黄盒',
       modified: null,
       price: 100,
       priceSummary: null,
@@ -99,6 +100,7 @@ describe('ProductDetailDrawer', () => {
     expect(screen.getByText('2026-07-24 09:20:00')).toBeTruthy();
     expect(screen.getByText('4 个')).toBeTruthy();
     expect(screen.getByText('测试商品')).toBeTruthy();
+    expect(screen.getByText('黄盒')).toBeTruthy();
     expect(screen.getByText('商品图片')).toBeTruthy();
     expect(screen.getByText('完整价目表')).toBeTruthy();
     expect(screen.getByText('批发')).toBeTruthy();

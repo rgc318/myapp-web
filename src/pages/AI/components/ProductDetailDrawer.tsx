@@ -242,6 +242,11 @@ export function ProductDetailDrawer({
                 { key: 'code', label: '商品编码', children: detail.itemCode },
                 { key: 'name', label: '商品名称', children: detail.itemName },
                 {
+                  key: 'nickname',
+                  label: '商品昵称',
+                  children: detail.nickname || '-',
+                },
+                {
                   key: 'group',
                   label: '商品分类',
                   children: detail.itemGroup || '-',

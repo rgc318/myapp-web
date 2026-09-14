@@ -66,6 +66,7 @@ const PRODUCT_STATE_LABELS: Record<string, string> = {
   image: '商品图片',
   item_group: '商品分类',
   item_name: '商品名称',
+  nickname: '商品昵称',
   prices: '价格与计价单位',
   retail_rate: '零售价',
   standard_buying_rate: '标准采购参考价',
@@ -160,6 +161,8 @@ function productCandidates(value: unknown): RemoteProductCandidate[] {
         typeof candidate.item_name === 'string'
           ? candidate.item_name
           : undefined,
+      nickname:
+        typeof candidate.nickname === 'string' ? candidate.nickname : undefined,
       specification:
         typeof candidate.specification === 'string'
           ? candidate.specification
@@ -1141,6 +1144,10 @@ export function AiDraftEditorModal({
                         options={duplicateProductCandidates.map(
                           (candidate) => ({
                             label: `${String(candidate.item_name ?? candidate.item_code ?? '')} · ${String(candidate.item_code ?? '')}${
+                              candidate.nickname
+                                ? ` · 昵称：${String(candidate.nickname)}`
+                                : ''
+                            }${
                               candidate.specification
                                 ? ` · ${String(candidate.specification)}`
                                 : ''
@@ -1169,6 +1176,13 @@ export function AiDraftEditorModal({
                     rules={[{ required: true }]}
                   >
                     <Input />
+                  </Form.Item>
+                  <Form.Item
+                    extra="用于内部快速识别相似商品，也可作为 AI 和订单选品的搜索词。"
+                    label="商品昵称"
+                    name="nickname"
+                  >
+                    <Input allowClear maxLength={140} />
                   </Form.Item>
                   <Form.Item
                     extra={
@@ -1211,7 +1225,7 @@ export function AiDraftEditorModal({
                             ? draft.payload.item_name
                             : undefined
                         }
-                        placeholder="按商品编码或名称搜索并选择"
+                        placeholder="按商品编码、名称、昵称或条码搜索并选择"
                       />
                     ) : (
                       <Input disabled={isProductUpdate} />

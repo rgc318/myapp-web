@@ -308,6 +308,7 @@ export type SaveProductPayload = {
   itemCode?: string | null;
   itemGroup?: string | null;
   itemName: string;
+  nickname?: string | null;
   postingDate?: string | null;
   retailDefaultUom?: string | null;
   retailRate?: number | null;
@@ -1660,6 +1661,7 @@ function productSavePayload(
     image: payload.image === undefined ? undefined : payload.image,
     item_group: optionalTextField('itemGroup'),
     item_name: payload.itemName,
+    nickname: optionalTextField('nickname'),
     posting_date: toOptionalText(payload.postingDate),
     retail_default_uom:
       options.includeEmptyFields || hasOwn('retailDefaultUom')

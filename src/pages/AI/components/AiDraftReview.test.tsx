@@ -53,6 +53,32 @@ describe('AI draft review components', () => {
     ).toBeTruthy();
   });
 
+  it('shows the product nickname in the final business review', () => {
+    render(
+      <App>
+        <AiDraftBusinessReview
+          draft={
+            {
+              ...draft,
+              draftType: 'product_setup',
+              payload: {
+                company: 'Demo Company',
+                item_code: 'ITEM-CAMERA',
+                item_name: '数码相机',
+                nickname: '会议机',
+                operation: 'create',
+              },
+              title: '商品建档草稿',
+            } as AiDraft
+          }
+        />
+      </App>,
+    );
+
+    expect(screen.getByText('商品昵称')).toBeTruthy();
+    expect(screen.getByText('会议机')).toBeTruthy();
+  });
+
   it('explains version differences and requests safe restore', () => {
     const onRestore = jest.fn();
     render(

@@ -170,6 +170,7 @@ export function buildProductExportCsvRows(
     [
       '商品编码',
       '商品名称',
+      '商品昵称',
       '规格',
       '分类',
       '品牌',
@@ -204,6 +205,7 @@ export function buildProductExportCsvRows(
       return [
         product.itemCode,
         product.itemName,
+        product.nickname ?? '',
         product.specification,
         product.itemGroup,
         product.brand,

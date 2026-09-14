@@ -48,6 +48,18 @@ update,ITEM-001,更新名称,,,
     expect(row.payload).not.toHaveProperty('currency');
   });
 
+  it('imports the product nickname for create and update rows', () => {
+    const rows = buildRows(`action,item_code,item_name,nickname
+update,ITEM-001,,红盖
+create,ITEM-002,新增商品,餐饮装`);
+
+    expect(rows[0].payload).toEqual({ nickname: '红盖' });
+    expect(rows[1].payload).toMatchObject({
+      itemName: '新增商品',
+      nickname: '餐饮装',
+    });
+  });
+
   it('rejects unknown actions and malformed typed values instead of guessing', () => {
     const [row] = buildRows(`action,item_code,item_name,retail_rate,disabled
 udpate,ITEM-001,更新名称,abc,maybe`);

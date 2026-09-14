@@ -153,7 +153,7 @@ function buildColumns({
       hideInTable: true,
       fieldProps: {
         allowClear: true,
-        placeholder: '商品编码 / 名称 / 条码',
+        placeholder: '商品编码 / 名称 / 昵称 / 条码',
       },
     },
     {
@@ -299,8 +299,22 @@ function buildColumns({
       title: '商品名称',
       dataIndex: 'itemName',
       search: false,
-      ellipsis: true,
       width: 220,
+      render: (_, record) => (
+        <Space orientation="vertical" size={0}>
+          <Typography.Text ellipsis={{ tooltip: record.itemName }}>
+            {record.itemName}
+          </Typography.Text>
+          {record.nickname ? (
+            <Typography.Text
+              ellipsis={{ tooltip: `昵称：${record.nickname}` }}
+              type="secondary"
+            >
+              昵称：{record.nickname}
+            </Typography.Text>
+          ) : null}
+        </Space>
+      ),
     },
     {
       title: '规格',
@@ -557,6 +571,8 @@ const ProductsPage: React.FC = () => {
             ? payload.item_group
             : undefined,
         itemName: String(payload.item_name ?? ''),
+        nickname:
+          typeof payload.nickname === 'string' ? payload.nickname : undefined,
         standardSellingRate:
           payload.standard_selling_rate === null ||
           payload.standard_selling_rate === undefined
@@ -1370,6 +1386,13 @@ const ProductsPage: React.FC = () => {
             rules={[{ required: true, message: '请输入商品名称' }]}
           >
             <Input placeholder="商品名称" />
+          </Form.Item>
+          <Form.Item
+            extra="用于内部区分相似商品，也可以通过昵称搜索。"
+            label="商品昵称"
+            name="nickname"
+          >
+            <Input allowClear placeholder="例如：红盖、老包装、餐饮装" />
           </Form.Item>
           <Space size={16} style={{ width: '100%' }}>
             <Form.Item

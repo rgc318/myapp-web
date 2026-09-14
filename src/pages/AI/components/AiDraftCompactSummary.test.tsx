@@ -73,6 +73,7 @@ describe('AiDraftCompactSummary', () => {
         currency: 'CNY',
         item_code: 'SKU-001',
         item_name: '迪莫',
+        nickname: '蓝瓶',
         opening_qty: 1000,
         opening_uom: 'Nos',
         opening_uom_display: '件',
@@ -86,7 +87,7 @@ describe('AiDraftCompactSummary', () => {
       }),
     );
 
-    expect(screen.getByText('迪莫（SKU-001）')).toBeTruthy();
+    expect(screen.getByText('迪莫（SKU-001） · 昵称：蓝瓶')).toBeTruthy();
     expect(screen.getAllByText('件').length).toBeGreaterThan(0);
     expect(screen.getByText('销售参考 5.00 元')).toBeTruthy();
     expect(screen.getByText('批发 4.00 元')).toBeTruthy();

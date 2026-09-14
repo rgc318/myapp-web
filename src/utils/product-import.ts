@@ -205,6 +205,12 @@ export function buildProductImportRows(
     const itemCode = readCsvField(row, ['itemCode', 'item_code', '商品编码']);
     const itemName =
       readCsvField(row, ['itemName', 'item_name', '商品名称']) ?? '';
+    const nickname = readCsvField(row, [
+      'nickname',
+      'custom_nickname',
+      '商品昵称',
+      '昵称',
+    ]);
     const stockUom =
       readCsvField(row, ['stockUom', 'stock_uom', '库存单位']) ?? 'Nos';
     const barcode = readCsvField(row, ['barcode', '主条码', '条码']);
@@ -273,6 +279,7 @@ export function buildProductImportRows(
       setOptionalTextPayload(payload, 'description', description);
       setOptionalTextPayload(payload, 'itemGroup', itemGroup);
       setOptionalTextPayload(payload, 'itemName', itemName || undefined);
+      setOptionalTextPayload(payload, 'nickname', nickname);
       setOptionalTextPayload(payload, 'retailDefaultUom', retailDefaultUom);
       setOptionalTextPayload(
         payload,
@@ -330,6 +337,7 @@ export function buildProductImportRows(
       itemCode: itemCode ?? null,
       itemGroup: itemGroup ?? null,
       itemName,
+      nickname: nickname ?? null,
       retailDefaultUom: retailDefaultUom ?? stockUom,
       retailRate,
       standardBuyingRate,

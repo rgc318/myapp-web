@@ -121,6 +121,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
   const payload = draft.payload;
   const currency = optionalText(payload.currency) ?? 'CNY';
   const itemName = optionalText(payload.item_name) ?? '-';
+  const nickname = optionalText(payload.nickname);
   const itemCode = optionalText(payload.item_code);
   const openingQty = finiteNumber(payload.opening_qty);
   const openingUom = displayUom(
@@ -148,7 +149,7 @@ function productSummaryItems(draft: AiDraft): SummaryItem[] {
     {
       key: 'product',
       label: '商品',
-      value: itemCode ? `${itemName}（${itemCode}）` : itemName,
+      value: `${itemCode ? `${itemName}（${itemCode}）` : itemName}${nickname ? ` · 昵称：${nickname}` : ''}`,
     },
     {
       key: 'stock-uom',

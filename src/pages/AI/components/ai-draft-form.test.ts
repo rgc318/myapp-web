@@ -197,6 +197,7 @@ describe('AI draft conflict form helpers', () => {
         item_group: null,
         item_group_query: '宝石分类',
         item_name: '圣晶石',
+        nickname: '蓝晶',
         opening_qty: 10,
         operation: 'create',
         stock_uom: 'Unit',
@@ -219,6 +220,7 @@ describe('AI draft conflict form helpers', () => {
       expect.objectContaining({
         brand: undefined,
         itemGroup: undefined,
+        nickname: '蓝晶',
         warehouse: undefined,
       }),
     );
@@ -244,6 +246,7 @@ describe('AI draft conflict form helpers', () => {
         brand_query: '幻兽品牌',
         item_group: undefined,
         item_group_query: '宝石分类',
+        nickname: '蓝晶',
         warehouse: undefined,
         warehouse_query: '成品仓',
       }),

@@ -621,6 +621,7 @@ const ProductMaintenanceWorkspace: React.FC = () => {
       image: data.imageUrl || undefined,
       itemGroup: data.itemGroup,
       itemName: data.itemName,
+      nickname: data.nickname,
       retailDefaultUom: data.retailDefaultUom ?? data.stockUom,
       stockUom: data.stockUom,
       uomConversions: data.uomConversions.map((row) => ({
@@ -730,6 +731,17 @@ const ProductMaintenanceWorkspace: React.FC = () => {
                 rules={[{ required: true, message: '请输入商品名称' }]}
               >
                 <Input disabled={!data.canWrite} />
+              </Form.Item>
+              <Form.Item
+                extra="仅供内部快速识别和搜索，例如“红盖”“老包装”；不会替代正式商品名称。"
+                label="商品昵称"
+                name="nickname"
+              >
+                <Input
+                  allowClear
+                  disabled={!data.canWrite}
+                  placeholder="填写便于业务人员区分的简称或俗称"
+                />
               </Form.Item>
               <Space size={16} style={{ width: '100%' }} wrap>
                 <Form.Item

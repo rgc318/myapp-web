@@ -65,7 +65,7 @@ describe('RemoteProductSelect', () => {
       React.createElement(RemoteProductSelect, {
         initialCandidates: [
           { itemCode: 'COKE-001', itemName: '可口可乐' },
-          { itemCode: 'PEPSI-001', itemName: '百事可乐' },
+          { itemCode: 'PEPSI-001', itemName: '百事可乐', nickname: '蓝罐' },
         ],
         initialQuery: '可乐',
         itemContext: 'inventory',
@@ -73,7 +73,7 @@ describe('RemoteProductSelect', () => {
     );
 
     expect(screen.getByText('可口可乐（COKE-001）')).toBeTruthy();
-    expect(screen.getByText('百事可乐（PEPSI-001）')).toBeTruthy();
+    expect(screen.getByText('百事可乐（PEPSI-001） · 昵称：蓝罐')).toBeTruthy();
   });
 
   it('uses the product domain search and merges returned products', async () => {
@@ -85,6 +85,7 @@ describe('RemoteProductSelect', () => {
           brand: '饮料',
           itemCode: 'COKE-5000',
           itemName: '可口可乐 5000ml',
+          nickname: '大可乐',
           specification: '5000ml',
         } as any,
       ],
@@ -116,7 +117,9 @@ describe('RemoteProductSelect', () => {
       );
     });
     expect(
-      await screen.findByText('可口可乐 5000ml（COKE-5000） · 5000ml · 饮料'),
+      await screen.findByText(
+        '可口可乐 5000ml（COKE-5000） · 昵称：大可乐 · 5000ml · 饮料',
+      ),
     ).toBeTruthy();
   });
 

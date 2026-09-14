@@ -33,6 +33,7 @@ export type AiDraftFormValues = {
   itemCode?: string;
   itemGroup?: string;
   itemName?: string;
+  nickname?: string;
   items?: AiDraftItemFormValues[];
   openingQty?: number;
   operation?: 'create' | 'update';
@@ -93,6 +94,7 @@ const FIELD_LABELS: Record<keyof AiDraftFormValues, string> = {
   itemCode: '商品编码',
   itemGroup: '商品分类',
   itemName: '商品名称',
+  nickname: '商品昵称',
   items: '商品明细',
   openingQty: '初始库存数量',
   operation: '处理方式',
@@ -128,6 +130,7 @@ const PRODUCT_FIELDS: (keyof AiDraftFormValues)[] = [
   'company',
   'operation',
   'itemName',
+  'nickname',
   'itemCode',
   'barcode',
   'specification',
@@ -375,6 +378,7 @@ export function getAiDraftFormValues(draft: AiDraft): AiDraftFormValues {
       itemCode: textValue(payload.item_code),
       itemGroup: textValue(payload.item_group),
       itemName: textValue(payload.item_name),
+      nickname: textValue(payload.nickname),
       openingQty: numberValue(payload.opening_qty),
       operation: payload.operation === 'update' ? 'update' : 'create',
       standardBuyingRate:
@@ -489,6 +493,7 @@ const BACKEND_FIELD_TO_FORM_FIELD: Record<
   item_code: 'itemCode',
   item_group: 'itemGroup',
   item_name: 'itemName',
+  nickname: 'nickname',
   opening_qty: 'openingQty',
   posting_date: 'postingDate',
   reason: 'reason',
@@ -751,6 +756,7 @@ export function buildAiDraftPayload(
         ? undefined
         : unresolvedQuery(draft.payload, 'item_group', 'item_group_query'),
       item_name: values.itemName,
+      nickname: values.nickname,
       operation,
       opening_qty: operation === 'create' ? values.openingQty : undefined,
       opening_uom: operation === 'create' ? values.stockUom : undefined,

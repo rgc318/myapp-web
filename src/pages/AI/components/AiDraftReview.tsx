@@ -155,6 +155,11 @@ export function AiDraftBusinessReview({ draft }: { draft: AiDraft }) {
               children: displayValue(payload.item_name),
             },
             {
+              key: 'nickname',
+              label: '商品昵称',
+              children: displayValue(payload.nickname),
+            },
+            {
               key: 'itemCode',
               label: '商品编码',
               children: displayValue(payload.item_code),

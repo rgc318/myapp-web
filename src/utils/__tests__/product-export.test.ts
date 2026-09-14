@@ -37,6 +37,7 @@ function makeProduct(index: number): ProductSummary {
     itemCode,
     itemGroup: '饮料',
     itemName: `商品 ${index}`,
+    nickname: `昵称 ${index}`,
     modified: '2026-09-03 12:00:00',
     price: 12,
     priceSummary: {
@@ -163,6 +164,7 @@ describe('product export governance', () => {
     const data = rows[1];
 
     expect(data[header.indexOf('主条码单位')]).toBe('件 (Nos)');
+    expect(data[header.indexOf('商品昵称')]).toBe('昵称 1');
     expect(data[header.indexOf('全部条码（含单位）')]).toContain(
       '16900000000001 [箱 (Box)]',
     );

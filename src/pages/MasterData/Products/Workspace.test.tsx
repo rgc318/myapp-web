@@ -140,6 +140,7 @@ const product = {
   itemCode: 'ITEM-001',
   itemGroup: '商品',
   itemName: '测试商品',
+  nickname: '红盖',
   modified: '2026-09-02 10:00:00',
   price: 10,
   priceSummary: {
@@ -215,7 +216,13 @@ describe('ProductMaintenanceWorkspace', () => {
     expect(screen.getByRole('tab', { name: '变更历史' })).toBeTruthy();
 
     const nameInput = screen.getByLabelText('商品名称');
+    expect(screen.getByLabelText<HTMLInputElement>('商品昵称').value).toBe(
+      '红盖',
+    );
     fireEvent.change(nameInput, { target: { value: '测试商品（新）' } });
+    fireEvent.change(screen.getByLabelText('商品昵称'), {
+      target: { value: '餐饮装' },
+    });
     expect(screen.getByText('当前有尚未保存的商品资料修改')).toBeTruthy();
     fireEvent.click(screen.getAllByRole('button', { name: /保存商品资料/ })[0]);
 
@@ -225,7 +232,23 @@ describe('ProductMaintenanceWorkspace', () => {
         expect.objectContaining({
           itemModified: '2026-09-02 10:00:00',
           itemName: '测试商品（新）',
+          nickname: '餐饮装',
         }),
+      );
+    });
+  });
+
+  it('allows an existing nickname to be cleared explicitly', async () => {
+    renderWorkspace();
+
+    const nicknameInput = await screen.findByLabelText('商品昵称');
+    fireEvent.change(nicknameInput, { target: { value: '' } });
+    fireEvent.click(screen.getAllByRole('button', { name: /保存商品资料/ })[0]);
+
+    await waitFor(() => {
+      expect(mockedUpdateProduct).toHaveBeenCalledWith(
+        'ITEM-001',
+        expect.objectContaining({ nickname: '' }),
       );
     });
   });

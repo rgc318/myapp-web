@@ -1,15 +1,11 @@
 import { callGatewayMethod } from '../api-client';
+import { listBusinessDocuments } from '../documents';
 import {
   adjustInventoryStock,
   listInventoryStockSummary,
   submitInventoryStockCount,
   transferInventoryStock,
 } from '../inventory';
-import { listBusinessDocuments } from '../documents';
-import {
-  confirmPendingDocument,
-  listPendingConfirmations,
-} from '../pending-confirmations';
 import {
   addProductBarcode,
   assessProductUomMigration,
@@ -20,6 +16,7 @@ import {
   createProductAndStock,
   createSupplier,
   createUom,
+  createWarehouse,
   deleteProductBarcode,
   executeProductUomMigration,
   getProductDetail,
@@ -29,34 +26,49 @@ import {
   listUoms,
   listWarehouses,
   resolveActiveProduct,
-  searchProducts,
   searchLinkOptions,
-  setPrimaryProductBarcode,
+  searchProducts,
   setCustomerDisabled,
+  setPrimaryProductBarcode,
   setProductDisabled,
   setSupplierDisabled,
   setUomDisabled,
+  setWarehouseDisabled,
   updateCustomer,
   updateProduct,
   updateSupplier,
   updateUom,
-  createWarehouse,
-  setWarehouseDisabled,
   updateWarehouse,
 } from '../master-data';
+import { deleteItemImage, replaceItemImage, uploadItemImage } from '../media';
 import {
-  deleteItemImage,
-  replaceItemImage,
-  uploadItemImage,
-} from '../media';
+  confirmPendingDocument,
+  listPendingConfirmations,
+} from '../pending-confirmations';
 import {
-  cancelPurchaseOrder,
+  cancelPrintBatch,
+  createPrintBatch,
+  fetchPrintFile,
+  fetchPrintPreview,
+  fetchPrintTemplates,
+  getPrintBatch,
+  getPrintSettings,
+  listPrintBatches,
+  listPrintDoctypes,
+  listPrintJobs,
+  listPrintJobsGlobal,
+  recordPrintJob,
+  retryPrintBatchFailed,
+  setPrintDefaultTemplate,
+} from '../printing';
+import {
   cancelPurchaseInvoice,
+  cancelPurchaseOrder,
   cancelPurchaseReceipt,
   cancelSupplierPaymentEntry,
   createPurchaseInvoiceFromReceipt,
-  createPurchaseOrderV2,
   createPurchaseOrderInvoice,
+  createPurchaseOrderV2,
   getPurchaseCompanyContext,
   getPurchaseInvoiceDetail,
   getPurchaseOrderDetail,
@@ -73,22 +85,6 @@ import {
   updatePurchaseOrderV2,
 } from '../purchase';
 import {
-  cancelPrintBatch,
-  createPrintBatch,
-  fetchPrintFile,
-  fetchPrintPreview,
-  fetchPrintTemplates,
-  getPrintBatch,
-  getPrintSettings,
-  listPrintJobs,
-  listPrintBatches,
-  listPrintJobsGlobal,
-  listPrintDoctypes,
-  recordPrintJob,
-  retryPrintBatchFailed,
-  setPrintDefaultTemplate,
-} from '../printing';
-import {
   cancelPaymentEntry,
   fetchCashflowEntries,
   fetchSalesReport,
@@ -96,19 +92,19 @@ import {
 } from '../reports';
 import {
   cancelDeliveryNote,
+  cancelSalesInvoice,
   cancelSalesOrder,
   cancelSalesPaymentEntry,
-  cancelSalesInvoice,
   createCustomerRefund,
-  createSalesOrderV2,
   createSalesOrderInvoice,
+  createSalesOrderV2,
   exportSalesOrders,
   getCustomerRefundContext,
-  getDeliveryNoteDetail,
-  getSalesReturnSourceContext,
   getCustomerSalesContext,
+  getDeliveryNoteDetail,
   getSalesInvoiceDetail,
   getSalesOrderDetail,
+  getSalesReturnSourceContext,
   quickCancelSalesOrderV2,
   quickCreateSalesOrderV2,
   recordSalesOrderPayment,
@@ -671,7 +667,9 @@ describe('myapp domain services', () => {
           visibility: { purchase: 0, sales: 1 },
           tables: {
             sales_summary: [{ amount: '100', count: 2, name: 'ACME' }],
-            sales_trend: [{ amount: '100', count: 2, trend_date: '2026-06-04' }],
+            sales_trend: [
+              { amount: '100', count: 2, trend_date: '2026-06-04' },
+            ],
           },
         },
         meta: {},
@@ -1311,13 +1309,9 @@ describe('myapp domain services', () => {
           modified: '2026-08-31 12:00:00',
           stock_uom: 'Wrong UOM',
           stock_uom_display: '错误单位',
-          uom_conversions: [
-            { conversion_factor: 1, uom: 'Wrong UOM' },
-          ],
+          uom_conversions: [{ conversion_factor: 1, uom: 'Wrong UOM' }],
         },
-        warnings: [
-          { code: 'HISTORY_PRESERVED', message: '保留历史流水' },
-        ],
+        warnings: [{ code: 'HISTORY_PRESERVED', message: '保留历史流水' }],
       },
       meta: {},
       raw: {},
@@ -2478,7 +2472,11 @@ describe('myapp domain services', () => {
       supplierAddressDisplay: 'Supplier address\nHangzhou\nChina',
       timeline: [
         { docname: 'PO-0001', type: 'purchase_order' },
-        { docname: 'PAY-0001', relatedDocname: 'PI-0001', type: 'payment_entry' },
+        {
+          docname: 'PAY-0001',
+          relatedDocname: 'PI-0001',
+          type: 'payment_entry',
+        },
       ],
     });
   });
@@ -2799,7 +2797,6 @@ describe('myapp domain services', () => {
     );
   });
 
-
   it('maps link options for selectors', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
       data: [
@@ -2830,7 +2827,13 @@ describe('myapp domain services', () => {
 
   it('passes whitelisted link option filters', async () => {
     mockedCallGatewayMethod.mockResolvedValueOnce({
-      data: [{ description: 'rgc (Demo)', label: 'Stores - RD', value: 'Stores - RD' }],
+      data: [
+        {
+          description: 'rgc (Demo)',
+          label: 'Stores - RD',
+          value: 'Stores - RD',
+        },
+      ],
       meta: {},
       raw: {},
     });
@@ -3351,6 +3354,7 @@ describe('myapp domain services', () => {
       itemCode: 'ITEM-001',
       itemGroup: 'All Item Groups',
       itemName: '新品',
+      nickname: '新品昵称',
       retailDefaultUom: 'Nos',
       retailRate: 14,
       standardBuyingRate: 8,
@@ -3375,6 +3379,7 @@ describe('myapp domain services', () => {
       disabled: false,
       itemGroup: '',
       itemName: '新品2',
+      nickname: '',
       retailDefaultUom: 'Nos',
       retailRate: 15,
       standardBuyingRate: 9,
@@ -3422,6 +3427,7 @@ describe('myapp domain services', () => {
         item_code: 'ITEM-001',
         item_group: 'All Item Groups',
         item_name: '新品',
+        nickname: '新品昵称',
         retail_default_uom: 'Nos',
         selling_prices: [
           {
@@ -3467,6 +3473,7 @@ describe('myapp domain services', () => {
         item_code: 'ITEM-001',
         item_group: '',
         item_name: '新品2',
+        nickname: '',
         retail_default_uom: 'Nos',
         selling_prices: [
           {
